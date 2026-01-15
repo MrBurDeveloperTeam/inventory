@@ -9,7 +9,7 @@ export interface ItemBatch {
 }
 
 export interface Item {
-  id: number;
+  id: string;
   name: string;
   brand: string;
   code: string;
@@ -24,7 +24,7 @@ export interface Item {
 }
 
 export interface Room {
-  id: number;
+  id: string;
   name: string;
   x: number;
   y: number;
@@ -34,14 +34,14 @@ export interface Room {
 export interface ActivityLog {
   id: string;
   timestamp: string;
-  roomId: number;
+  roomId: string;
   roomName: string;
   action: 'add' | 'remove' | 'delete' | 'transfer_out' | 'transfer_in' | 'edit' | 'receive';
   details: string;
 }
 
 export interface PurchaseHistory {
-  id: number;
+  id: string;
   timestamp: string;
   productName: string;
   brand: string;
@@ -52,7 +52,7 @@ export interface PurchaseHistory {
   totalPrice: number;
   location: string;
   category: string;
-  roomId: number;
+  roomId: string; // Changed to string
   uom?: UOM;
   expiryDate?: string | null;
 }

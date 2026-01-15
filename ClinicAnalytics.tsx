@@ -888,10 +888,20 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history }) => {
                     </g>
                     <g className="pointer-events-none">
                       <text x={center} y={center - 5} textAnchor="middle" className="text-[9px] font-black text-slate-400 fill-slate-400 uppercase tracking-widest">
-                        Total
+                        {hoveredIdx !== null ? currentBreakdown[hoveredIdx].label : 'Total'}
                       </text>
                       <text x={center} y={center + 15} textAnchor="middle" className="text-lg font-black fill-slate-800">
-                        {isReorderReport ? usageStats.totalReorders.toLocaleString() : (isQuantityReport ? usageStats.totalQuantity.toLocaleString() : `$${usageStats.totalExpense.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`)}
+                        {hoveredIdx !== null
+                          ? (isReorderReport 
+                              ? currentBreakdown[hoveredIdx].amount.toLocaleString()
+                              : (isQuantityReport 
+                                  ? currentBreakdown[hoveredIdx].amount.toLocaleString()
+                                  : `$${(currentBreakdown[hoveredIdx].totalSpent ?? currentBreakdown[hoveredIdx].amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`))
+                          : (isReorderReport 
+                              ? usageStats.totalReorders.toLocaleString()
+                              : (isQuantityReport 
+                                  ? usageStats.totalQuantity.toLocaleString()
+                                  : `$${usageStats.totalExpense.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`))}
                       </text>
                     </g>
                   </svg>
@@ -910,8 +920,8 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history }) => {
                     <span className="text-sm font-black text-slate-800 leading-none mb-1.5">
                       {isReorderReport ? `${currentBreakdown[hoveredIdx].amount.toLocaleString()} Reorders` : (isQuantityReport ? `${currentBreakdown[hoveredIdx].amount.toLocaleString()} Units` : `$${currentBreakdown[hoveredIdx].amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
                     </span>
-                    <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100/50">
-                      {currentBreakdown[hoveredIdx].percentage.toFixed(1)}% Share
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100/50">
+                      {currentBreakdown[hoveredIdx].percentage.toFixed(1)}%
                     </span>
                   </div>
                 </div>

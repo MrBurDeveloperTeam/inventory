@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
@@ -89,10 +89,10 @@ const ensureBatches = (item: Item): Item => {
   const baseBatches = item.batches && item.batches.length > 0
     ? item.batches.map(b => ({ ...b }))
     : [{
-        qty: item.quantity,
-        unitPrice: item.price,
-        expiryDate: item.expiryDate || null
-      }];
+      qty: item.quantity,
+      unitPrice: item.price,
+      expiryDate: item.expiryDate || null
+    }];
   const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(baseBatches);
   return {
     ...item,
@@ -146,15 +146,14 @@ const adjustBatchesWithDelta = (item: Item, delta: number) => {
 
 const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [activeRoomId, setActiveRoomId] = useState<number | null>(null);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [history, setHistory] = useState<PurchaseHistory[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [blueprint, setBlueprint] = useState<string | null>(null);
-  
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isBootstrapped, setIsBootstrapped] = useState<boolean>(false);
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
-  const [inventoryId, setInventoryId] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [managedProfiles, setManagedProfiles] = useState<ProfileRow[]>([]);
@@ -167,6 +166,7 @@ const App: React.FC = () => {
   const [isAddMode, setIsAddMode] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [catPosition, setCatPosition] = useState<CatPosition>({ x: 20, y: 20 });
+  const syncInFlight = useRef(false);
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -213,23 +213,93 @@ const App: React.FC = () => {
         setManagedProfiles(profiles || []);
       }
 
-      const { data: inventories, error: inventoryError } = await supabase
-        .from('inventories')
-        .select('user_id, data, blueprint');
-      if (inventoryError) {
-        console.error('Admin inventory fetch error', inventoryError);
-        setAdminDataError('Failed to load inventories. Please retry.');
-      } else {
-        const prepared: ManagedInventory[] = (inventories || []).map((inv: any) => ({
-          userId: inv.user_id,
-          rooms: inv.data?.rooms || [],
-          history: inv.data?.history || [],
-          logs: inv.data?.logs || [],
-          blueprint: inv.data?.blueprint || inv.blueprint || PRESET_BLUEPRINTS[0].url,
-          catPosition: inv.data?.catPosition || null
-        }));
-        setManagedInventories(prepared);
-      }
+      const { data: meta } = await supabase.from('inventory_meta').select('*');
+      const { data: roomsData } = await supabase
+        .from('inventory_rooms')
+        .select('id, user_id, name, pos_x, pos_y, items:inventory_items(*, item_batches:inventory_item_batches(*))');
+      const { data: historyData } = await supabase.from('inventory_purchase_history').select('*');
+      const { data: logData } = await supabase.from('inventory_activity_logs').select('*');
+
+      const metaByUser = new Map<string, any>((meta || []).map((m: any) => [m.user_id, m]));
+      const roomsByUser = new Map<string, Room[]>();
+      (roomsData || []).forEach((r: any) => {
+        const items: Item[] = (r.items || []).map((it: any) =>
+          ensureBatches({
+            id: it.id,
+            name: it.name || '',
+            brand: it.brand || '',
+            code: it.code || '',
+            quantity: Number(it.quantity) || 0,
+            uom: it.uom || 'pcs',
+            price: Number(it.price) || 0,
+            vendor: it.vendor || '',
+            category: (it.category as any) || 'other',
+            description: it.description || '',
+            expiryDate: it.expiry_date || null,
+            batches: (it.item_batches || []).map((b: any) => ({
+              qty: Number(b.qty) || 0,
+              unitPrice: Number(b.unit_price) || 0,
+              expiryDate: b.expiry_date || null
+            }))
+          })
+        );
+        const arr = roomsByUser.get(r.user_id) || [];
+        arr.push({ id: r.id, name: r.name, x: Number(r.pos_x) || 0, y: Number(r.pos_y) || 0, items });
+        roomsByUser.set(r.user_id, arr);
+      });
+
+      const historyByUser = new Map<string, PurchaseHistory[]>();
+      (historyData || []).forEach((h: any) => {
+        const arr = historyByUser.get(h.user_id) || [];
+        arr.push({
+          id: h.id,
+          timestamp: h.occurred_at || h.created_at,
+          productName: h.product_name || '',
+          brand: h.brand || '',
+          code: h.code || '',
+          vendor: h.vendor || '',
+          qty: Number(h.qty) || 0,
+          unitPrice: Number(h.unit_price) || 0,
+          totalPrice: Number(h.total_price) || 0,
+          location: h.location || '',
+          category: h.category || 'other',
+          roomId: h.room_id || '',
+          uom: h.uom || 'pcs',
+          expiryDate: h.expiry_date || null
+        });
+        historyByUser.set(h.user_id, arr);
+      });
+
+      const logsByUser = new Map<string, ActivityLog[]>();
+      (logData || []).forEach((l: any) => {
+        const arr = logsByUser.get(l.user_id) || [];
+        arr.push({
+          id: l.id,
+          timestamp: l.created_at,
+          roomId: l.room_id || '',
+          roomName: l.room_name || '',
+          action: l.action,
+          details: l.details
+        });
+        logsByUser.set(l.user_id, arr);
+      });
+
+      const prepared: ManagedInventory[] = Array.from(metaByUser.keys()).map(userId => {
+        const metaRow = metaByUser.get(userId);
+        return {
+          userId,
+          rooms: roomsByUser.get(userId) || [],
+          history: historyByUser.get(userId) || [],
+          logs: logsByUser.get(userId) || [],
+          blueprint: metaRow?.blueprint || PRESET_BLUEPRINTS[0].url,
+          catPosition: {
+            x: metaRow?.cat_position_x !== undefined ? Number(metaRow.cat_position_x) : 20,
+            y: metaRow?.cat_position_y !== undefined ? Number(metaRow.cat_position_y) : 20
+          }
+        };
+      });
+
+      setManagedInventories(prepared);
     } finally {
       setAdminDataLoading(false);
     }
@@ -299,33 +369,103 @@ const App: React.FC = () => {
       });
     }
 
-    const { data: inventory, error: inventoryError } = await supabase
-      .from('inventories')
-      .select('id, data, blueprint')
+    const { data: meta } = await supabase
+      .from('inventory_meta')
+      .select('*')
       .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
       .maybeSingle();
 
-    if (inventoryError && inventoryError.code !== 'PGRST116') { // PGRST116 = no rows
-      console.error('Inventory fetch error', inventoryError);
+    const { data: roomsData, error: roomsError } = await supabase
+      .from('inventory_rooms')
+      .select('id, name, pos_x, pos_y')
+      .eq('user_id', userId);
+    if (roomsError) {
+      console.error('Rooms fetch error', roomsError);
     }
 
-    if (inventory?.data) {
-      if ((inventory as any).id) setInventoryId((inventory as any).id);
-      const invData = (inventory as any).data || {};
-      setRooms(normalizeRooms(invData.rooms || []));
-      setHistory(invData.history || []);
-      setLogs(invData.logs || []);
-      setBlueprint(invData.blueprint || (inventory as any).blueprint || PRESET_BLUEPRINTS[0].url);
-      if (invData.catPosition) setCatPosition(invData.catPosition);
-    } else {
-      setRooms([]);
-      setHistory([]);
-      setLogs([]);
-      setBlueprint(PRESET_BLUEPRINTS[0].url);
-      setCatPosition({ x: 20, y: 20 });
-    }
+    const roomIds = (roomsData || []).map((r: any) => r.id);
+    const { data: itemsData } = roomIds.length
+      ? await supabase.from('inventory_items').select('*, item_batches:inventory_item_batches(*)').in('room_id', roomIds)
+      : { data: [] as any[] };
+
+    const { data: historyData } = await supabase
+      .from('inventory_purchase_history')
+      .select('*')
+      .eq('user_id', userId)
+      .order('occurred_at', { ascending: false });
+
+    const { data: logData } = await supabase
+      .from('inventory_activity_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    const itemsByRoom: Record<string, Item[]> = {};
+    (itemsData || []).forEach((row: any) => {
+      const batches: ItemBatch[] = (row.item_batches || []).map((b: any) => ({
+        qty: Number(b.qty) || 0,
+        unitPrice: Number(b.unit_price) || 0,
+        expiryDate: b.expiry_date || null
+      }));
+      const item: Item = ensureBatches({
+        id: row.id,
+        name: row.name || '',
+        brand: row.brand || '',
+        code: row.code || '',
+        quantity: Number(row.quantity) || 0,
+        uom: row.uom || 'pcs',
+        price: Number(row.price) || 0,
+        vendor: row.vendor || '',
+        category: (row.category as any) || 'other',
+        description: row.description || '',
+        expiryDate: row.expiry_date || null,
+        batches
+      });
+      itemsByRoom[row.room_id] = [...(itemsByRoom[row.room_id] || []), item];
+    });
+
+    const hydratedRooms: Room[] = (roomsData || []).map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      x: Number(r.pos_x) || 0,
+      y: Number(r.pos_y) || 0,
+      items: (itemsByRoom[r.id] || []).map(ensureBatches)
+    }));
+
+    setRooms(hydratedRooms);
+    setHistory(
+      (historyData || []).map((h: any) => ({
+        id: h.id,
+        timestamp: h.occurred_at || h.created_at,
+        productName: h.product_name || '',
+        brand: h.brand || '',
+        code: h.code || '',
+        vendor: h.vendor || '',
+        qty: Number(h.qty) || 0,
+        unitPrice: Number(h.unit_price) || 0,
+        totalPrice: Number(h.total_price) || (Number(h.qty) || 0) * (Number(h.unit_price) || 0),
+        location: h.location || '',
+        category: h.category || 'other',
+        roomId: h.room_id || '',
+        uom: h.uom || 'pcs',
+        expiryDate: h.expiry_date || null
+      }))
+    );
+    setLogs(
+      (logData || []).map((l: any) => ({
+        id: l.id,
+        timestamp: l.created_at,
+        roomId: l.room_id || '',
+        roomName: l.room_name || '',
+        action: l.action,
+        details: l.details
+      }))
+    );
+    setBlueprint(meta?.blueprint || PRESET_BLUEPRINTS[0].url);
+    setCatPosition({
+      x: meta?.cat_position_x !== undefined ? Number(meta.cat_position_x) : 20,
+      y: meta?.cat_position_y !== undefined ? Number(meta.cat_position_y) : 20
+    });
 
     const isUserAdmin = accountTypeValue === 'admin';
     setIsAdmin(isUserAdmin);
@@ -381,7 +521,6 @@ const App: React.FC = () => {
     setRooms([]);
     setHistory([]);
     setLogs([]);
-    setInventoryId(null);
   };
 
   const handleUpdateUserImages = async (payload: { type: 'avatar' | 'background'; file: File; previewUrl: string }) => {
@@ -435,17 +574,38 @@ const App: React.FC = () => {
   };
 
   const addRoom = (x: number, y: number) => {
-    const newRoom: Room = { id: Date.now(), name: `New Room`, x, y, items: [] };
-    setRooms(prev => [...prev, newRoom]);
+    setRooms(prev => {
+      const roomNumbers = prev
+        .map(r => {
+          const match = r.name.match(/^Room (\d+)$/);
+          return match ? parseInt(match[1], 10) : null;
+        })
+        .filter((n): n is number => n !== null);
+
+      const nextNumber = roomNumbers.length > 0
+        ? Math.max(...roomNumbers) + 1
+        : 1;
+
+      const newRoom: Room = {
+        id: crypto.randomUUID(),
+        name: `Room ${nextNumber}`,
+        x,
+        y,
+        items: [],
+      };
+
+      return [...prev, newRoom];
+    });
+
     setIsAddMode(false);
   };
 
-  const deleteRoom = (id: number) => setRooms(prev => prev.filter(r => r.id !== id));
-  
-  const updateRoomName = (id: number, name: string) => 
+  const deleteRoom = (id: string) => setRooms(prev => prev.filter(r => r.id !== id));
+
+  const updateRoomName = (id: string, name: string) =>
     setRooms(prev => prev.map(r => r.id === id ? { ...r, name } : r));
 
-  const addActivity = (roomId: number, roomName: string, action: ActivityLog['action'], details: string) => {
+  const addActivity = (roomId: string, roomName: string, action: ActivityLog['action'], details: string) => {
     const timestamp = new Date().toISOString();
     const newLog: ActivityLog = {
       id: crypto.randomUUID(),
@@ -456,7 +616,7 @@ const App: React.FC = () => {
       details
     };
     setLogs(prev => {
-      const isDuplicate = prev.some(l => 
+      const isDuplicate = prev.some(l =>
         l.action === action &&
         l.roomId === roomId &&
         l.details === details &&
@@ -467,11 +627,11 @@ const App: React.FC = () => {
     });
   };
 
-  const receiveStock = (roomId: number, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => {
+  const receiveStock = (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => {
     setRooms(prev => prev.map(room => {
       if (room.id !== roomId) return room;
-      const existingItem = room.items.find(i => 
-        i.name.toLowerCase() === itemData.name?.toLowerCase() && 
+      const existingItem = room.items.find(i =>
+        i.name.toLowerCase() === itemData.name?.toLowerCase() &&
         (itemData.brand ? i.brand.toLowerCase() === itemData.brand.toLowerCase() : true)
       );
       let updatedItems;
@@ -480,7 +640,7 @@ const App: React.FC = () => {
         updatedItems = room.items.map(i => i.id === existingItem.id ? merged : i);
       } else {
         const newItem: Item = {
-          id: Date.now(),
+          id: crypto.randomUUID(),
           name: itemData.name || '',
           brand: itemData.brand || '',
           code: itemData.code || '',
@@ -500,10 +660,10 @@ const App: React.FC = () => {
         updatedItems = [...room.items, newItem];
       }
       addActivity(roomId, room.name, 'receive', `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" [${itemData.code || 'N/A'}] @ $${price.toFixed(2)}`);
-      
+
       const historyTimestamp = purchaseDate ? new Date(`${purchaseDate}T00:00:00`).toISOString() : new Date().toISOString();
       const historyEntry: PurchaseHistory = {
-        id: crypto.randomUUID() as any,
+        id: crypto.randomUUID(),
         timestamp: historyTimestamp,
         productName: itemData.name || '',
         brand: itemData.brand || '',
@@ -534,7 +694,7 @@ const App: React.FC = () => {
     }));
   };
 
-  const updateItemQty = (roomId: number, itemId: number, delta: number) => {
+  const updateItemQty = (roomId: string, itemId: string, delta: number) => {
     setRooms(prev => prev.map(r => {
       if (r.id !== roomId) return r;
       return {
@@ -546,7 +706,7 @@ const App: React.FC = () => {
           if (safeDelta === 0) return i;
           const adjusted = adjustBatchesWithDelta(i, safeDelta);
           if (adjusted.quantity !== i.quantity) {
-             addActivity(roomId, r.name, 'edit', `Adjusted qty of "${i.name}" to ${adjusted.quantity}`);
+            addActivity(roomId, r.name, 'edit', `Adjusted qty of "${i.name}" to ${adjusted.quantity}`);
           }
           return adjusted;
         })
@@ -554,7 +714,7 @@ const App: React.FC = () => {
     }));
   };
 
-  const updateItemBatchQty = (roomId: number, itemId: number, batchIndex: number, delta: number) => {
+  const updateItemBatchQty = (roomId: string, itemId: string, batchIndex: number, delta: number) => {
     setRooms(prev => prev.map(r => {
       if (r.id !== roomId) return r;
       return {
@@ -582,7 +742,7 @@ const App: React.FC = () => {
     }));
   };
 
-  const deleteItem = (roomId: number, itemId: number) => {
+  const deleteItem = (roomId: string, itemId: string) => {
     setRooms(prev => prev.map(r => {
       if (r.id !== roomId) return r;
       const item = r.items.find(i => i.id === itemId);
@@ -619,7 +779,38 @@ const App: React.FC = () => {
     return { kept, moved };
   };
 
-  const moveItem = (fromRoomId: number, toRoomId: number, itemId: number, quantity: number) => {
+  const mergeItemBatches = (a: Item, b: Item): Item => {
+    const aBatches = ensureBatches(a).batches || [];
+    const bBatches = ensureBatches(b).batches || [];
+    const all = [...aBatches, ...bBatches];
+    const byExpiry = new Map<string | null, { qty: number; unitPrice: number; expiryDate: string | null }>();
+    all.forEach(batch => {
+      const key = batch.expiryDate || null;
+      const existing = byExpiry.get(key);
+      if (!existing) {
+        byExpiry.set(key, { qty: batch.qty, unitPrice: batch.unitPrice, expiryDate: batch.expiryDate || null });
+      } else {
+        const totalQty = existing.qty + batch.qty;
+        const totalValue = (existing.qty * existing.unitPrice) + (batch.qty * batch.unitPrice);
+        byExpiry.set(key, {
+          qty: totalQty,
+          unitPrice: totalQty > 0 ? totalValue / totalQty : existing.unitPrice,
+          expiryDate: key
+        });
+      }
+    });
+    const mergedBatches = Array.from(byExpiry.values());
+    const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(mergedBatches);
+    return {
+      ...a,
+      quantity: totalQty,
+      price: avgPrice,
+      expiryDate: earliestExpiry,
+      batches: mergedBatches
+    };
+  };
+
+  const moveItem = (fromRoomId: string, toRoomId: string, itemId: string, quantity: number) => {
     const fromRoom = rooms.find(r => r.id === fromRoomId);
     const toRoom = rooms.find(r => r.id === toRoomId);
     const item = fromRoom?.items.find(i => i.id === itemId);
@@ -628,21 +819,27 @@ const App: React.FC = () => {
     const qtyToMove = Math.min(Math.max(quantity || 0, 1), item.quantity);
     const remainingQty = item.quantity - qtyToMove;
     const { kept, moved } = splitBatchesForTransfer(item.batches, qtyToMove);
-    const movedItemId = remainingQty > 0 ? Date.now() : item.id;
+    const movedItemId = remainingQty > 0 ? crypto.randomUUID() : item.id;
 
+    const movedBatches = moved.length ? moved : item.batches || [];
+    const { totalQty: movedQty, avgPrice: movedPrice, earliestExpiry: movedExpiry } = summarizeBatches(movedBatches);
     const movedItem = {
       ...item,
       id: movedItemId,
-      quantity: qtyToMove,
-      batches: moved.length ? moved : item.batches,
-      expiryDate: moved.length && moved[0]?.expiryDate ? moved[0].expiryDate : item.expiryDate
+      quantity: movedQty,
+      price: movedPrice,
+      batches: movedBatches,
+      expiryDate: movedExpiry
     };
 
+    const keptBatches = kept.length ? kept : item.batches || [];
+    const { totalQty: keptQty, avgPrice: keptPrice, earliestExpiry: keptExpiry } = summarizeBatches(keptBatches);
     const remainingItem = remainingQty > 0 ? {
       ...item,
-      quantity: remainingQty,
-      batches: kept.length ? kept : item.batches,
-      expiryDate: kept.length && kept[0]?.expiryDate ? kept[0].expiryDate : item.expiryDate
+      quantity: keptQty,
+      price: keptPrice,
+      batches: keptBatches,
+      expiryDate: keptExpiry
     } : null;
 
     setRooms(prev => prev.map(r => {
@@ -653,7 +850,17 @@ const App: React.FC = () => {
         });
         return { ...r, items: updatedItems };
       }
-      if (r.id === toRoomId) return { ...r, items: [...r.items, movedItem] };
+      if (r.id === toRoomId) {
+        const existingIdx = r.items.findIndex(i => i.name.toLowerCase() === item.name.toLowerCase() && (i.brand || '').toLowerCase() === (item.brand || '').toLowerCase());
+        if (existingIdx >= 0) {
+          const existingItem = r.items[existingIdx];
+          const merged = mergeItemBatches(existingItem, movedItem);
+          const nextItems = [...r.items];
+          nextItems[existingIdx] = merged;
+          return { ...r, items: nextItems };
+        }
+        return { ...r, items: [...r.items, movedItem] };
+      }
       return r;
     }));
     addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Transferred ${qtyToMove} ${item.uom} of "${item.name}" to ${toRoom.name}`);
@@ -670,31 +877,157 @@ const App: React.FC = () => {
   useEffect(() => {
     const sync = async () => {
       const userId = supabaseUserId;
-      if (!userId) return;
-      const uniqueLogs = Array.from(new Map(logs.map(l => [l.id, l])).values());
-      const uniqueHistory = Array.from(new Map(history.map(h => [h.id, h])).values());
-      const payload = { rooms, history: uniqueHistory, logs: uniqueLogs, blueprint, catPosition };
-      const record: any = { user_id: userId, data: payload, blueprint };
+      if (!userId || isAdmin) return;
+      if (syncInFlight.current) return;
+      syncInFlight.current = true;
+      const logMap = new Map<string, ActivityLog>();
+      logs.forEach(l => logMap.set(l.id, l));
+      const uniqueLogs = Array.from(logMap.values());
 
-      if (inventoryId) record.id = inventoryId;
+      const historyMap = new Map<string, PurchaseHistory>();
+      history.forEach(h => historyMap.set(h.id, h));
+      const uniqueHistory = Array.from(historyMap.values());
+      const uniqueRooms = (() => {
+        const seenNames = new Map<string, number>();
+        return rooms.map((r) => {
+          const base = r.name || 'Room';
+          const count = seenNames.get(base) || 0;
+          seenNames.set(base, count + 1);
+          const finalName = count === 0 ? base : `${base} (${count + 1})`;
+          return { ...r, name: finalName };
+        });
+      })();
+      try {
+        const metaPayload = {
+          user_id: userId,
+          blueprint: blueprint || PRESET_BLUEPRINTS[0].url,
+          cat_position_x: catPosition.x,
+          cat_position_y: catPosition.y
+        };
+        const metaResult = await supabase.from('inventory_meta').upsert(metaPayload);
+        if (metaResult.error) {
+          console.error('inventory_meta upsert error', metaResult.error);
+          return;
+        }
 
-      const { data, error } = await supabase
-        .from('inventories')
-        .upsert(record, { onConflict: 'user_id' })
-        .select('id')
-        .single();
+        // wipe user-specific rows in dependency order to avoid FK conflicts
+        await supabase.from('inventory_activity_logs').delete().eq('user_id', userId);
+        await supabase.from('inventory_purchase_history').delete().eq('user_id', userId);
+        await supabase.from('inventory_rooms').delete().eq('user_id', userId); // cascades to items and item_batches
 
-      if (error) {
-        console.error('Inventory upsert error', error);
-      } else if (data?.id) {
-        setInventoryId(data.id);
+        const roomRows = uniqueRooms.map(r => ({
+          id: r.id,
+          user_id: userId,
+          name: r.name,
+          pos_x: r.x,
+          pos_y: r.y
+        }));
+        if (roomRows.length) {
+          const res = await supabase.from('inventory_rooms').insert(roomRows);
+          if (res.error) {
+            console.error('rooms insert error', res.error);
+            return;
+          }
+        }
+
+        const allowedRoomIds = new Set(roomRows.map(r => r.id));
+
+        const itemRows = uniqueRooms.flatMap(room =>
+          room.items.map(item => ({
+            id: item.id,
+            user_id: userId,
+            room_id: room.id,
+            name: item.name,
+            brand: item.brand,
+            code: item.code,
+            quantity: item.quantity,
+            uom: item.uom,
+            price: item.price,
+            vendor: item.vendor,
+            category: item.category,
+            description: item.description,
+            expiry_date: item.expiryDate || null
+          }))
+        );
+        const itemMap = new Map<string, typeof itemRows[0]>();
+        itemRows.forEach(r => itemMap.set(r.id, r));
+        const dedupedItemRows = Array.from(itemMap.values()).filter(r => allowedRoomIds.has(r.room_id));
+        if (dedupedItemRows.length) {
+          const res = await supabase.from('inventory_items').upsert(dedupedItemRows, { onConflict: 'id' });
+          if (res.error) console.error('items insert error', res.error);
+        }
+
+        const batchRows = uniqueRooms.flatMap(room =>
+          room.items.flatMap(item =>
+            (item.batches || []).map(batch => ({
+              item_id: item.id,
+              qty: batch.qty,
+              unit_price: batch.unitPrice,
+              expiry_date: batch.expiryDate || null
+            }))
+          )
+        );
+        const batchMap = new Map<string, typeof batchRows[0]>();
+        batchRows.forEach(b => batchMap.set(`${b.item_id}|${b.expiry_date || 'none'}|${b.qty}|${b.unit_price}`, b));
+        const dedupedBatchRows = Array.from(batchMap.values()).filter(b => dedupedItemRows.find(i => i.id === b.item_id));
+        if (dedupedBatchRows.length) {
+          const res = await supabase.from('inventory_item_batches').insert(dedupedBatchRows);
+          if (res.error) console.error('item_batches insert error', res.error);
+        }
+
+        const historyRows = uniqueHistory.map(h => ({
+          id: h.id,
+          user_id: userId,
+          room_id: allowedRoomIds.has(h.roomId) ? h.roomId : null,
+          occurred_at: h.timestamp,
+          product_name: h.productName,
+          brand: h.brand,
+          code: h.code,
+          vendor: h.vendor,
+          qty: h.qty,
+          unit_price: h.unitPrice,
+          total_price: h.totalPrice,
+          location: h.location,
+          category: h.category,
+          uom: h.uom,
+          expiry_date: h.expiryDate || null
+        }));
+        const historyMap = new Map<string, typeof historyRows[0]>();
+        historyRows.forEach(h => historyMap.set(h.id, h));
+        const dedupedHistoryRows = Array.from(historyMap.values());
+        if (dedupedHistoryRows.length) {
+          const res = await supabase.from('inventory_purchase_history').insert(dedupedHistoryRows);
+          if (res.error) console.error('purchase_history insert error', res.error);
+        }
+
+        const logRows = uniqueLogs.map(l => ({
+          id: l.id,
+          user_id: userId,
+          room_id: allowedRoomIds.has(l.roomId) ? l.roomId : null,
+          room_name: l.roomName,
+          action: l.action,
+          details: l.details,
+          created_at: l.timestamp
+        }));
+        const logMap = new Map<string, typeof logRows[0]>();
+        logRows.forEach(l => logMap.set(l.id, l));
+        const dedupedLogRows = Array.from(logMap.values());
+        if (dedupedLogRows.length) {
+          const res = await supabase.from('inventory_activity_logs').insert(dedupedLogRows);
+          if (res.error) console.error('activity_logs insert error', res.error);
+        }
+      } finally {
+        syncInFlight.current = false;
       }
+      syncInFlight.current = false;
     };
     if (isAuthenticated && isBootstrapped) {
-      if (isAdmin) return;
-      sync();
+      const timer = setTimeout(() => {
+        sync();
+      }, 2000); // Debounce sync by 2 seconds
+      return () => clearTimeout(timer);
     }
-  }, [rooms, history, logs, blueprint, catPosition, isAuthenticated, isBootstrapped, supabaseUserId, inventoryId, isAdmin]);
+  }, [rooms, history, logs, blueprint, catPosition, isAuthenticated, isBootstrapped, supabaseUserId, isAdmin]);
 
   const adminRooms = useMemo(() => managedInventories.flatMap((inv) => inv.rooms || []), [managedInventories]);
   const adminHistory = useMemo(() => managedInventories.flatMap((inv) => inv.history || []), [managedInventories]);
@@ -705,12 +1038,12 @@ const App: React.FC = () => {
 
   if (isAuthenticated && isAdmin && user) {
     return (
-      <AdminDashboard 
-        user={user} 
-        rooms={adminRooms} 
-        history={adminHistory} 
-        onLogout={handleLogout} 
-        onSwitchToClinic={() => {}} 
+      <AdminDashboard
+        user={user}
+        rooms={adminRooms}
+        history={adminHistory}
+        onLogout={handleLogout}
+        onSwitchToClinic={() => { }}
         managedProfiles={managedProfiles}
         managedInventories={managedInventories}
         adminLoading={adminDataLoading}
@@ -722,9 +1055,11 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col select-none bg-slate-50">
-      <Header 
-        onProfileClick={() => setCurrentView('profile')} 
+      <Header
+        onProfileClick={() => setCurrentView('profile')}
         onDashboardClick={() => setCurrentView('dashboard')}
+        onLogout={handleLogout}
+        user={user}
         userInitials={userInitials}
         userAvatarUrl={user?.avatarUrl}
       />
@@ -733,7 +1068,7 @@ const App: React.FC = () => {
         <main className="flex-1 flex flex-col gap-8">
           {currentView === 'dashboard' ? (
             <>
-              <ClinicMap 
+              <ClinicMap
                 rooms={rooms}
                 blueprint={blueprint}
                 isLocked={isLocked}
@@ -751,21 +1086,21 @@ const App: React.FC = () => {
                 onCatPositionChange={setCatPosition}
               />
 
-          <MasterInventory 
-            rooms={rooms} 
-            history={history} 
-            logs={logs}
-            onReceive={receiveStock}
-            onUpdateQty={updateItemQty}
-            onTransfer={moveItem}
-            onDeleteItem={deleteItem}
-          />
-        </>
+              <MasterInventory
+                rooms={rooms}
+                history={history}
+                logs={logs}
+                onReceive={receiveStock}
+                onUpdateQty={updateItemQty}
+                onTransfer={moveItem}
+                onDeleteItem={deleteItem}
+              />
+            </>
           ) : (
             user && (
-              <ProfilePage 
-                user={user} 
-                onLogout={handleLogout} 
+              <ProfilePage
+                user={user}
+                onLogout={handleLogout}
                 onBack={() => setCurrentView('dashboard')}
                 onUpdateImages={handleUpdateUserImages}
               />
@@ -775,11 +1110,11 @@ const App: React.FC = () => {
       </div>
 
       {activeRoomId && activeRoom && currentView === 'dashboard' && (
-        <RoomModal 
-          room={activeRoom} 
+        <RoomModal
+          room={activeRoom}
           allRooms={rooms}
           logs={logs.filter(l => l.roomId === activeRoomId)}
-          onClose={() => setActiveRoomId(null)} 
+          onClose={() => setActiveRoomId(null)}
           onUpdateName={updateRoomName}
           onReceive={receiveStock}
           onUpdateQty={updateItemQty}

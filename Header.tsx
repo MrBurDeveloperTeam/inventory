@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { UserProfile } from './types';
+import { LogOut, Building2, ChevronRight, Camera } from 'lucide-react';
 
 interface HeaderProps {
   onProfileClick?: () => void;
   onDashboardClick?: () => void;
+  onLogout?: () => void;
+  user?: UserProfile | null;
   userInitials?: string;
   userAvatarUrl?: string;
 }
@@ -10,12 +14,33 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({
   onProfileClick,
   onDashboardClick,
+  onLogout,
+  user,
   userInitials = 'U',
   userAvatarUrl,
 }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleProfileClick = () => {
+    setIsOpen(false);
+    onProfileClick?.();
+  };
+
   return (
     <header className="bg-white shadow-sm px-6 md:px-16 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 w-full z-50">
-      {/* Logo (replaces icon + DentaStock Pro text entirely) */}
+      {/* Logo */}
       <div
         className="flex items-center cursor-pointer group"
         onClick={onDashboardClick}
@@ -31,31 +56,83 @@ const Header: React.FC<HeaderProps> = ({
         />
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 relative" ref={dropdownRef}>
         {onProfileClick && (
           <button
-            onClick={onProfileClick}
-            className="flex items-center gap-2 group p-1 rounded-full hover:bg-slate-50 transition-all border border-transparent hover:border-slate-100"
+            onClick={() => setIsOpen(!isOpen)}
+            className="flex items-center gap-2 group p-1 rounded-full outline-none"
             title="Account Profile"
           >
             {userAvatarUrl ? (
               <img
                 src={userAvatarUrl}
                 alt="Profile avatar"
-                className="w-10 h-10 rounded-full object-cover shadow-md group-hover:shadow-blue-200 transition-all border border-[#004aad]/10"
+                className="w-10 h-10 rounded-full object-cover shadow-sm border border-slate-100"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-[#004aad] flex items-center justify-center text-white font-black text-sm shadow-md group-hover:shadow-blue-200 transition-all">
+              <div className="w-10 h-10 rounded-full bg-[#004aad] flex items-center justify-center text-white font-black text-sm shadow-sm">
                 {userInitials}
               </div>
             )}
-            <div className="hidden md:block text-left mr-2">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
-                Account
-              </p>
-              <p className="text-xs font-bold text-slate-700 leading-none">Settings</p>
-            </div>
           </button>
+        )}
+
+        {isOpen && (
+          <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-100 font-sans">
+            <div className="p-4">
+              <h3 className="text-xs font-bold text-slate-700 tracking-wide mb-2">Accounts</h3>
+
+              <button
+                onClick={handleProfileClick}
+                className="w-full flex items-center justify-between p-2 hover:bg-slate-50 rounded-xl transition-colors group text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    {userAvatarUrl ? (
+                      <img
+                        src={userAvatarUrl}
+                        alt="Profile"
+                        className="w-12 h-12 rounded-full object-cover border border-slate-100"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-[#004aad] flex items-center justify-center text-white font-bold text-lg">
+                        {userInitials}
+                      </div>
+                    )}
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-slate-400 group-hover:text-[#004aad] transition-colors">
+                      <Camera size={10} strokeWidth={2.5} />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-800 text-[16px] truncate">{user?.name || 'User'}</p>
+                    <p className="text-[12px] text-slate-500 font-medium truncate">{user?.email}</p>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-slate-500 group-hover:text-slate-500 transition-colors shrink-0" />
+              </button>
+
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <h3 className="text-xs font-bold text-slate-700 tracking-wide mb-3">Collaborator</h3>
+                <button
+                  onClick={() => alert('Collaborator feature coming soon!')}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-xl transition-all font-semibold text-sm text-slate-700 shadow-sm"
+                >
+                  <Building2 size={16} />
+                  <span>Add Collaborator</span>
+                </button>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <button
+                  onClick={onLogout}
+                  className="w-full flex items-center gap-3 px-2 py-2 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all font-bold text-sm"
+                >
+                  <LogOut size={18} />
+                  <span>Log out</span>
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </header>

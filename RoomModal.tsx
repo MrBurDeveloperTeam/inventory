@@ -10,7 +10,7 @@ import {
   ChevronDown,
   FileDown
 } from 'lucide-react';
-import { Room, Item, ActivityLog, Category, UOM } from './types';
+import { Room, Item, ActivityLog, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
 
 interface RoomModalProps {
@@ -18,12 +18,12 @@ interface RoomModalProps {
   allRooms: Room[];
   logs: ActivityLog[];
   onClose: () => void;
-  onUpdateName: (id: number, name: string) => void;
-  onReceive: (roomId: number, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
-  onUpdateQty: (roomId: number, itemId: number, delta: number) => void;
-  onUpdateBatchQty: (roomId: number, itemId: number, batchIndex: number, delta: number) => void;
-  onTransfer: (fromRoomId: number, toRoomId: number, itemId: number, quantity: number) => void;
-  onDeleteItem: (roomId: number, itemId: number) => void;
+  onUpdateName: (id: string, name: string) => void;
+  onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
+  onUpdateQty: (roomId: string, itemId: string, delta: number) => void;
+  onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
+  onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
+  onDeleteItem: (roomId: string, itemId: string) => void;
 }
 
 const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem }) => {
@@ -40,10 +40,11 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const [hasExpiry, setHasExpiry] = useState(false);
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [roomSearch, setRoomSearch] = useState('');
-  const [openBatchRows, setOpenBatchRows] = useState<Record<number, boolean>>({});
-  const [transferContext, setTransferContext] = useState<{ item: Item; toRoomId: number } | null>(null);
+  const [openBatchRows, setOpenBatchRows] = useState<Record<string, boolean>>({});
+  const [transferContext, setTransferContext] = useState<{ item: Item; toRoomId: string; batchIndex?: number; availableQty: number } | null>(null);
   const [transferQty, setTransferQty] = useState(0);
   const targetRoomName = transferContext ? (allRooms.find(r => r.id === transferContext.toRoomId)?.name || 'Selected room') : '';
+  const [bulkTransferContext, setBulkTransferContext] = useState<{ item: Item; toRoomId: string } | null>(null);
   const [deleteContext, setDeleteContext] = useState<{ item: Item; batchIndex?: number } | null>(null);
 
   const filteredItems = useMemo(() => {
@@ -64,7 +65,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     return groups;
   }, [filteredItems]);
 
-  const toggleBatchRow = (id: number) => {
+  const toggleBatchRow = (id: string) => {
     setOpenBatchRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
@@ -99,23 +100,36 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     setIsReceiving(false);
   };
 
-  const openTransferModal = (item: Item, toRoomId: number) => {
-    setTransferContext({ item, toRoomId });
-    setTransferQty(item.quantity);
+  const openTransferModal = (item: Item, toRoomId: string, batchIndex?: number, availableQty?: number) => {
+    const qty = availableQty ?? item.quantity;
+    setTransferContext({ item, toRoomId, batchIndex, availableQty: qty });
+    setTransferQty(qty);
   };
 
   const handleRelocateSelect = (item: Item, value: string) => {
     if (value === '') return;
-    const targetId = Number(value);
-    if (!Number.isFinite(targetId) || targetId === room.id) return;
+    const targetId = value;
+    if (targetId === room.id) return;
+    const hasMultipleBatches = (item.batches?.length || 0) > 1;
+    if (hasMultipleBatches) {
+      setBulkTransferContext({ item, toRoomId: targetId });
+      return;
+    }
     openTransferModal(item, targetId);
+  };
+
+  const handleBatchRelocateSelect = (item: Item, batchIndex: number, batch: ItemBatch, value: string) => {
+    if (value === '') return;
+    const targetId = value;
+    if (targetId === room.id) return;
+    openTransferModal(item, targetId, batchIndex, batch.qty);
   };
 
   const confirmTransfer = () => {
     if (!transferContext) return;
-    const maxQty = Math.max(transferContext.item.quantity, 0);
+    const maxQty = Math.max(transferContext.availableQty, 0);
     const qtyToMove = Math.min(Math.max(transferQty || 0, 1), maxQty);
-    onTransfer(room.id, transferContext.toRoomId, transferContext.item.id, qtyToMove);
+    onTransfer(room.id, transferContext.toRoomId, transferContext.item.id, qtyToMove, transferContext.batchIndex);
     setTransferContext(null);
     setTransferQty(0);
   };
@@ -146,6 +160,12 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   };
 
   const cancelDelete = () => setDeleteContext(null);
+  const confirmBulkTransfer = () => {
+    if (!bulkTransferContext) return;
+    onTransfer(room.id, bulkTransferContext.toRoomId, bulkTransferContext.item.id, bulkTransferContext.item.quantity);
+    setBulkTransferContext(null);
+  };
+  const cancelBulkTransfer = () => setBulkTransferContext(null);
 
   // Existing item pricing preview
   const selectedExistingItem = receiveMode === 'existing' && selectedItemIdx !== '' ? room.items[parseInt(selectedItemIdx)] : null;
@@ -462,7 +482,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                   <button
                                     type="button"
                                     className="ml-2 text-[10px] font-bold text-blue-600 underline"
-                                onClick={(e) => { e.stopPropagation(); toggleBatchRow(item.id); }}
+                                    onClick={(e) => { e.stopPropagation(); toggleBatchRow(item.id); }}
                                   >
                                     {isOpen ? "Hide" : "View"}
                                   </button>
@@ -506,9 +526,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                 const bSoon = bExpiry ? !bExpired && bExpiry <= soonThreshold : false;
                                 return (
                                     <tr key={idx} className={`${isOpen ? 'bg-blue-100/50' : 'bg-slate-50/60'}`}>
-                                    <td className="px-3 py-2 text-[11px] text-slate-400">Batch {idx + 1}</td>
-                                    <td className="px-3 py-2 text-[11px] font-semibold text-slate-700"></td>
-                                    <td className="px-3 py-2 text-[11px] text-slate-400"></td>
+                                    <td className="px-3 py-2 text-[11px] text-slate-400" colSpan={3}>Batch {idx + 1}</td>
                                     <td className="px-3 py-2 text-[11px] font-bold text-slate-800 text-center">
                                       <div className="flex items-center justify-center gap-2">
                                         <button
@@ -545,7 +563,22 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                       {bExpired && <span className="ml-1 text-[9px] uppercase font-black">(EXP)</span>}
                                       {bSoon && !bExpired && <span className="ml-1 text-[9px] uppercase font-black">(SOON)</span>}
                                     </td>
-                                    <td className="px-3 py-2 text-[11px] text-slate-400"></td>
+                                    <td className="px-3 py-2 text-[11px] text-slate-400">
+                                      <select
+                                        className="bg-white text-[10px] font-semibold text-slate-600 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer w-full text-ellipsis shadow-sm"
+                                        value={room.id}
+                                        onChange={(e) => handleBatchRelocateSelect(item, idx, b, e.target.value)}
+                                        title="Transfer batch"
+                                      >
+                                        <option value={room.id}>{room.name}</option>
+                                        <option value="" disabled>-- Move to --</option>
+                                        {allRooms
+                                          .filter((r) => r.id !== room.id)
+                                          .map((r) => (
+                                            <option key={r.id} value={r.id}>{r.name}</option>
+                                          ))}
+                                      </select>
+                                    </td>
                                     <td className="px-3 py-2 text-[11px] text-center">
                                       <button
                                         onClick={() => requestDeleteBatch(item, idx)}
@@ -651,6 +684,35 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                 className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition-colors"
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkTransferContext && (
+        <div className="fixed inset-0 bg-black/50 z-[115] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div>
+              <p className="text-xl font-semibold text-slate-700">
+                Transfer all batches of "{bulkTransferContext.item.name}"?
+              </p>
+              <p className="text-sm text-slate-600 mt-1">
+                This will move {bulkTransferContext.item.quantity} {bulkTransferContext.item.uom} to {allRooms.find(r => r.id === bulkTransferContext.toRoomId)?.name || 'the selected room'}.
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={cancelBulkTransfer}
+                className="px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkTransfer}
+                className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition-colors"
+              >
+                Transfer all
               </button>
             </div>
           </div>

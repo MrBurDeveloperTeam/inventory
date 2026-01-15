@@ -26,10 +26,11 @@ interface MasterInventoryProps {
   rooms: Room[];
   history: PurchaseHistory[];
   logs: ActivityLog[];
-  onReceive: (roomId: number, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
-  onUpdateQty: (roomId: number, itemId: number, delta: number) => void;
-  onTransfer: (fromRoomId: number, toRoomId: number, itemId: number, quantity: number) => void;
-  onDeleteItem: (roomId: number, itemId: number) => void;
+  onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
+  onUpdateQty: (roomId: string, itemId: string, delta: number) => void;
+  onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
+  onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
+  onDeleteItem: (roomId: string, itemId: string) => void;
 }
 
 const MasterInventory: React.FC<MasterInventoryProps> = ({ 
@@ -39,6 +40,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   onReceive, 
   onUpdateQty, 
   onTransfer,
+  onUpdateBatchQty,
   onDeleteItem
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
@@ -48,9 +50,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const [historyCategory, setHistoryCategory] = useState('all');
   const [historyVendor, setHistoryVendor] = useState('all');
   const [historySearch, setHistorySearch] = useState('');
+  const [historyStartDate, setHistoryStartDate] = useState('');
+  const [historyEndDate, setHistoryEndDate] = useState('');
+  const [inventoryCategory, setInventoryCategory] = useState('all');
+  const [inventoryVendor, setInventoryVendor] = useState('all');
+  const [inventoryLocation, setInventoryLocation] = useState('all');
 
   // Form State for Master Receiving
-  const [selectedRoomId, setSelectedRoomId] = useState<number | string>('');
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [receiveMode, setReceiveMode] = useState<'existing' | 'new'>('existing');
   const [selectedProductKey, setSelectedProductKey] = useState<string>('');
   const [formData, setFormData] = useState<Partial<Item>>({
@@ -61,30 +68,44 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [expiry, setExpiry] = useState('');
   const [hasExpiry, setHasExpiry] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ roomId: number; itemId: number; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ roomId: string; itemId: string; name: string; batchIndex?: number; qty?: number; expiryDate?: string } | null>(null);
 
   // Flattened items for the master list
   const allItems = useMemo(() => {
     return rooms.flatMap(room => 
       room.items.map(item => ({ ...item, roomName: room.name, roomId: room.id }))
     ).filter(item => 
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.roomName.toLowerCase().includes(searchTerm.toLowerCase())
+      item.roomName.toLowerCase().includes(searchTerm.toLowerCase())) &&
+      (inventoryCategory === 'all' || item.category === inventoryCategory) &&
+      (inventoryVendor === 'all' || item.vendor === inventoryVendor) &&
+      (inventoryLocation === 'all' || String(item.roomId) === inventoryLocation)
     );
-  }, [rooms, searchTerm]);
+  }, [rooms, searchTerm, inventoryCategory, inventoryVendor, inventoryLocation]);
 
   // Filtered History
   const filteredHistory = useMemo(() => {
+    const startBoundary = historyStartDate ? new Date(`${historyStartDate}T00:00:00`) : null;
+    // If only a start date is provided, treat it as a single-day filter
+    const endBoundary = historyEndDate
+      ? new Date(`${historyEndDate}T23:59:59`)
+      : historyStartDate
+      ? new Date(`${historyStartDate}T23:59:59`)
+      : null;
+
     return history.filter(h => {
       const matchCat = historyCategory === 'all' || h.category === historyCategory;
       const matchVendor = historyVendor === 'all' || h.vendor === historyVendor;
+      const recordDate = new Date(h.timestamp);
+      const matchDateStart = !startBoundary || recordDate >= startBoundary;
+      const matchDateEnd = !endBoundary || recordDate <= endBoundary;
       const matchSearch = h.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
                           h.brand.toLowerCase().includes(historySearch.toLowerCase());
-      return matchCat && matchVendor && matchSearch;
+      return matchCat && matchVendor && matchDateStart && matchDateEnd && matchSearch;
     });
-  }, [history, historyCategory, historyVendor, historySearch]);
+  }, [history, historyCategory, historyVendor, historySearch, historyStartDate, historyEndDate]);
 
   const groupedHistory = useMemo(() => {
     const sorted = [...filteredHistory].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -102,6 +123,18 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     return Array.from(vendors);
   }, [history]);
 
+  const uniqueInventoryVendors = useMemo(() => {
+    const vendors = new Set<string>();
+    rooms.forEach(room => {
+      room.items.forEach(item => {
+        if (item.vendor) vendors.add(item.vendor);
+      });
+    });
+    return Array.from(vendors);
+  }, [rooms]);
+
+  const inventoryLocations = useMemo(() => rooms.map(r => ({ id: r.id, name: r.name })), [rooms]);
+
   const [openBatchRows, setOpenBatchRows] = useState<Record<string, boolean>>({});
   const toggleBatchRow = (key: string) => {
     setOpenBatchRows(prev => ({ ...prev, [key]: !prev[key] }));
@@ -118,13 +151,54 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     return groups;
   }, [allItems]);
 
-  // Expiry Logic
+  // Expiry Logic - track per batch, not just per item
   const expiringItems = useMemo(() => {
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    // Include items that are already expired or expiring within 30 days
-    return allItems.filter(i => i.expiryDate && new Date(i.expiryDate) <= thirtyDaysFromNow);
-  }, [allItems]);
+    const entries: Array<{
+      key: string;
+      id: string;
+      roomId: string;
+      roomName: string;
+      name: string;
+      brand: string;
+      code: string;
+      expiryDate: string;
+      qty: number;
+      price: number;
+      uom?: string;
+      batchIndex: number;
+    }> = [];
+    rooms.forEach(room => {
+      room.items.forEach(item => {
+        const batches = item.batches && item.batches.length > 0
+          ? item.batches
+          : [{ qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }];
+        batches.forEach((b, idx) => {
+          if (!b.expiryDate) return;
+          const expDate = new Date(b.expiryDate);
+          if (expDate <= thirtyDaysFromNow) {
+            entries.push({
+              key: `${room.id}-${item.id}-${idx}`,
+              id: item.id,
+              roomId: room.id,
+              roomName: room.name,
+              name: item.name,
+              brand: item.brand,
+              code: item.code,
+              expiryDate: b.expiryDate,
+              qty: b.qty,
+              price: b.unitPrice,
+              uom: item.uom,
+              batchIndex: idx
+            });
+          }
+        });
+      });
+    });
+    // Sort soonest first
+    return entries.sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+  }, [rooms]);
 
   const handleProductSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -134,7 +208,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       setFormData({ name: '', brand: '', category: 'consumables', uom: 'pcs', code: '', vendor: '', description: '' });
     } else if (val !== '') {
       setReceiveMode('existing');
-      const [rId, iId] = val.split('-').map(Number);
+      const [rId, ...rest] = val.split('|');
+      const iId = rest.join('|');
       const room = rooms.find(r => r.id === rId);
       const item = room?.items.find(i => i.id === iId);
       if (item) setFormData({ ...item });
@@ -147,7 +222,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const handleReceiveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRoomId) return;
-    onReceive(Number(selectedRoomId), formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
+    onReceive(selectedRoomId, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
     setActiveTab('all');
     resetReceiveForm();
   };
@@ -246,15 +321,41 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         {/* VIEW: ALL INVENTORY */}
         {activeTab === 'all' && (
           <div className="flex flex-col gap-6 animate-in fade-in duration-300">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Quick search master inventory..."
-                className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-700 focus:ring-2 focus:ring-[#4d9678] outline-none transition-all"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm">
+              <select
+                value={inventoryCategory}
+                onChange={e => setInventoryCategory(e.target.value)}
+                className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none"
+              >
+                <option value="all">All Categories</option>
+                {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+              <select
+                value={inventoryVendor}
+                onChange={e => setInventoryVendor(e.target.value)}
+                className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none"
+              >
+                <option value="all">All Vendors</option>
+                {uniqueInventoryVendors.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+              <select
+                value={inventoryLocation}
+                onChange={e => setInventoryLocation(e.target.value)}
+                className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none"
+              >
+                <option value="all">All Locations</option>
+                {inventoryLocations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+              </select>
+              <div className="relative md:col-span-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search records..."
+                  className="h-10 w-full pl-10 pr-6 py-4 bg-white border border-slate-200 rounded-2xl text-xs font-semibold text-slate-600 outline-none transition-all"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm custom-scrollbar">
@@ -450,7 +551,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <select value={selectedProductKey} onChange={handleProductSelect} className="px-4 py-3 rounded-xl border border-slate-200 bg-white font-normal text-slate-800 text-sm focus:ring-2 focus:ring-[#3498db] outline-none shadow-sm" required>
                       <option value="">Choose existing product...</option>
                       {rooms.flatMap(r => r.items.map(i => (
-                        <option key={`${r.id}-${i.id}`} value={`${r.id}-${i.id}`}>
+                        <option key={`${r.id}|${i.id}`} value={`${r.id}|${i.id}`}>
                           {i.name} ({i.brand})
                         </option>
                       )))}
@@ -490,10 +591,11 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 </div>
                 {/* Existing product summary */}
                 {receiveMode === 'existing' && selectedProductKey && selectedRoomId && (() => {
-                  const [sourceRoomId, sourceItemId] = selectedProductKey.includes('-') ? selectedProductKey.split('-').map(Number) : [null, null];
+                  const [sourceRoomId, ...rest] = selectedProductKey.split('|');
+                  const sourceItemId = rest.join('|');
                   const sourceRoom = rooms.find(r => r.id === sourceRoomId);
                   const sourceItem = sourceRoom?.items.find(i => i.id === sourceItemId);
-                  const targetRoom = rooms.find(r => r.id === Number(selectedRoomId));
+                  const targetRoom = rooms.find(r => r.id === selectedRoomId);
                   if (!sourceItem || !targetRoom) return null;
 
                   const matchInTarget = targetRoom.items.find(i => 
@@ -589,7 +691,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                <div className="bg-purple-100 p-3 rounded-2xl text-[#9b59b6]"><ClipboardList className="w-6 h-6" /></div>
                <h4 className="text-[#9b59b6] font-bold text-xl tracking-tight">Full Purchase Records</h4>
              </div>
-             <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-sm">
+             <div className="grid grid-cols-1 md:grid-cols-6 gap-3 bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-sm">
                 <select value={historyCategory} onChange={e => setHistoryCategory(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 outline-none">
                   <option value="all">All Categories</option>
                   {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -598,9 +700,30 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <option value="all">All Vendors</option>
                   {uniqueVendors.map(v => <option key={v} value={v}>{v}</option>)}
                 </select>
-                <div className="md:col-span-3 relative">
+                <div className="md:col-span-2 flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="date"
+                      value={historyStartDate}
+                      onChange={e => setHistoryStartDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
+                    />
+                  </div>
+                  <span className="text-slate-400 font-black px-1">-</span>
+                  <div className="relative flex-1">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="date"
+                      value={historyEndDate}
+                      onChange={e => setHistoryEndDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="md:col-span-2 relative">
                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                   <input type="text" placeholder="Search records..." className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none" value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
+                   <input type="text" placeholder="Search records..." className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-slate-600 outline-none" value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
                 </div>
              </div>
              <div className="overflow-x-auto bg-white rounded-3xl shadow-sm border border-slate-100 custom-scrollbar">
@@ -687,12 +810,12 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
              </div>
            {expiringItems.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                {expiringItems.map((item, idx) => {
+                {expiringItems.map((item) => {
                   const isExpired = new Date(item.expiryDate!) < new Date();
                   const daysDiff = getDaysDiff(item.expiryDate!);
                    
                    return (
-                    <div key={idx} className="bg-white rounded-[1.25rem] border border-slate-200 overflow-hidden shadow-sm flex flex-col group hover:shadow-md transition-shadow relative">
+                    <div key={item.key} className="bg-white rounded-[1.25rem] border border-slate-200 overflow-hidden shadow-sm flex flex-col group hover:shadow-md transition-shadow relative">
                        {/* Header Status Bar */}
                        <div className={`px-5 py-2.5 flex items-center justify-between ${isExpired ? 'bg-rose-50 border-t-4 border-t-rose-500' : 'bg-amber-50 border-t-4 border-t-amber-500'}`}>
                           <div className="flex items-center gap-3">
@@ -705,7 +828,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                             </div>
                           </div>
                           <button
-                            onClick={() => setDeleteTarget({ roomId: item.roomId, itemId: item.id, name: item.name })}
+                            onClick={() => setDeleteTarget({ roomId: item.roomId, itemId: item.id, name: item.name, batchIndex: item.batchIndex, qty: item.qty, expiryDate: item.expiryDate })}
                             className="text-slate-300 hover:text-rose-600 transition-colors"
                             aria-label={`Delete ${item.name}`}
                             title="Delete item"
@@ -748,11 +871,11 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                           <div className="flex justify-between items-center">
                              <div className="flex flex-col gap-1">
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Qty on hand</span>
-                                <span className="text-base font-black text-slate-800">{item.quantity} {item.uom}</span>
+                                <span className="text-base font-black text-slate-800">{item.qty} {item.uom || 'pcs'}</span>
                              </div>
                              <div className="flex flex-col gap-1 text-right">
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Value</span>
-                                <span className="text-base font-black text-slate-800">${(item.quantity * item.price).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                                <span className="text-base font-black text-slate-800">${(item.qty * item.price).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                              </div>
                           </div>
                        </div>
@@ -802,10 +925,16 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
             <div>
-              <p className="text-sm font-semibold text-slate-700">
-                Delete "{deleteTarget.name}" from inventory?
+              <p className="text-[18px] font-semibold text-slate-700">
+                {typeof deleteTarget.batchIndex === 'number'
+                  ? `Delete batch ${deleteTarget.batchIndex + 1} of "${deleteTarget.name}"?`
+                  : `Delete "${deleteTarget.name}" from inventory?`}
               </p>
-              <p className="text-xs text-slate-500 mt-1">This action cannot be undone.</p>
+              <p className="text-sm text-slate-500 mt-1">
+                {typeof deleteTarget.batchIndex === 'number'
+                  ? `Qty: ${deleteTarget.qty ?? 0} ${deleteTarget.expiryDate ? `| Exp: ${deleteTarget.expiryDate}` : ''}`
+                  : 'This action cannot be undone.'}
+              </p>
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <button
@@ -816,7 +945,12 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
               </button>
               <button
                 onClick={() => {
-                  onDeleteItem(deleteTarget.roomId, deleteTarget.itemId);
+                  if (typeof deleteTarget.batchIndex === 'number') {
+                    const delta = -(deleteTarget.qty || 0);
+                    onUpdateBatchQty(deleteTarget.roomId, deleteTarget.itemId, deleteTarget.batchIndex, delta);
+                  } else {
+                    onDeleteItem(deleteTarget.roomId, deleteTarget.itemId);
+                  }
                   setDeleteTarget(null);
                 }}
                 className="px-4 py-2 rounded-full bg-rose-600 text-white font-bold text-sm hover:bg-rose-700 transition-colors"
