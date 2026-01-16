@@ -1,31 +1,44 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from './types';
-import { LogOut, Building2, ChevronRight, Camera } from 'lucide-react';
+import { LogOut, Building2, ChevronRight, Camera, ChevronDown } from 'lucide-react';
 
 interface HeaderProps {
   onProfileClick?: () => void;
   onDashboardClick?: () => void;
   onLogout?: () => void;
+  onAddCollaborator?: () => void;
   user?: UserProfile | null;
   userInitials?: string;
   userAvatarUrl?: string;
+  availableInventories?: { id: string; name: string; role: string }[];
+  currentInventoryId?: string | null;
+  onSwitchInventory?: (id: string) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
   onProfileClick,
   onDashboardClick,
   onLogout,
+  onAddCollaborator,
   user,
   userInitials = 'U',
   userAvatarUrl,
+  availableInventories = [],
+  currentInventoryId,
+  onSwitchInventory
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const inventoryRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+      }
+      if (inventoryRef.current && !inventoryRef.current.contains(event.target as Node)) {
+        setIsInventoryOpen(false);
       }
     };
 
@@ -38,23 +51,33 @@ const Header: React.FC<HeaderProps> = ({
     onProfileClick?.();
   };
 
+  const handleAddCollaborator = () => {
+    setIsOpen(false);
+    onAddCollaborator?.();
+  }
+
+  const currentInventoryName = availableInventories.find(i => i.id === currentInventoryId)?.name || 'My Inventory';
+
   return (
     <header className="bg-white shadow-sm px-6 md:px-16 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 w-full z-50">
-      {/* Logo */}
-      <div
-        className="flex items-center cursor-pointer group"
-        onClick={onDashboardClick}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && onDashboardClick?.()}
-      >
-        <img
-          src="/images/mrbur_logo.png"
-          alt="MR.BUR logo."
-          className="h-10 md:h-12 w-auto object-contain"
-          draggable={false}
-        />
+      {/* Logo and Inventory Switcher */}
+      <div className="flex items-center gap-6">
+        <div
+          className="flex items-center cursor-pointer group"
+          onClick={onDashboardClick}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && onDashboardClick?.()}
+        >
+          <img
+            src="/images/mrbur_logo.png"
+            alt="MR.BUR logo."
+            className="h-10 w-auto transition-transform group-hover:scale-105"
+          />
+        </div>
+
       </div>
+
 
       <div className="flex items-center gap-4 relative" ref={dropdownRef}>
         {onProfileClick && (
@@ -111,10 +134,39 @@ const Header: React.FC<HeaderProps> = ({
                 <ChevronRight size={16} className="text-slate-500 group-hover:text-slate-500 transition-colors shrink-0" />
               </button>
 
+              {availableInventories.length > 1 && (
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <h3 className="text-xs font-bold text-slate-700 tracking-wide mb-3">Switch Inventory</h3>
+                  <div className="space-y-1">
+                    {availableInventories.map((inv) => (
+                      <button
+                        key={inv.id}
+                        onClick={() => {
+                          onSwitchInventory?.(inv.id);
+                          setIsOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all text-sm font-medium border
+                          ${currentInventoryId === inv.id
+                            ? 'bg-blue-50 text-blue-600 border-blue-100'
+                            : 'text-slate-600 hover:bg-slate-50 border-transparent hover:border-slate-100'
+                          }
+                        `}
+                      >
+                        <span className="truncate">{inv.name}</span>
+                        {inv.role === 'owner' ? (
+                          <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded ml-2 font-bold">OWNER</span>
+                        ) : (
+                          <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded ml-2 font-bold uppercase">{inv.role}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="mt-4 pt-4 border-t border-slate-100">
                 <h3 className="text-xs font-bold text-slate-700 tracking-wide mb-3">Collaborator</h3>
                 <button
-                  onClick={() => alert('Collaborator feature coming soon!')}
+                  onClick={handleAddCollaborator}
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-xl transition-all font-semibold text-sm text-slate-700 shadow-sm"
                 >
                   <Building2 size={16} />
@@ -135,7 +187,7 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         )}
       </div>
-    </header>
+    </header >
   );
 };
 

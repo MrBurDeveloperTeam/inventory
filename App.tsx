@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
@@ -9,6 +9,7 @@ import RoomModal from './RoomModal';
 import LandingModal from './LandingModal';
 import ProfilePage from './ProfilePage';
 import AdminDashboard from './AdminDashboard';
+import CollaboratorModal from './CollaboratorModal';
 import { supabase } from './supabaseClient';
 
 type ManagedInventory = {
@@ -34,6 +35,7 @@ type ProfileRow = {
 
 const PROFILE_IMAGE_STORAGE_PREFIX = 'denta_profile_images_';
 const PROFILE_IMAGE_BUCKET = 'profile-media';
+const PREFERRED_INVENTORY_ID_KEY = 'denta_preferred_inventory_id_';
 
 const loadUserImages = (userId: string) => {
   try {
@@ -74,6 +76,14 @@ const uploadProfileImage = async (file: File, userId: string, type: 'avatar' | '
   return data.publicUrl;
 };
 
+const generateId = () => {
+  try {
+    return window.crypto.randomUUID();
+  } catch (e) {
+    return Math.random().toString(36).substring(2) + Date.now().toString(36);
+  }
+};
+
 const summarizeBatches = (batches: ItemBatch[]) => {
   const totalQty = batches.reduce((sum, b) => sum + b.qty, 0);
   const totalValue = batches.reduce((sum, b) => sum + (b.qty * b.unitPrice), 0);
@@ -89,6 +99,7 @@ const ensureBatches = (item: Item): Item => {
   const baseBatches = item.batches && item.batches.length > 0
     ? item.batches.map(b => ({ ...b }))
     : [{
+      id: crypto.randomUUID(),
       qty: item.quantity,
       unitPrice: item.price,
       expiryDate: item.expiryDate || null
@@ -119,7 +130,7 @@ const mergeBatchAdd = (item: Item, qty: number, price: number, expiry?: string) 
     const newPrice = newQty > 0 ? ((b.qty * b.unitPrice) + (qty * price)) / newQty : price;
     batches[idx] = { ...b, qty: newQty, unitPrice: newPrice, expiryDate: key };
   } else {
-    batches.push({ qty, unitPrice: price, expiryDate: key });
+    batches.push({ id: crypto.randomUUID(), qty, unitPrice: price, expiryDate: key });
   }
   const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(batches);
   return { ...normalized, batches, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
@@ -129,7 +140,7 @@ const adjustBatchesWithDelta = (item: Item, delta: number) => {
   const normalized = ensureBatches(item);
   let batches = normalized.batches ? normalized.batches.map(b => ({ ...b })) : [];
   if (delta > 0) {
-    if (batches.length === 0) batches.push({ qty: 0, unitPrice: normalized.price, expiryDate: normalized.expiryDate || null });
+    if (batches.length === 0) batches.push({ id: crypto.randomUUID(), qty: 0, unitPrice: normalized.price, expiryDate: normalized.expiryDate || null });
     batches[0].qty += delta;
   } else if (delta < 0) {
     let remaining = Math.abs(delta);
@@ -147,6 +158,8 @@ const adjustBatchesWithDelta = (item: Item, delta: number) => {
 const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [isCollaboratorModalOpen, setIsCollaboratorModalOpen] = useState(false);
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
   const [history, setHistory] = useState<PurchaseHistory[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [blueprint, setBlueprint] = useState<string | null>(null);
@@ -167,6 +180,79 @@ const App: React.FC = () => {
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [catPosition, setCatPosition] = useState<CatPosition>({ x: 20, y: 20 });
   const syncInFlight = useRef(false);
+  const isHydrated = useRef(false);
+  const [isLoadingMain, setIsLoadingMain] = useState(true);
+  const [isReloading, setIsReloading] = useState(false);
+  const lastLocalMutation = useRef(0);
+  const isDirty = useRef(false);
+  const pendingSyncNeeded = useRef(false);
+  const lastLoadRequestId = useRef(0);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+
+  // Sharing Logic
+  const [currentInventoryOwnerId, setCurrentInventoryOwnerId] = useState<string | null>(null);
+
+  // Persist inventory selection to localStorage whenever it changes
+  useEffect(() => {
+    if (supabaseUserId && currentInventoryOwnerId) {
+      localStorage.setItem(`${PREFERRED_INVENTORY_ID_KEY}${supabaseUserId}`, currentInventoryOwnerId);
+    }
+  }, [currentInventoryOwnerId, supabaseUserId]);
+  const [availableInventories, setAvailableInventories] = useState<{ id: string; name: string; role: string }[]>([]);
+
+  const fetchAvailableInventories = async (uid: string) => {
+    // 1. Own Inventory
+    const list: { id: string; name: string; role: string }[] = [{ id: uid, name: 'My Inventory', role: 'owner' }];
+
+    // 2. Shared Inventories - get collaborator records
+    const { data: shared, error } = await supabase
+      .from('collaborators')
+      .select('owner_id, role')
+      .eq('user_id', uid);
+
+    if (error) {
+      console.error('Error fetching shared inventories:', error);
+    } else if (shared && shared.length > 0) {
+      // Fetch owner profiles separately to avoid FK join issues
+      const ownerIds = shared.map((s: any) => s.owner_id);
+      const { data: ownerProfiles } = await supabase
+        .from('profiles')
+        .select('user_id, email, name')
+        .in('user_id', ownerIds);
+
+      const profileMap = new Map<string, any>();
+      (ownerProfiles || []).forEach((p: any) => profileMap.set(p.user_id, p));
+
+      shared.forEach((s: any) => {
+        const ownerProfile = profileMap.get(s.owner_id);
+        const ownerName = ownerProfile?.name || ownerProfile?.email || 'Unknown';
+        list.push({
+          id: s.owner_id,
+          name: `${ownerName}'s Inventory`,
+          role: s.role
+        });
+      });
+    }
+
+    setAvailableInventories(list);
+    // Determine which ID to use. If currentInventoryOwnerId is already set and valid, keep it. Otherwise default to own.
+    setCurrentInventoryOwnerId(prev => {
+      const storedId = uid ? localStorage.getItem(`${PREFERRED_INVENTORY_ID_KEY}${uid}`) : null;
+      const targetId = prev || storedId || uid;
+      const stillValid = list.find(i => i.id === targetId);
+      const nextId = stillValid ? targetId : uid;
+
+      if (nextId !== prev) {
+        console.log('Switching inventory to:', nextId, '(from:', prev, ') resetting hydration');
+        isHydrated.current = false;
+        isDirty.current = false;
+        setIsLoadingMain(true);
+        setRooms([]); // Clear local state for new inventory
+      }
+      return nextId;
+    });
+  };
+
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -199,6 +285,75 @@ const App: React.FC = () => {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  // Invitation Logic
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('invite_token');
+    if (token) {
+      setPendingInviteToken(token);
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    const checkInvite = async () => {
+      if (pendingInviteToken && user) {
+        // Accept invitation
+        const { data: invite, error } = await supabase
+          .from('invitations')
+          .select('*')
+          .eq('token', pendingInviteToken)
+          .single();
+
+        if (error || !invite) {
+          // Silent fail or alert if needed
+          console.error('Invalid invitation');
+          setPendingInviteToken(null);
+          return;
+        }
+
+        if (invite.status !== 'pending') {
+          alert('This invitation has already been used.');
+          setPendingInviteToken(null);
+          return;
+        }
+
+        // Create collaborator record
+        const { error: collabError } = await supabase
+          .from('collaborators')
+          .insert({
+            owner_id: invite.owner_id,
+            user_id: user.id,
+            role: invite.role
+          });
+
+        if (collabError) {
+          if (!collabError.message.includes('duplicate key')) {
+            console.error('Error accepting invite:', collabError);
+            return;
+          }
+        }
+
+        // Update invitation status
+        await supabase
+          .from('invitations')
+          .update({ status: 'accepted' })
+          .eq('id', invite.id);
+
+        alert(`Invitation accepted! You are now a ${invite.role} for this inventory.`);
+        setPendingInviteToken(null);
+        // Refresh or switch context could happen here (future task)
+      } else if (pendingInviteToken && !user && !isAuthenticated) {
+        // User not logged in, prompt them
+        // The LandingModal will naturally show up.
+        // We can optionally show a message or banner.
+        console.log('User needs to login to accept invite');
+      }
+    };
+    checkInvite();
+  }, [pendingInviteToken, user]);
 
   const fetchAdminData = async (force = false) => {
     if (!force && !isAdmin) return;
@@ -335,150 +490,381 @@ const App: React.FC = () => {
         position: authUser.user.user_metadata?.position || '',
         company_name: authUser.user.user_metadata?.company_name || null
       };
+
       const { data: insertedProfile, error: insertProfileError } = await supabase
         .from('profiles')
         .upsert(fallbackProfile, { onConflict: 'user_id' })
         .select('*')
         .single();
-      if (insertProfileError) {
-        console.error('Profile upsert during bootstrap error', insertProfileError);
+
+      if (insertProfileError && insertProfileError.code !== '23505') {
+        console.error('Profile upsert error', insertProfileError);
       } else {
-        finalProfile = insertedProfile;
+        if (insertedProfile) finalProfile = insertedProfile;
       }
     }
 
-    const accountTypeValue = (finalProfile?.account_type as any) || (authUser.user?.user_metadata?.account_type as any) || 'individual';
-    const profileSource = finalProfile || (authUser.user ? {
-      name: authUser.user.user_metadata?.name || authUser.user.email || 'User',
-      email: authUser.user.email || '',
-      phone: authUser.user.user_metadata?.phone || '',
-      position: authUser.user.user_metadata?.position || '',
-      companyName: authUser.user.user_metadata?.company_name || undefined
-    } : null);
-
-    if (profileSource) {
-      setUser({
-        name: profileSource.name || 'User',
-        email: profileSource.email,
-        accountType: accountTypeValue as any,
-        phone: (profileSource as any).phone || '',
-        position: (profileSource as any).position || '',
-        companyName: (profileSource as any).companyName || (profileSource as any).company_name || undefined,
-        avatarUrl: (profileSource as any).avatar_url || storedImages.avatarUrl,
-        backgroundUrl: (profileSource as any).background_url || storedImages.backgroundUrl
-      });
+    // Final check if user is admin
+    if (finalProfile?.account_type === 'admin') {
+      setIsAdmin(true);
+      fetchAdminData();
     }
 
-    const { data: meta } = await supabase
-      .from('inventory_meta')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // Load available inventories
+    await fetchAvailableInventories(userId);
 
-    const { data: roomsData, error: roomsError } = await supabase
-      .from('inventory_rooms')
-      .select('id, name, pos_x, pos_y')
-      .eq('user_id', userId);
-    if (roomsError) {
-      console.error('Rooms fetch error', roomsError);
-    }
-
-    const roomIds = (roomsData || []).map((r: any) => r.id);
-    const { data: itemsData } = roomIds.length
-      ? await supabase.from('inventory_items').select('*, item_batches:inventory_item_batches(*)').in('room_id', roomIds)
-      : { data: [] as any[] };
-
-    const { data: historyData } = await supabase
-      .from('inventory_purchase_history')
-      .select('*')
-      .eq('user_id', userId)
-      .order('occurred_at', { ascending: false });
-
-    const { data: logData } = await supabase
-      .from('inventory_activity_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    const itemsByRoom: Record<string, Item[]> = {};
-    (itemsData || []).forEach((row: any) => {
-      const batches: ItemBatch[] = (row.item_batches || []).map((b: any) => ({
-        qty: Number(b.qty) || 0,
-        unitPrice: Number(b.unit_price) || 0,
-        expiryDate: b.expiry_date || null
-      }));
-      const item: Item = ensureBatches({
-        id: row.id,
-        name: row.name || '',
-        brand: row.brand || '',
-        code: row.code || '',
-        quantity: Number(row.quantity) || 0,
-        uom: row.uom || 'pcs',
-        price: Number(row.price) || 0,
-        vendor: row.vendor || '',
-        category: (row.category as any) || 'other',
-        description: row.description || '',
-        expiryDate: row.expiry_date || null,
-        batches
-      });
-      itemsByRoom[row.room_id] = [...(itemsByRoom[row.room_id] || []), item];
+    setUser({
+      id: userId,
+      email: finalProfile?.email || authUser.user?.email || '',
+      name: finalProfile?.name || 'User',
+      accountType: finalProfile?.account_type as any || 'individual',
+      clinicName: finalProfile?.company_name || undefined,
+      avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
+      backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
     });
 
-    const hydratedRooms: Room[] = (roomsData || []).map((r: any) => ({
-      id: r.id,
-      name: r.name,
-      x: Number(r.pos_x) || 0,
-      y: Number(r.pos_y) || 0,
-      items: (itemsByRoom[r.id] || []).map(ensureBatches)
-    }));
-
-    setRooms(hydratedRooms);
-    setHistory(
-      (historyData || []).map((h: any) => ({
-        id: h.id,
-        timestamp: h.occurred_at || h.created_at,
-        productName: h.product_name || '',
-        brand: h.brand || '',
-        code: h.code || '',
-        vendor: h.vendor || '',
-        qty: Number(h.qty) || 0,
-        unitPrice: Number(h.unit_price) || 0,
-        totalPrice: Number(h.total_price) || (Number(h.qty) || 0) * (Number(h.unit_price) || 0),
-        location: h.location || '',
-        category: h.category || 'other',
-        roomId: h.room_id || '',
-        uom: h.uom || 'pcs',
-        expiryDate: h.expiry_date || null
-      }))
-    );
-    setLogs(
-      (logData || []).map((l: any) => ({
-        id: l.id,
-        timestamp: l.created_at,
-        roomId: l.room_id || '',
-        roomName: l.room_name || '',
-        action: l.action,
-        details: l.details
-      }))
-    );
-    setBlueprint(meta?.blueprint || PRESET_BLUEPRINTS[0].url);
-    setCatPosition({
-      x: meta?.cat_position_x !== undefined ? Number(meta.cat_position_x) : 20,
-      y: meta?.cat_position_y !== undefined ? Number(meta.cat_position_y) : 20
-    });
-
-    const isUserAdmin = accountTypeValue === 'admin';
-    setIsAdmin(isUserAdmin);
-    if (isUserAdmin) {
-      await fetchAdminData(true);
-    } else {
-      setManagedProfiles([]);
-      setManagedInventories([]);
-    }
-
-    setIsAuthenticated(!!authUser.user);
+    setIsAuthenticated(true);
     setIsBootstrapped(true);
   };
+
+  const loadInventory = useCallback(async () => {
+    if (!currentInventoryOwnerId) return;
+    if (isDirty.current) {
+      console.log('loadInventory: Local state is dirty, skipping reload to prevent overwrite');
+      return;
+    }
+    // Prevent background reload if we just did a local mutation (echo prevention for full loads)
+    if (Date.now() - lastLocalMutation.current < 2000) {
+      console.log('loadInventory: Local mutation buffer active, skipping reload');
+      return;
+    }
+    const reqId = ++lastLoadRequestId.current;
+    if (isHydrated.current) {
+      setIsReloading(true);
+      setSyncStatus('syncing');
+    }
+
+    try {
+      const { data: meta } = await supabase
+        .from('inventory_meta')
+        .select('*')
+        .eq('user_id', currentInventoryOwnerId)
+        .maybeSingle();
+
+      const { data: roomsData, error: roomsError } = await supabase
+        .from('inventory_rooms')
+        .select('id, name, pos_x, pos_y')
+        .eq('user_id', currentInventoryOwnerId);
+      if (roomsError) {
+        console.error('Rooms fetch error', roomsError);
+      }
+
+      const roomIds = (roomsData || []).map((r: any) => r.id);
+      const { data: itemsData } = roomIds.length
+        ? await supabase.from('inventory_items').select('*, item_batches:inventory_item_batches(*)').in('room_id', roomIds)
+        : { data: [] as any[] };
+
+      const { data: historyData } = await supabase
+        .from('inventory_purchase_history')
+        .select('*')
+        .eq('user_id', currentInventoryOwnerId)
+        .order('occurred_at', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      const { data: logData } = await supabase
+        .from('inventory_activity_logs')
+        .select('*, actor:actor_id(name, email)')
+        .eq('user_id', currentInventoryOwnerId)
+        .order('created_at', { ascending: false });
+
+      const itemsByRoom: Record<string, Item[]> = {};
+      (itemsData || []).forEach((row: any) => {
+        const batches: ItemBatch[] = (row.item_batches || []).map((b: any) => ({
+          id: b.id,
+          qty: Number(b.qty) || 0,
+          unitPrice: Number(b.unit_price) || 0,
+          expiryDate: b.expiry_date || null
+        }));
+        const item: Item = ensureBatches({
+          id: row.id,
+          name: row.name || '',
+          brand: row.brand || '',
+          code: row.code || '',
+          quantity: Number(row.quantity) || 0,
+          uom: row.uom || 'pcs',
+          price: Number(row.price) || 0,
+          vendor: row.vendor || '',
+          category: (row.category as any) || 'other',
+          description: row.description || '',
+          expiryDate: row.expiry_date || null,
+          createdAt: row.created_at,
+          batches
+        });
+        itemsByRoom[row.room_id] = [...(itemsByRoom[row.room_id] || []), item];
+      });
+
+      const hydratedRooms: Room[] = (roomsData || []).map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        x: Number(r.pos_x) || 0,
+        y: Number(r.pos_y) || 0,
+        items: (itemsByRoom[r.id] || []).map(ensureBatches)
+      }));
+
+      if (roomsData) {
+        if (reqId !== lastLoadRequestId.current) {
+          console.log('Discarding stale inventory load result');
+          return;
+        }
+        console.log(`Inventory loaded successfully for ${currentInventoryOwnerId}. Found ${hydratedRooms.length} rooms.`);
+        isHydrated.current = true;
+        setRooms(hydratedRooms);
+      }
+      setHistory(
+        (historyData || []).map((h: any) => ({
+          id: h.id,
+          timestamp: h.occurred_at || h.created_at,
+          productName: h.product_name || '',
+          brand: h.brand || '',
+          code: h.code || '',
+          vendor: h.vendor || '',
+          qty: Number(h.qty) || 0,
+          unitPrice: Number(h.unit_price) || 0,
+          totalPrice: Number(h.total_price) || (Number(h.qty) || 0) * (Number(h.unit_price) || 0),
+          location: h.location || '',
+          category: h.category || 'other',
+          roomId: h.room_id || '',
+          uom: h.uom || 'pcs',
+          expiryDate: h.expiry_date || null
+        }))
+      );
+      setLogs(
+        (logData || []).map((l: any) => ({
+          id: l.id,
+          timestamp: l.created_at,
+          roomId: l.room_id || '',
+          roomName: l.room_name || '',
+          action: l.action,
+          details: l.details,
+          actorId: l.actor_id || undefined,
+          actorName: l.actor?.name || l.actor?.email || undefined,
+          beforeValue: l.before_value || undefined,
+          afterValue: l.after_value || undefined
+        }))
+      );
+      setBlueprint(meta?.blueprint || PRESET_BLUEPRINTS[0].url);
+      setCatPosition({
+        x: meta?.cat_position_x !== undefined ? Number(meta.cat_position_x) : 20,
+        y: meta?.cat_position_y !== undefined ? Number(meta.cat_position_y) : 20
+      });
+      setIsLoadingMain(false);
+      setIsReloading(false);
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('Inventory load failed:', err);
+      setIsLoadingMain(false);
+      setIsReloading(false);
+      setSyncStatus('error');
+    }
+  }, [currentInventoryOwnerId]);
+
+  useEffect(() => {
+    loadInventory();
+  }, [loadInventory, currentInventoryOwnerId]);
+
+  // Realtime Subscriptions
+  useEffect(() => {
+    if (!currentInventoryOwnerId) return;
+
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedReload = () => {
+      // If we are currently syncing our own changes, don't reload from the database
+      // to avoid infinite loops and UI flickering
+      if (syncInFlight.current) return;
+
+      // If we recently made a local change, don't reload yet to give sync a chance to complete
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        console.log('Debounced Reload Triggering loadInventory...');
+        loadInventory();
+      }, 500); // Reduce to 500ms for faster collaborative updates
+    };
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inventory_rooms' },
+        (payload) => {
+          if (Date.now() - lastLocalMutation.current < 800) return;
+          console.log('Realtime Room Change:', payload.eventType);
+
+          if (payload.eventType === 'INSERT') {
+            if (payload.new.user_id !== currentInventoryOwnerId) return;
+            const newRoom: Room = {
+              id: payload.new.id,
+              name: payload.new.name,
+              x: Number(payload.new.pos_x),
+              y: Number(payload.new.pos_y),
+              items: []
+            };
+            setRooms(prev => {
+              if (prev.find(r => r.id === newRoom.id)) return prev;
+              return [...prev, newRoom];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            if (payload.new.user_id !== currentInventoryOwnerId) return;
+            setRooms(prev => prev.map(r => r.id === payload.new.id ? {
+              ...r,
+              name: payload.new.name,
+              x: Number(payload.new.pos_x),
+              y: Number(payload.new.pos_y)
+            } : r));
+          } else if (payload.eventType === 'DELETE') {
+            // For DELETE, payload.old only has the ID. 
+            // We just filter it out of our local state if it exists.
+            setRooms(prev => prev.filter(r => r.id !== payload.old.id));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inventory_items' },
+        (payload) => {
+          if (Date.now() - lastLocalMutation.current < 800) return;
+          console.log('Realtime Item Change:', payload.eventType);
+
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            if (payload.new.user_id !== currentInventoryOwnerId) return;
+            const newItemData = payload.new;
+            setRooms(prev => prev.map(r => {
+              if (r.id !== newItemData.room_id) return r;
+              const exists = r.items.find(i => i.id === newItemData.id);
+              if (exists) {
+                return {
+                  ...r,
+                  items: r.items.map(i => i.id === newItemData.id ? {
+                    ...i,
+                    name: newItemData.name,
+                    brand: newItemData.brand,
+                    code: newItemData.code,
+                    quantity: Number(newItemData.quantity),
+                    price: Number(newItemData.price),
+                    uom: newItemData.uom,
+                    vendor: newItemData.vendor,
+                    category: newItemData.category,
+                    description: newItemData.description,
+                    expiryDate: newItemData.expiry_date
+                  } : i)
+                };
+              } else {
+                // For INSERT, we can't fully hydrate without batches, so reload is safer
+                debouncedReload();
+                return r;
+              }
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            setRooms(prev => prev.map(r => ({
+              ...r,
+              items: r.items.filter(i => i.id !== payload.old.id)
+            })));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inventory_item_batches' },
+        (payload) => {
+          if (Date.now() - lastLocalMutation.current < 800) return;
+          console.log('Realtime Batch Change:', payload.eventType);
+
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const newBatch = payload.new;
+            setRooms(prev => prev.map(r => ({
+              ...r,
+              items: r.items.map(i => {
+                if (i.id !== newBatch.item_id) return i;
+                const batchExists = i.batches?.find(b => b.id === newBatch.id);
+                let updatedBatches;
+                if (batchExists) {
+                  updatedBatches = i.batches!.map(b => b.id === newBatch.id ? {
+                    id: newBatch.id,
+                    qty: Number(newBatch.qty),
+                    unitPrice: Number(newBatch.unit_price),
+                    expiryDate: newBatch.expiry_date
+                  } : b);
+                } else {
+                  updatedBatches = [...(i.batches || []), {
+                    id: newBatch.id,
+                    qty: Number(newBatch.qty),
+                    unitPrice: Number(newBatch.unit_price),
+                    expiryDate: newBatch.expiry_date
+                  }];
+                }
+                const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(updatedBatches);
+                return {
+                  ...i,
+                  batches: updatedBatches,
+                  quantity: totalQty,
+                  price: avgPrice,
+                  expiryDate: earliestExpiry
+                };
+              })
+            })));
+          } else if (payload.eventType === 'DELETE') {
+            setRooms(prev => prev.map(r => ({
+              ...r,
+              items: r.items.map(i => {
+                const updatedBatches = (i.batches || []).filter(b => b.id !== payload.old.id);
+                if (updatedBatches.length === i.batches?.length) return i;
+                const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(updatedBatches);
+                return {
+                  ...i,
+                  batches: updatedBatches,
+                  quantity: totalQty,
+                  price: avgPrice,
+                  expiryDate: earliestExpiry
+                };
+              })
+            })));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inventory_meta' },
+        (payload) => {
+          if (Date.now() - lastLocalMutation.current < 800) return;
+          if (payload.eventType === 'UPDATE') {
+            if (payload.new.user_id !== currentInventoryOwnerId) return;
+            setBlueprint(payload.new.blueprint);
+            setCatPosition({ x: Number(payload.new.cat_position_x), y: Number(payload.new.cat_position_y) });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inventory_purchase_history' },
+        () => debouncedReload()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'inventory_activity_logs', filter: `user_id=eq.${currentInventoryOwnerId}` },
+        () => debouncedReload() // Logs are fine to reload periodically
+      )
+      .subscribe((status) => {
+        console.log(`Realtime Subscription Status for ${currentInventoryOwnerId}:`, status);
+        if (status === 'CHANNEL_ERROR') {
+          console.error('Realtime Channel Error - collaborators may not see updates. Check DB Realtime settings.');
+          setSyncStatus('error');
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (reloadTimer) clearTimeout(reloadTimer);
+    };
+  }, [currentInventoryOwnerId, loadInventory]);
 
   const handleLogin = async (userProfile: UserProfile) => {
     const { data: userData } = await supabase.auth.getUser();
@@ -573,47 +959,156 @@ const App: React.FC = () => {
     }
   };
 
-  const addRoom = (x: number, y: number) => {
-    setRooms(prev => {
-      const roomNumbers = prev
-        .map(r => {
-          const match = r.name.match(/^Room (\d+)$/);
-          return match ? parseInt(match[1], 10) : null;
-        })
-        .filter((n): n is number => n !== null);
+  const addRoom = async (x: number, y: number) => {
+    console.log('addRoom initiated:', { x, y });
+    lastLocalMutation.current = Date.now();
 
-      const nextNumber = roomNumbers.length > 0
-        ? Math.max(...roomNumbers) + 1
-        : 1;
+    const roomNumbers = rooms
+      .map(r => {
+        const m = r.name.match(/Room\s+(\d+)/);
+        return m ? parseInt(m[1]) : null;
+      })
+      .filter((n): n is number => n !== null);
+    const nextNumber = roomNumbers.length > 0
+      ? Math.max(...roomNumbers) + 1
+      : 1;
 
-      const newRoom: Room = {
-        id: crypto.randomUUID(),
-        name: `Room ${nextNumber}`,
-        x,
-        y,
-        items: [],
-      };
+    const newRoomId = generateId();
+    const newRoom: Room = {
+      id: newRoomId,
+      name: `Room ${nextNumber}`,
+      x,
+      y,
+      items: [],
+    };
 
-      return [...prev, newRoom];
-    });
-
+    // 1. Optimistic Update
+    setRooms(prev => [...prev, newRoom]);
+    addActivity(newRoomId, newRoom.name, 'add', `Created "${newRoom.name}"`);
     setIsAddMode(false);
+    isDirty.current = true;
+
+    // 2. Direct Persistence
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      const { error } = await supabase.from('inventory_rooms').insert({
+        id: newRoomId,
+        user_id: currentInventoryOwnerId,
+        name: newRoom.name,
+        pos_x: x,
+        pos_y: y
+      });
+      if (error) {
+        console.error('Failed to persist new room:', error);
+        setSyncStatus('error');
+      } else {
+        setSyncStatus('synced');
+      }
+      isDirty.current = false;
+    }
   };
 
-  const deleteRoom = (id: string) => setRooms(prev => prev.filter(r => r.id !== id));
+  const deleteRoom = async (id: string) => {
+    console.log('deleteRoom initiated:', id);
+    const room = rooms.find(r => r.id === id);
+    lastLocalMutation.current = Date.now();
 
-  const updateRoomName = (id: string, name: string) =>
-    setRooms(prev => prev.map(r => r.id === id ? { ...r, name } : r));
+    // 1. Optimistic Update
+    setRooms(prev => prev.filter(r => r.id !== id));
+    if (room) {
+      addActivity(id, room.name, 'delete', `Deleted room "${room.name}"`);
+    }
+    isDirty.current = true;
 
-  const addActivity = (roomId: string, roomName: string, action: ActivityLog['action'], details: string) => {
+    // 2. Direct Persistence
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      try {
+        // Since we might not have server-side CASCADE, we perform a manual cascade delete logic.
+        // Identify all items in this room
+        const { data: itemsToDelete } = await supabase
+          .from('inventory_items')
+          .select('id')
+          .eq('room_id', id);
+
+        if (itemsToDelete && itemsToDelete.length > 0) {
+          const itemIds = itemsToDelete.map(i => i.id);
+
+          // Delete batches for those items first
+          await supabase
+            .from('inventory_item_batches')
+            .delete()
+            .in('item_id', itemIds);
+
+          // Delete the items
+          await supabase
+            .from('inventory_items')
+            .delete()
+            .in('id', itemIds);
+        }
+
+        // Finally, delete the room
+        const { error } = await supabase
+          .from('inventory_rooms')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to delete room with manual cascade:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+      }
+    }
+  };
+
+  const updateRoomName = async (id: string, name: string) => {
+    lastLocalMutation.current = Date.now();
+    // 1. Optimistic Update
+    let oldName = '';
+    setRooms(prev => prev.map(r => {
+      if (r.id === id) {
+        oldName = r.name;
+        return { ...r, name };
+      }
+      return r;
+    }));
+    if (oldName && oldName !== name) {
+      addActivity(id, name, 'edit', `Renamed room "${oldName}" to "${name}"`, { beforeValue: oldName, afterValue: name });
+    }
+
+    // 2. Direct Persistence
+    setSyncStatus('syncing');
+    const { error } = await supabase.from('inventory_rooms').update({ name, user_id: currentInventoryOwnerId }).eq('id', id);
+    if (error) {
+      console.error('Failed to update room name in DB:', error);
+      setSyncStatus('error');
+    } else {
+      setSyncStatus('synced');
+    }
+  };
+
+  const addActivity = (
+    roomId: string,
+    roomName: string,
+    action: ActivityLog['action'],
+    details: string,
+    options?: { beforeValue?: string; afterValue?: string }
+  ) => {
     const timestamp = new Date().toISOString();
     const newLog: ActivityLog = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       timestamp,
       roomId,
       roomName,
       action,
-      details
+      details,
+      actorId: supabaseUserId || undefined,
+      actorName: user?.name || undefined,
+      beforeValue: options?.beforeValue,
+      afterValue: options?.afterValue
     };
     setLogs(prev => {
       const isDuplicate = prev.some(l =>
@@ -627,131 +1122,383 @@ const App: React.FC = () => {
     });
   };
 
-  const receiveStock = (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => {
-    setRooms(prev => prev.map(room => {
-      if (room.id !== roomId) return room;
-      const existingItem = room.items.find(i =>
-        i.name.toLowerCase() === itemData.name?.toLowerCase() &&
-        (itemData.brand ? i.brand.toLowerCase() === itemData.brand.toLowerCase() : true)
-      );
-      let updatedItems;
-      if (existingItem) {
-        const merged = mergeBatchAdd(existingItem, qty, price, expiry);
-        updatedItems = room.items.map(i => i.id === existingItem.id ? merged : i);
-      } else {
-        const newItem: Item = {
-          id: crypto.randomUUID(),
-          name: itemData.name || '',
-          brand: itemData.brand || '',
-          code: itemData.code || '',
-          quantity: qty,
-          price: price,
-          uom: itemData.uom || 'pcs',
-          vendor: itemData.vendor || '',
-          category: itemData.category || 'other',
-          description: itemData.description || '',
-          expiryDate: expiry || null,
-          batches: [{
-            qty,
-            unitPrice: price,
-            expiryDate: expiry || null
-          }]
-        };
-        updatedItems = [...room.items, newItem];
-      }
-      addActivity(roomId, room.name, 'receive', `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" [${itemData.code || 'N/A'}] @ $${price.toFixed(2)}`);
+  const updateRoomPosition = async (id: string, x: number, y: number) => {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
 
-      const historyTimestamp = purchaseDate ? new Date(`${purchaseDate}T00:00:00`).toISOString() : new Date().toISOString();
-      const historyEntry: PurchaseHistory = {
-        id: crypto.randomUUID(),
-        timestamp: historyTimestamp,
-        productName: itemData.name || '',
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      try {
+        const { error } = await supabase
+          .from('inventory_rooms')
+          .update({ pos_x: x, pos_y: y })
+          .eq('id', id);
+        if (error) throw error;
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to update room position in DB:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+      }
+    }
+  };
+
+  const receiveStock = async (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    let affectedItemToSync: Item | null = null;
+    let roomNameForLog = '';
+
+    // 1. Calculate the new state first (so we have affectedItemToSync immediately)
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return;
+
+    roomNameForLog = room.name;
+    const existingItem = room.items.find(i =>
+      i.name.toLowerCase() === itemData.name?.toLowerCase() &&
+      (itemData.brand ? i.brand.toLowerCase() === itemData.brand.toLowerCase() : true)
+    );
+
+    if (existingItem) {
+      affectedItemToSync = mergeBatchAdd(existingItem, qty, price, expiry);
+    } else {
+      affectedItemToSync = {
+        id: generateId(),
+        name: itemData.name || '',
         brand: itemData.brand || '',
         code: itemData.code || '',
+        quantity: qty,
+        price: price,
+        uom: itemData.uom || 'pcs',
         vendor: itemData.vendor || '',
-        qty,
-        unitPrice: price,
-        totalPrice: qty * price,
-        location: room.name,
         category: itemData.category || 'other',
-        roomId: room.id,
-        uom: itemData.uom || existingItem?.uom || 'pcs',
-        expiryDate: expiry
+        description: itemData.description || '',
+        expiryDate: expiry || null,
+        batches: [{
+          id: generateId(),
+          qty,
+          unitPrice: price,
+          expiryDate: expiry || null
+        }]
       };
-      setHistory(h => {
-        const duplicate = h.some(
-          entry =>
-            entry.id === historyEntry.id ||
-            (entry.productName === historyEntry.productName &&
-              entry.roomId === historyEntry.roomId &&
-              entry.qty === historyEntry.qty &&
-              entry.unitPrice === historyEntry.unitPrice &&
-              entry.timestamp === historyEntry.timestamp)
-        );
-        return duplicate ? h : [historyEntry, ...h];
-      });
-      return { ...room, items: updatedItems };
-    }));
-  };
+    }
 
-  const updateItemQty = (roomId: string, itemId: string, delta: number) => {
+    // 2. Optimistic Update
     setRooms(prev => prev.map(r => {
       if (r.id !== roomId) return r;
-      return {
-        ...r,
-        items: r.items.map(i => {
-          if (i.id !== itemId) return i;
-          if (delta < 0 && i.quantity <= 1) return i;
-          const safeDelta = delta < 0 ? Math.max(delta, -(i.quantity - 1)) : delta;
-          if (safeDelta === 0) return i;
-          const adjusted = adjustBatchesWithDelta(i, safeDelta);
-          if (adjusted.quantity !== i.quantity) {
-            addActivity(roomId, r.name, 'edit', `Adjusted qty of "${i.name}" to ${adjusted.quantity}`);
+      const updatedItems = existingItem
+        ? r.items.map(i => i.id === existingItem.id ? affectedItemToSync! : i)
+        : [...r.items, affectedItemToSync!];
+      return { ...r, items: updatedItems };
+    }));
+
+    // Add activity and history locally
+    addActivity(
+      roomId,
+      roomNameForLog,
+      'receive',
+      `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" [${itemData.code || 'N/A'}] @ $${price.toFixed(2)}`,
+      { beforeValue: existingItem ? String(existingItem.quantity) : '0', afterValue: String(existingItem ? existingItem.quantity + qty : qty) }
+    );
+
+    const historyTimestamp = purchaseDate
+      ? new Date(`${purchaseDate}T${new Date().toTimeString().split(' ')[0]}`).toISOString()
+      : new Date().toISOString();
+    const historyEntry: PurchaseHistory = {
+      id: crypto.randomUUID(),
+      timestamp: historyTimestamp,
+      productName: itemData.name || '',
+      brand: itemData.brand || '',
+      code: itemData.code || '',
+      vendor: itemData.vendor || '',
+      qty,
+      unitPrice: price,
+      totalPrice: qty * price,
+      location: roomNameForLog,
+      category: itemData.category || 'other',
+      roomId: roomId,
+      uom: itemData.uom || existingItem?.uom || 'pcs',
+      expiryDate: expiry
+    };
+    setHistory(h => [historyEntry, ...h]);
+
+    // 3. Direct Persistence
+    if (affectedItemToSync && currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      try {
+        const itm = affectedItemToSync as Item;
+        const { error: itemErr } = await supabase.from('inventory_items').upsert({
+          id: itm.id,
+          room_id: roomId,
+          user_id: currentInventoryOwnerId,
+          name: itm.name,
+          brand: itm.brand,
+          code: itm.code,
+          quantity: itm.quantity,
+          price: itm.price,
+          uom: itm.uom,
+          vendor: itm.vendor,
+          category: itm.category,
+          description: itm.description,
+          expiry_date: itm.expiryDate
+        });
+        if (itemErr) throw itemErr;
+
+        if (itm.batches) {
+          for (const b of itm.batches) {
+            await supabase.from('inventory_item_batches').upsert({
+              id: b.id,
+              item_id: itm.id,
+              qty: b.qty,
+              unit_price: b.unitPrice,
+              expiry_date: b.expiryDate
+            });
           }
-          return adjusted;
-        })
-      };
-    }));
-  };
+        }
 
-  const updateItemBatchQty = (roomId: string, itemId: string, batchIndex: number, delta: number) => {
-    setRooms(prev => prev.map(r => {
-      if (r.id !== roomId) return r;
-      return {
-        ...r,
-        items: r.items.map(i => {
-          if (i.id !== itemId) return i;
-          const normalized = ensureBatches(i);
-          const batches = normalized.batches ? normalized.batches.map(b => ({ ...b })) : [];
-          if (batchIndex < 0 || batchIndex >= batches.length) return normalized;
-          const b = batches[batchIndex];
-          if (delta < 0 && b.qty <= 1) return normalized;
-          const safeDelta = delta < 0 ? Math.max(delta, -(b.qty - 1)) : delta;
-          if (safeDelta === 0) return normalized;
-          const newQty = Math.max(0, b.qty + safeDelta);
-          batches[batchIndex] = { ...b, qty: newQty };
-          const filtered = batches.filter(x => x.qty > 0);
-          const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(filtered);
-          const adjusted = { ...normalized, batches: filtered, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
-          if (adjusted.quantity !== i.quantity) {
-            addActivity(roomId, r.name, 'edit', `Adjusted batch qty of "${i.name}" to ${adjusted.quantity}`);
-          }
-          return adjusted;
-        })
-      };
-    }));
-  };
+        // 3. Persist History Entry
+        const { error: historyErr } = await supabase.from('inventory_purchase_history').insert({
+          id: historyEntry.id,
+          user_id: currentInventoryOwnerId,
+          room_id: historyEntry.roomId,
+          occurred_at: historyEntry.timestamp,
+          product_name: historyEntry.productName,
+          brand: historyEntry.brand,
+          code: historyEntry.code,
+          vendor: historyEntry.vendor,
+          qty: historyEntry.qty,
+          unit_price: historyEntry.unitPrice,
+          total_price: historyEntry.totalPrice,
+          location: historyEntry.location,
+          category: historyEntry.category,
+          uom: historyEntry.uom,
+          expiry_date: historyEntry.expiryDate
+        });
+        if (historyErr) throw historyErr;
 
-  const deleteItem = (roomId: string, itemId: string) => {
-    setRooms(prev => prev.map(r => {
-      if (r.id !== roomId) return r;
-      const item = r.items.find(i => i.id === itemId);
-      const updated = r.items.filter(i => i.id !== itemId);
-      if (item) {
-        addActivity(roomId, r.name, 'delete', `Deleted "${item.name}"`);
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to persist received stock:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
       }
-      return { ...r, items: updated };
+    }
+  };
+
+  const updateItemQty = async (roomId: string, itemId: string, delta: number) => {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    const room = rooms.find(r => r.id === roomId);
+    const item = room?.items.find(i => i.id === itemId);
+    if (!room || !item) {
+      isDirty.current = false;
+      return;
+    }
+
+    const updatedItem = adjustBatchesWithDelta(item, delta);
+
+    if (updatedItem.quantity !== item.quantity) {
+      addActivity(
+        roomId,
+        room.name,
+        'edit',
+        `Adjusted qty of "${item.name}" to ${updatedItem.quantity}`,
+        { beforeValue: String(item.quantity), afterValue: String(updatedItem.quantity) }
+      );
+    }
+
+    setRooms(prev => prev.map(r => {
+      if (r.id !== roomId) return r;
+      const items = r.items.map(i => {
+        if (i.id !== itemId) return i;
+        return updatedItem!;
+      });
+      return { ...r, items };
     }));
+
+    if (updatedItem && currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      try {
+        const itm = updatedItem as Item;
+        // 1. Update parent item
+        const { error } = await supabase.from('inventory_items').update({
+          quantity: itm.quantity,
+          price: itm.price,
+          expiry_date: itm.expiryDate,
+          user_id: currentInventoryOwnerId
+        }).eq('id', itm.id);
+
+        if (error) throw error;
+
+        // 2. Sync batches (Upsert remaining, Delete missing)
+        if (itm.batches) {
+          // Get current batch IDs for this item to identify which ones to delete
+          const { data: dbBatches } = await supabase
+            .from('inventory_item_batches')
+            .select('id')
+            .eq('item_id', itm.id);
+
+          const currentBatchIds = new Set(itm.batches.map(b => b.id));
+          const idsToDelete = dbBatches
+            ? dbBatches.filter(dbB => !currentBatchIds.has(dbB.id)).map(dbB => dbB.id)
+            : [];
+
+          if (idsToDelete.length > 0) {
+            await supabase.from('inventory_item_batches').delete().in('id', idsToDelete);
+          }
+
+          for (const b of itm.batches) {
+            await supabase.from('inventory_item_batches').upsert({
+              id: b.id,
+              item_id: itm.id,
+              qty: b.qty,
+              unit_price: b.unitPrice,
+              expiry_date: b.expiryDate
+            });
+          }
+        }
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to update item quantity:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+      }
+    } else {
+      isDirty.current = false;
+    }
+  };
+
+  const updateItemBatchQty = async (roomId: string, itemId: string, batchIndex: number, delta: number) => {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    const room = rooms.find(r => r.id === roomId);
+    const item = room?.items.find(i => i.id === itemId);
+    if (!room || !item) {
+      isDirty.current = false;
+      return;
+    }
+
+    const normalized = ensureBatches(item);
+    const batches = normalized.batches ? normalized.batches.map(b => ({ ...b })) : [];
+    if (batchIndex < 0 || batchIndex >= batches.length) {
+      isDirty.current = false;
+      return;
+    }
+    const b = batches[batchIndex];
+    const targetBatchId = b.id;
+
+    if (delta === 0) {
+      isDirty.current = false;
+      return;
+    }
+    const newQty = Math.max(0, b.qty + delta);
+    if (newQty === b.qty) {
+      isDirty.current = false;
+      return;
+    }
+    batches[batchIndex] = { ...b, qty: newQty };
+    const filtered = batches.filter(x => x.qty > 0);
+    const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(filtered);
+    const updatedItem = { ...normalized, batches: filtered, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
+
+    if (newQty !== b.qty) {
+      addActivity(
+        roomId,
+        room.name,
+        'edit',
+        `Adjusted Batch ${batchIndex + 1} of "${item.name}" from ${b.qty} to ${newQty}`,
+        { beforeValue: String(b.qty), afterValue: String(newQty) }
+      );
+    }
+
+    setRooms(prev => prev.map(r => {
+      if (r.id !== roomId) return r;
+      return {
+        ...r,
+        items: r.items.map(i => i.id === itemId ? updatedItem! : i)
+      };
+    }));
+
+    if (updatedItem && currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      try {
+        const itm = updatedItem as Item;
+        // 1. Update parent item
+        const { error: itemUpdateError } = await supabase.from('inventory_items').update({
+          quantity: itm.quantity,
+          price: itm.price,
+          expiry_date: itm.expiryDate,
+          user_id: currentInventoryOwnerId
+        }).eq('id', itm.id);
+
+        if (itemUpdateError) throw itemUpdateError;
+
+        // 2. Update specific batch (If newly zero, delete from DB. If > 0, upsert.)
+        const targetBatchInStore = itm.batches?.find(b => b.id === targetBatchId);
+
+        if (!targetBatchInStore || targetBatchInStore.qty <= 0) {
+          // It was filtered out or set to 0, so delete it from DB
+          const { error: batchDeleteError } = await supabase.from('inventory_item_batches').delete().eq('id', targetBatchId);
+          if (batchDeleteError) throw batchDeleteError;
+        } else {
+          // Upsert the updated batch
+          const { error: batchUpsertError } = await supabase.from('inventory_item_batches').upsert({
+            id: targetBatchInStore.id,
+            item_id: itm.id,
+            qty: targetBatchInStore.qty,
+            unit_price: targetBatchInStore.unitPrice,
+            expiry_date: targetBatchInStore.expiryDate
+          });
+          if (batchUpsertError) throw batchUpsertError;
+        }
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to update batch qty:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+      }
+    } else {
+      isDirty.current = false;
+    }
+  };
+
+  const deleteItem = async (roomId: string, itemId: string) => {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    let roomName = '';
+    let itemName = '';
+    let beforeQty = '0';
+
+    setRooms(prev => prev.map(r => {
+      if (r.id !== roomId) return r;
+      roomName = r.name;
+      const item = r.items.find(i => i.id === itemId);
+      if (item) {
+        itemName = item.name;
+        beforeQty = String(item.quantity);
+      }
+      return { ...r, items: r.items.filter(i => i.id !== itemId) };
+    }));
+
+    if (itemName) {
+      addActivity(roomId, roomName, 'delete', `Deleted "${itemName}"`, { beforeValue: beforeQty, afterValue: '0' });
+    }
+
+    setSyncStatus('syncing');
+    try {
+      const { error } = await supabase.from('inventory_items').delete().eq('id', itemId);
+      if (error) throw error;
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('Failed to delete item:', err);
+      setSyncStatus('error');
+    } finally {
+      isDirty.current = false;
+    }
   };
 
   const splitBatchesForTransfer = (batches: ItemBatch[] | undefined, qtyToMove: number) => {
@@ -767,10 +1514,14 @@ const App: React.FC = () => {
       }
       const move = Math.min(batch.qty, remaining);
       if (move > 0) {
-        moved.push({ ...batch, qty: move });
+        // If moving the full amount, keep same ID, otherwise new ID for the snippet
+        const movedId = move === batch.qty ? batch.id : generateId();
+        moved.push({ ...batch, id: movedId, qty: move });
       }
       const leftover = batch.qty - move;
       if (leftover > 0) {
+        // If some stayed, we might need a new ID if the full batch was "moved" above?
+        // Actually, let's just say the "kept" part keeps the original ID if it exists.
         kept.push({ ...batch, qty: leftover });
       }
       remaining -= move;
@@ -783,16 +1534,17 @@ const App: React.FC = () => {
     const aBatches = ensureBatches(a).batches || [];
     const bBatches = ensureBatches(b).batches || [];
     const all = [...aBatches, ...bBatches];
-    const byExpiry = new Map<string | null, { qty: number; unitPrice: number; expiryDate: string | null }>();
+    const byExpiry = new Map<string | null, ItemBatch>();
     all.forEach(batch => {
       const key = batch.expiryDate || null;
       const existing = byExpiry.get(key);
       if (!existing) {
-        byExpiry.set(key, { qty: batch.qty, unitPrice: batch.unitPrice, expiryDate: batch.expiryDate || null });
+        byExpiry.set(key, { id: generateId(), qty: batch.qty, unitPrice: batch.unitPrice, expiryDate: batch.expiryDate || null });
       } else {
         const totalQty = existing.qty + batch.qty;
         const totalValue = (existing.qty * existing.unitPrice) + (batch.qty * batch.unitPrice);
         byExpiry.set(key, {
+          ...existing,
           qty: totalQty,
           unitPrice: totalQty > 0 ? totalValue / totalQty : existing.unitPrice,
           expiryDate: key
@@ -810,61 +1562,103 @@ const App: React.FC = () => {
     };
   };
 
-  const moveItem = (fromRoomId: string, toRoomId: string, itemId: string, quantity: number) => {
-    const fromRoom = rooms.find(r => r.id === fromRoomId);
-    const toRoom = rooms.find(r => r.id === toRoomId);
-    const item = fromRoom?.items.find(i => i.id === itemId);
-    if (!fromRoom || !toRoom || !item) return;
+  const moveItem = async (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    if (fromRoomId === toRoomId) {
+      isDirty.current = false;
+      return;
+    }
+    let affectedItem: Item | null = null;
+    let targetRoomName = '';
+    let fromRoomName = '';
 
-    const qtyToMove = Math.min(Math.max(quantity || 0, 1), item.quantity);
-    const remainingQty = item.quantity - qtyToMove;
-    const { kept, moved } = splitBatchesForTransfer(item.batches, qtyToMove);
-    const movedItemId = remainingQty > 0 ? crypto.randomUUID() : item.id;
+    setRooms(prev => {
+      const fromRoom = prev.find(r => r.id === fromRoomId);
+      const toRoom = prev.find(r => r.id === toRoomId);
+      if (!fromRoom || !toRoom) return prev;
+      fromRoomName = fromRoom.name;
+      targetRoomName = toRoom.name;
 
-    const movedBatches = moved.length ? moved : item.batches || [];
-    const { totalQty: movedQty, avgPrice: movedPrice, earliestExpiry: movedExpiry } = summarizeBatches(movedBatches);
-    const movedItem = {
-      ...item,
-      id: movedItemId,
-      quantity: movedQty,
-      price: movedPrice,
-      batches: movedBatches,
-      expiryDate: movedExpiry
-    };
+      const item = fromRoom.items.find(i => i.id === itemId);
+      if (!item) return prev;
 
-    const keptBatches = kept.length ? kept : item.batches || [];
-    const { totalQty: keptQty, avgPrice: keptPrice, earliestExpiry: keptExpiry } = summarizeBatches(keptBatches);
-    const remainingItem = remainingQty > 0 ? {
-      ...item,
-      quantity: keptQty,
-      price: keptPrice,
-      batches: keptBatches,
-      expiryDate: keptExpiry
-    } : null;
-
-    setRooms(prev => prev.map(r => {
-      if (r.id === fromRoomId) {
-        const updatedItems = r.items.flatMap(i => {
-          if (i.id !== itemId) return [i];
-          return remainingItem ? [remainingItem] : [];
-        });
-        return { ...r, items: updatedItems };
-      }
-      if (r.id === toRoomId) {
-        const existingIdx = r.items.findIndex(i => i.name.toLowerCase() === item.name.toLowerCase() && (i.brand || '').toLowerCase() === (item.brand || '').toLowerCase());
-        if (existingIdx >= 0) {
-          const existingItem = r.items[existingIdx];
-          const merged = mergeItemBatches(existingItem, movedItem);
-          const nextItems = [...r.items];
-          nextItems[existingIdx] = merged;
-          return { ...r, items: nextItems };
+      const { kept, moved } = (typeof batchIndex === 'number')
+        ? {
+          kept: item.batches?.map((b, idx) => idx === batchIndex ? { ...b, qty: Math.max(0, b.qty - quantity) } : b).filter(b => b.qty > 0) || [],
+          moved: [{ ...item.batches![batchIndex], qty: quantity, id: crypto.randomUUID() }]
         }
-        return { ...r, items: [...r.items, movedItem] };
+        : splitBatchesForTransfer(item.batches, quantity);
+
+      const keptSummary = summarizeBatches(kept);
+      const updatedFromItem = { ...item, batches: kept, quantity: keptSummary.totalQty, price: keptSummary.avgPrice, expiryDate: keptSummary.earliestExpiry };
+
+      const movedSummary = summarizeBatches(moved);
+      const movedItem = { ...item, id: crypto.randomUUID(), batches: moved, quantity: movedSummary.totalQty, price: movedSummary.avgPrice, expiryDate: movedSummary.earliestExpiry, roomId: toRoomId };
+      affectedItem = movedItem;
+
+      addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Moved ${quantity} of "${item.name}" to ${toRoom.name}`);
+      addActivity(toRoomId, toRoom.name, 'transfer_in', `Received ${quantity} of "${item.name}" from ${fromRoom.name}`);
+
+      return prev.map(r => {
+        if (r.id === fromRoomId) {
+          return { ...r, items: updatedFromItem.quantity > 0 ? r.items.map(i => i.id === itemId ? updatedFromItem : i) : r.items.filter(i => i.id !== itemId) };
+        }
+        if (r.id === toRoomId) {
+          const existing = r.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
+          if (existing) {
+            const merged = mergeBatchAdd(existing, movedItem.quantity, movedItem.price, movedItem.expiryDate);
+            affectedItem = merged;
+            return { ...r, items: r.items.map(i => i.id === existing.id ? merged : i) };
+          }
+          return { ...r, items: [...r.items, movedItem] };
+        }
+        return r;
+      });
+    });
+
+    if (affectedItem && currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      try {
+        const item = affectedItem as Item;
+        const { error } = await supabase.from('inventory_items').upsert({
+          id: item.id,
+          room_id: toRoomId,
+          name: item.name,
+          brand: item.brand,
+          category: item.category,
+          uom: item.uom,
+          quantity: item.quantity,
+          price: item.price,
+          expiry_date: item.expiryDate,
+          code: item.code,
+          vendor: item.vendor,
+          description: item.description,
+          user_id: currentInventoryOwnerId
+        });
+        if (error) throw error;
+
+        if (item.batches) {
+          for (const b of item.batches) {
+            await supabase.from('inventory_item_batches').upsert({
+              id: b.id,
+              item_id: item.id,
+              qty: b.qty,
+              unit_price: b.unitPrice,
+              expiry_date: b.expiryDate
+            });
+          }
+        }
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to move item:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
       }
-      return r;
-    }));
-    addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Transferred ${qtyToMove} ${item.uom} of "${item.name}" to ${toRoom.name}`);
-    addActivity(toRoomId, toRoom.name, 'transfer_in', `Received ${qtyToMove} ${item.uom} of "${item.name}" from ${fromRoom.name}`);
+    } else {
+      isDirty.current = false;
+    }
   };
 
   const activeRoom = useMemo(() => rooms.find(r => r.id === activeRoomId), [rooms, activeRoomId]);
@@ -876,109 +1670,60 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const sync = async () => {
-      const userId = supabaseUserId;
-      if (!userId || isAdmin) return;
-      if (syncInFlight.current) return;
-      syncInFlight.current = true;
-      const logMap = new Map<string, ActivityLog>();
-      logs.forEach(l => logMap.set(l.id, l));
-      const uniqueLogs = Array.from(logMap.values());
+      const userId = currentInventoryOwnerId;
+      if (!userId) return;
+      if (!isHydrated.current) {
+        console.log('Sync skipped: Not yet hydrated');
+        return;
+      }
+      if (syncInFlight.current) {
+        console.log('Sync already in flight, marking pending');
+        pendingSyncNeeded.current = true;
+        return;
+      }
+      const targetOwnerId = currentInventoryOwnerId || userId;
+      if (!targetOwnerId) {
+        console.warn('Sync aborted: No target owner id');
+        return;
+      }
 
-      const historyMap = new Map<string, PurchaseHistory>();
-      history.forEach(h => historyMap.set(h.id, h));
-      const uniqueHistory = Array.from(historyMap.values());
-      const uniqueRooms = (() => {
-        const seenNames = new Map<string, number>();
-        return rooms.map((r) => {
-          const base = r.name || 'Room';
-          const count = seenNames.get(base) || 0;
-          seenNames.set(base, count + 1);
-          const finalName = count === 0 ? base : `${base} (${count + 1})`;
-          return { ...r, name: finalName };
-        });
-      })();
+      syncInFlight.current = true;
+
       try {
+        console.group('Surgical Sync Execution');
+        const logMap = new Map<string, ActivityLog>();
+        logs.forEach(l => logMap.set(l.id, l));
+        const uniqueLogs = Array.from(logMap.values());
+
+        const historyMap = new Map<string, PurchaseHistory>();
+        history.forEach(h => historyMap.set(h.id, h));
+        const uniqueHistory = Array.from(historyMap.values());
+
+        const uniqueRooms = rooms.map((r) => {
+          // Note: room name deduping happens in the UI or during add, 
+          // but we'll keep it simple for the sync payload.
+          return r;
+        });
+
         const metaPayload = {
-          user_id: userId,
+          user_id: targetOwnerId,
           blueprint: blueprint || PRESET_BLUEPRINTS[0].url,
           cat_position_x: catPosition.x,
           cat_position_y: catPosition.y
         };
-        const metaResult = await supabase.from('inventory_meta').upsert(metaPayload);
-        if (metaResult.error) {
-          console.error('inventory_meta upsert error', metaResult.error);
-          return;
-        }
 
-        // wipe user-specific rows in dependency order to avoid FK conflicts
-        await supabase.from('inventory_activity_logs').delete().eq('user_id', userId);
-        await supabase.from('inventory_purchase_history').delete().eq('user_id', userId);
-        await supabase.from('inventory_rooms').delete().eq('user_id', userId); // cascades to items and item_batches
+        const metaRes = await supabase.from('inventory_meta').upsert(metaPayload, { onConflict: 'user_id' });
+        if (metaRes.error) throw new Error(`inventory_meta upsert error: ${metaRes.error.message}`);
 
-        const roomRows = uniqueRooms.map(r => ({
-          id: r.id,
-          user_id: userId,
-          name: r.name,
-          pos_x: r.x,
-          pos_y: r.y
-        }));
-        if (roomRows.length) {
-          const res = await supabase.from('inventory_rooms').insert(roomRows);
-          if (res.error) {
-            console.error('rooms insert error', res.error);
-            return;
-          }
-        }
-
-        const allowedRoomIds = new Set(roomRows.map(r => r.id));
-
-        const itemRows = uniqueRooms.flatMap(room =>
-          room.items.map(item => ({
-            id: item.id,
-            user_id: userId,
-            room_id: room.id,
-            name: item.name,
-            brand: item.brand,
-            code: item.code,
-            quantity: item.quantity,
-            uom: item.uom,
-            price: item.price,
-            vendor: item.vendor,
-            category: item.category,
-            description: item.description,
-            expiry_date: item.expiryDate || null
-          }))
-        );
-        const itemMap = new Map<string, typeof itemRows[0]>();
-        itemRows.forEach(r => itemMap.set(r.id, r));
-        const dedupedItemRows = Array.from(itemMap.values()).filter(r => allowedRoomIds.has(r.room_id));
-        if (dedupedItemRows.length) {
-          const res = await supabase.from('inventory_items').upsert(dedupedItemRows, { onConflict: 'id' });
-          if (res.error) console.error('items insert error', res.error);
-        }
-
-        const batchRows = uniqueRooms.flatMap(room =>
-          room.items.flatMap(item =>
-            (item.batches || []).map(batch => ({
-              item_id: item.id,
-              qty: batch.qty,
-              unit_price: batch.unitPrice,
-              expiry_date: batch.expiryDate || null
-            }))
-          )
-        );
-        const batchMap = new Map<string, typeof batchRows[0]>();
-        batchRows.forEach(b => batchMap.set(`${b.item_id}|${b.expiry_date || 'none'}|${b.qty}|${b.unit_price}`, b));
-        const dedupedBatchRows = Array.from(batchMap.values()).filter(b => dedupedItemRows.find(i => i.id === b.item_id));
-        if (dedupedBatchRows.length) {
-          const res = await supabase.from('inventory_item_batches').insert(dedupedBatchRows);
-          if (res.error) console.error('item_batches insert error', res.error);
-        }
+        // Note: Inventory reconciliation (Rooms/Items/Batches) is now handled 
+        // by Direct Persistence in mutation handlers + Incremental Realtime.
+        // We only sync History and Logs globally for background consistency.
+        const allowedRoomIds = new Set(rooms.map(r => r.id));
 
         const historyRows = uniqueHistory.map(h => ({
           id: h.id,
-          user_id: userId,
-          room_id: allowedRoomIds.has(h.roomId) ? h.roomId : null,
+          user_id: targetOwnerId,
+          room_id: (h.roomId && allowedRoomIds.has(h.roomId)) ? h.roomId : null,
           occurred_at: h.timestamp,
           product_name: h.productName,
           brand: h.brand,
@@ -991,46 +1736,63 @@ const App: React.FC = () => {
           category: h.category,
           uom: h.uom,
           expiry_date: h.expiryDate || null
-        }));
-        const historyMap = new Map<string, typeof historyRows[0]>();
-        historyRows.forEach(h => historyMap.set(h.id, h));
-        const dedupedHistoryRows = Array.from(historyMap.values());
-        if (dedupedHistoryRows.length) {
-          const res = await supabase.from('inventory_purchase_history').insert(dedupedHistoryRows);
-          if (res.error) console.error('purchase_history insert error', res.error);
+        })).sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
+
+        if (historyRows.length) {
+          const res = await supabase.from('inventory_purchase_history').upsert(historyRows, { onConflict: 'id' });
+          if (res.error) console.error('purchase_history upsert error', res.error);
         }
 
         const logRows = uniqueLogs.map(l => ({
           id: l.id,
-          user_id: userId,
-          room_id: allowedRoomIds.has(l.roomId) ? l.roomId : null,
+          user_id: targetOwnerId,
+          room_id: (l.roomId && allowedRoomIds.has(l.roomId)) ? l.roomId : null,
           room_name: l.roomName,
           action: l.action,
           details: l.details,
-          created_at: l.timestamp
+          created_at: l.timestamp,
+          actor_id: l.actorId || null,
+          before_value: l.beforeValue || null,
+          after_value: l.afterValue || null
         }));
-        const logMap = new Map<string, typeof logRows[0]>();
-        logRows.forEach(l => logMap.set(l.id, l));
-        const dedupedLogRows = Array.from(logMap.values());
-        if (dedupedLogRows.length) {
-          const res = await supabase.from('inventory_activity_logs').insert(dedupedLogRows);
-          if (res.error) console.error('activity_logs insert error', res.error);
+        const logsToSync = logRows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 100);
+        if (logsToSync.length) {
+          const res = await supabase.from('inventory_activity_logs').upsert(logsToSync, { onConflict: 'id' });
+          if (res.error) console.error('activity_logs upsert error', res.error);
         }
+
+        console.log('Surgical Sync Completed Successfully');
+        isDirty.current = false;
+      } catch (err: any) {
+        console.error('Surgical Sync Failed:', err.message || err);
       } finally {
+        console.groupEnd();
         syncInFlight.current = false;
+        if (pendingSyncNeeded.current) {
+          console.log('Executing pending sync retry');
+          sync();
+        }
       }
-      syncInFlight.current = false;
     };
     if (isAuthenticated && isBootstrapped) {
       const timer = setTimeout(() => {
         sync();
-      }, 2000); // Debounce sync by 2 seconds
+      }, 400); // Reduce debounce to 400ms for snappier performance
       return () => clearTimeout(timer);
     }
-  }, [rooms, history, logs, blueprint, catPosition, isAuthenticated, isBootstrapped, supabaseUserId, isAdmin]);
+  }, [rooms, history, logs, blueprint, catPosition, isAuthenticated, isBootstrapped, currentInventoryOwnerId, isAdmin]);
 
   const adminRooms = useMemo(() => managedInventories.flatMap((inv) => inv.rooms || []), [managedInventories]);
   const adminHistory = useMemo(() => managedInventories.flatMap((inv) => inv.history || []), [managedInventories]);
+
+  const currentRole = useMemo(() => {
+    if (!currentInventoryOwnerId || currentInventoryOwnerId === user?.id) return 'owner';
+    const inv = availableInventories.find(i => i.id === currentInventoryOwnerId);
+    return inv?.role || 'viewer';
+  }, [currentInventoryOwnerId, user, availableInventories]);
+
+  const canManageStructure = currentRole === 'owner' || currentRole === 'admin';
+  const canEditItems = currentRole === 'owner' || currentRole === 'admin' || currentRole === 'editor';
 
   if (!isAuthenticated) {
     return <LandingModal onLogin={handleLogin} />;
@@ -1059,15 +1821,33 @@ const App: React.FC = () => {
         onProfileClick={() => setCurrentView('profile')}
         onDashboardClick={() => setCurrentView('dashboard')}
         onLogout={handleLogout}
+        onAddCollaborator={currentRole === 'owner' ? () => setIsCollaboratorModalOpen(true) : undefined}
         user={user}
         userInitials={userInitials}
         userAvatarUrl={user?.avatarUrl}
+        availableInventories={availableInventories}
+        currentInventoryId={currentInventoryOwnerId}
+        onSwitchInventory={setCurrentInventoryOwnerId}
       />
 
       <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-8 px-6 md:px-16 lg:px-32 py-8">
         <main className="flex-1 flex flex-col gap-8">
           {currentView === 'dashboard' ? (
             <>
+              {isLoadingMain && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-indigo-900 font-medium">Hydrating Inventory...</p>
+                  </div>
+                </div>
+              )}
+              {isReloading && (
+                <div className="absolute top-4 right-4 z-40 bg-white/80 p-2 rounded-full shadow-sm animate-pulse flex items-center gap-2">
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Syncing...</span>
+                </div>
+              )}
               <ClinicMap
                 rooms={rooms}
                 blueprint={blueprint}
@@ -1080,20 +1860,39 @@ const App: React.FC = () => {
                 onAddRoom={addRoom}
                 onDeleteRoom={deleteRoom}
                 onSelectRoom={setActiveRoomId}
-                onUpdateRooms={setRooms}
-                onSelectTemplate={setBlueprint}
+                onDragEnd={canManageStructure ? updateRoomPosition : undefined}
+                onUpdateRooms={canManageStructure ? (newRooms) => {
+                  console.log('onUpdateRooms (drag/update) called');
+                  lastLocalMutation.current = Date.now();
+                  isDirty.current = true;
+                  setRooms(newRooms);
+                } : undefined}
+                onSelectTemplate={canManageStructure ? (url) => {
+                  console.log('onSelectTemplate called');
+                  lastLocalMutation.current = Date.now();
+                  isDirty.current = true;
+                  setBlueprint(url);
+                } : undefined}
                 catPosition={catPosition}
-                onCatPositionChange={setCatPosition}
+                onCatPositionChange={canManageStructure ? (pos) => {
+                  lastLocalMutation.current = Date.now();
+                  isDirty.current = true;
+                  setCatPosition(pos);
+                } : undefined}
+                readOnly={!canManageStructure || isLoadingMain}
+                syncStatus={syncStatus}
               />
 
               <MasterInventory
                 rooms={rooms}
                 history={history}
                 logs={logs}
-                onReceive={receiveStock}
-                onUpdateQty={updateItemQty}
-                onTransfer={moveItem}
-                onDeleteItem={deleteItem}
+                onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
+                onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
+                onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
+                onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
+                onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
+                readOnly={!canEditItems || isLoadingMain}
               />
             </>
           ) : (
@@ -1115,14 +1914,21 @@ const App: React.FC = () => {
           allRooms={rooms}
           logs={logs.filter(l => l.roomId === activeRoomId)}
           onClose={() => setActiveRoomId(null)}
-          onUpdateName={updateRoomName}
-          onReceive={receiveStock}
-          onUpdateQty={updateItemQty}
-          onUpdateBatchQty={updateItemBatchQty}
-          onTransfer={moveItem}
-          onDeleteItem={deleteItem}
+          onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateRoomName(id, name); }}
+          onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
+          onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
+          onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
+          onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
+          onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
+          readOnly={!canEditItems}
         />
       )}
+
+      <CollaboratorModal
+        isOpen={isCollaboratorModalOpen}
+        onClose={() => setIsCollaboratorModalOpen(false)}
+        currentUser={user}
+      />
     </div>
   );
 };

@@ -1,12 +1,12 @@
 
 import React, { useState, useMemo } from 'react';
-import { 
-  X, 
-  Package, 
-  Search, 
-  Plus, 
-  Minus, 
-  Trash2, 
+import {
+  X,
+  Package,
+  Search,
+  Plus,
+  Minus,
+  Trash2,
   ChevronDown,
   FileDown
 } from 'lucide-react';
@@ -24,9 +24,10 @@ interface RoomModalProps {
   onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
   onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
   onDeleteItem: (roomId: string, itemId: string) => void;
+  readOnly?: boolean;
 }
 
-const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem }) => {
+const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem, readOnly = false }) => {
   const [isReceiving, setIsReceiving] = useState(false);
   const [receiveMode, setReceiveMode] = useState<'existing' | 'new'>('existing');
   const [selectedItemIdx, setSelectedItemIdx] = useState<string>('');
@@ -48,8 +49,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const [deleteContext, setDeleteContext] = useState<{ item: Item; batchIndex?: number } | null>(null);
 
   const filteredItems = useMemo(() => {
-    return room.items.filter(i => 
-      i.name.toLowerCase().includes(roomSearch.toLowerCase()) || 
+    return room.items.filter(i =>
+      i.name.toLowerCase().includes(roomSearch.toLowerCase()) ||
       i.brand.toLowerCase().includes(roomSearch.toLowerCase()) ||
       i.code.toLowerCase().includes(roomSearch.toLowerCase())
     );
@@ -181,13 +182,17 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
       <div className="bg-white w-full max-w-[95vw] h-[90vh] rounded-[1.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="bg-[#4d9678] px-6 py-4 flex items-center justify-between text-white shrink-0 border-b border-white/10">
           <div className="flex-1">
-             <input 
-              type="text" 
-              value={room.name}
-              onChange={(e) => onUpdateName(room.id, e.target.value)}
-              className="bg-transparent border-b border-white/30 text-xl font-bold focus:border-white focus:outline-none w-full max-w-2xl placeholder:text-white/40 transition-colors"
-              placeholder="Enter room name..."
-            />
+            {readOnly ? (
+              <h2 className="text-xl font-bold py-1">{room.name}</h2>
+            ) : (
+              <input
+                type="text"
+                value={room.name}
+                onChange={(e) => onUpdateName(room.id, e.target.value)}
+                className="bg-transparent border-b border-white/30 text-xl font-bold focus:border-white focus:outline-none w-full max-w-2xl placeholder:text-white/40 transition-colors"
+                placeholder="Enter room name..."
+              />
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-sm transition-all border border-white/20">
@@ -201,27 +206,29 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-6 custom-scrollbar bg-slate-50/50">
           <div className="flex items-center">
-            {!isReceiving ? (
-              <button 
-                onClick={() => setIsReceiving(true)} 
-                className="bg-[#3498db] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#2980b9] shadow-lg shadow-blue-100 transition-all"
-              >
-                <Package className="w-4 h-4" /> Receive Stock
-              </button>
-            ) : (
-              <button 
-                onClick={() => setIsReceiving(false)} 
-                className="bg-[#e74c3c] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#c0392b] shadow-lg shadow-rose-100 transition-all"
-              >
-                <X className="w-4 h-4" /> Cancel
-              </button>
+            {!readOnly && (
+              !isReceiving ? (
+                <button
+                  onClick={() => setIsReceiving(true)}
+                  className="bg-[#3498db] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#2980b9] shadow-lg shadow-blue-100 transition-all"
+                >
+                  <Package className="w-4 h-4" /> Receive Stock
+                </button>
+              ) : (
+                <button
+                  onClick={() => setIsReceiving(false)}
+                  className="bg-[#e74c3c] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#c0392b] shadow-lg shadow-rose-100 transition-all"
+                >
+                  <X className="w-4 h-4" /> Cancel
+                </button>
+              )
             )}
           </div>
 
           {isReceiving && (
             <div className="bg-[#ebf5fb] border border-[#c4e1f3] rounded-[1rem] p-6 shadow-sm animate-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between mb-4">
-                 <h4 className="text-[#2c78b2] font-black uppercase text-xs tracking-[0.2em]">Receive Stock</h4>
+                <h4 className="text-[#2c78b2] font-black uppercase text-xs tracking-[0.2em]">Receive Stock</h4>
               </div>
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -245,8 +252,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Purchase Date *</label>
-                    <input 
-                      type="date" 
+                    <input
+                      type="date"
                       required
                       className="px-3 py-2 rounded-lg border border-slate-200 font-semibold text-xs focus:ring-1 focus:ring-[#3498db] outline-none shadow-sm"
                       value={purchaseDate}
@@ -272,30 +279,30 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className="flex flex-col gap-1">
                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Product Name *</label>
-                        <input required placeholder="e.g. Dental Gloves" className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                        <input required placeholder="e.g. Dental Gloves" className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Brand</label>
-                        <input placeholder="e.g. 3M" className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} />
+                        <input placeholder="e.g. 3M" className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm" value={formData.brand} onChange={e => setFormData({ ...formData, brand: e.target.value })} />
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Code/SKU</label>
-                        <input placeholder="e.g. DG-001" className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} />
+                        <input placeholder="e.g. DG-001" className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} />
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">UOM</label>
-                        <select className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs shadow-sm" value={formData.uom} onChange={e => setFormData({...formData, uom: e.target.value as UOM})}>
+                        <select className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs shadow-sm" value={formData.uom} onChange={e => setFormData({ ...formData, uom: e.target.value as UOM })}>
                           <option value="">Select UOM</option>
                           {UOMS.map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
                         </select>
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Vendor</label>
-                        <input placeholder="e.g. MedSupply Co" className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm" value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})} />
+                        <input placeholder="e.g. MedSupply Co" className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm" value={formData.vendor} onChange={e => setFormData({ ...formData, vendor: e.target.value })} />
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Category</label>
-                        <select className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs shadow-sm" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value as Category})}>
+                        <select className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs shadow-sm" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value as Category })}>
                           <option value="">Select category</option>
                           {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                         </select>
@@ -303,7 +310,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Description</label>
-                      <textarea rows={2} placeholder="Product description..." className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm resize-none" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+                      <textarea rows={2} placeholder="Product description..." className="px-3 py-2 rounded-lg border border-slate-200 text-xs shadow-sm resize-none" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
                     </div>
                   </div>
                 )}
@@ -329,17 +336,17 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h3 className="font-bold text-slate-800 text-lg tracking-tight">Items in Room <span className="text-slate-400 font-medium">({room.items.length})</span></h3>
               <div className="relative w-full md:w-96">
-                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3498db] w-4 h-4" />
-                 <input 
-                  type="text" 
-                  placeholder="Search items by product, brand, or code..." 
-                  className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-1 focus:ring-[#4d9678] focus:border-transparent outline-none shadow-sm transition-all" 
-                  value={roomSearch} 
-                  onChange={e => setRoomSearch(e.target.value)} 
-                 />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3498db] w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search items by product, brand, or code..."
+                  className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-1 focus:ring-[#4d9678] focus:border-transparent outline-none shadow-sm transition-all"
+                  value={roomSearch}
+                  onChange={e => setRoomSearch(e.target.value)}
+                />
               </div>
             </div>
-            
+
             <div className="bg-white border border-slate-200 rounded-[1rem] overflow-x-auto shadow-sm custom-scrollbar">
               <table className="w-full text-left border-collapse min-w-[1000px] text-xs">
                 <thead className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200 sticky top-0 z-10">
@@ -384,23 +391,24 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
                           return (
                             <React.Fragment key={item.id}>
-                            <tr
-                              className={`${rowHighlight} transition-colors group`}
-                            >
-                              <td className="px-3 py-4 text-slate-500 whitespace-nowrap text-xs overflow-hidden text-ellipsis">
-                                #{item.brand || "-"}
-                              </td>
+                              <tr
+                                className={`${rowHighlight} transition-colors group`}
+                              >
+                                <td className="px-3 py-4 text-slate-500 whitespace-nowrap text-xs overflow-hidden text-ellipsis">
+                                  #{item.brand || "-"}
+                                </td>
 
-                              <td className="px-3 py-4 font-bold text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis">
-                                {item.name}
-                              </td>
+                                <td className="px-3 py-4 font-bold text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis">
+                                  {item.name}
+                                </td>
 
-                              <td className="px-3 py-4 text-slate-500 text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">
-                                {item.code || "-"}
-                              </td>
+                                <td className="px-3 py-4 text-slate-500 text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">
+                                  {item.code || "-"}
+                                </td>
 
+                                {/* Quantity Column - Hide adjustments in readOnly mode */}
                                 <td className="px-3 py-4">
-                                  {batches.length > 1 ? (
+                                  {readOnly || batches.length > 1 ? (
                                     <span className="min-w-[28px] text-center font-bold text-slate-800 block">{item.quantity}</span>
                                   ) : (
                                     <div className="flex items-center justify-center gap-2">
@@ -413,11 +421,9 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                       >
                                         <Minus className="w-3.5 h-3.5" />
                                       </button>
-
                                       <span className="min-w-[28px] text-center font-bold text-slate-800">
                                         {item.quantity}
                                       </span>
-
                                       <button
                                         onClick={() => onUpdateQty(room.id, item.id, 1)}
                                         className="w-7 h-7 flex items-center justify-center border border-slate-200 rounded-full hover:bg-slate-100 text-slate-400 hover:text-emerald-500 transition-colors"
@@ -430,164 +436,180 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                   )}
                                 </td>
 
-                              <td className="px-3 py-4 text-slate-600 font-medium text-xs capitalize whitespace-nowrap">
-                                {item.uom}
-                              </td>
+                                <td className="px-3 py-4 text-slate-600 font-medium text-xs capitalize whitespace-nowrap">
+                                  {item.uom}
+                                </td>
 
-                              <td className="px-3 py-4 text-slate-500 font-semibold whitespace-nowrap">
-                                ${item.price.toFixed(2)}
-                              </td>
+                                <td className="px-3 py-4 text-slate-500 font-semibold whitespace-nowrap">
+                                  ${item.price.toFixed(2)}
+                                </td>
 
-                              <td className="px-3 py-4 font-black text-[#4d9678] tracking-tight whitespace-nowrap">
-                                ${(item.quantity * item.price).toFixed(2)}
-                              </td>
+                                <td className="px-3 py-4 font-black text-[#4d9678] tracking-tight whitespace-nowrap">
+                                  ${(item.quantity * item.price).toFixed(2)}
+                                </td>
 
-                              <td className="px-3 py-4 text-slate-600 font-medium text-xs whitespace-nowrap overflow-hidden text-ellipsis">
-                                {item.vendor || "-"}
-                              </td>
+                                <td className="px-3 py-4 text-slate-600 font-medium text-xs whitespace-nowrap overflow-hidden text-ellipsis">
+                                  {item.vendor || "-"}
+                                </td>
 
-                              <td className="px-3 py-4">
-                                <span className="text-[10px] font-medium text-slate-500 capitalize tracking-wide">
-                                  {item.category}
-                                </span>
-                              </td>
+                                <td className="px-3 py-4">
+                                  <span className="text-[10px] font-medium text-slate-500 capitalize tracking-wide">
+                                    {item.category}
+                                  </span>
+                                </td>
 
-                              <td
-                                className={`px-3 py-4 text-xs whitespace-nowrap ${
-                                  isExpired
+                                <td
+                                  className={`px-3 py-4 text-xs whitespace-nowrap ${isExpired
                                     ? "text-rose-600 font-bold"
                                     : isExpiringSoon
-                                    ? "text-amber-600 font-bold"
-                                    : "text-slate-500"
-                                }`}
-                              >
-                                {item.expiryDate ? (
-                                  <>
-                                    {new Date(item.expiryDate).toLocaleDateString()}
-                                    {isExpired && (
-                                      <span className="ml-1 text-[9px] uppercase tracking-tight font-black">
-                                        (EXP)
-                                      </span>
-                                    )}
-                                    {isExpiringSoon && (
-                                      <span className="ml-1 text-[9px] uppercase tracking-tight font-black">
-                                        (SOON)
-                                      </span>
-                                    )}
-                                  </>
-                                ) : (
-                                  "-"
-                                )}
-                                {batches.length > 1 && (
-                                  <button
-                                    type="button"
-                                    className="ml-2 text-[10px] font-bold text-blue-600 underline"
-                                    onClick={(e) => { e.stopPropagation(); toggleBatchRow(item.id); }}
-                                  >
-                                    {isOpen ? "Hide" : "View"}
-                                  </button>
-                                )}
-                              </td>
+                                      ? "text-amber-600 font-bold"
+                                      : "text-slate-500"
+                                    }`}
+                                >
+                                  {item.expiryDate ? (
+                                    <>
+                                      {new Date(item.expiryDate).toLocaleDateString()}
+                                      {isExpired && (
+                                        <span className="ml-1 text-[9px] uppercase tracking-tight font-black">
+                                          (EXP)
+                                        </span>
+                                      )}
+                                      {isExpiringSoon && (
+                                        <span className="ml-1 text-[9px] uppercase tracking-tight font-black">
+                                          (SOON)
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    "-"
+                                  )}
+                                  {batches.length > 1 && (
+                                    <button
+                                      type="button"
+                                      className="ml-2 text-[10px] font-bold text-blue-600 underline"
+                                      onClick={(e) => { e.stopPropagation(); toggleBatchRow(item.id); }}
+                                    >
+                                      {isOpen ? "Hide" : "View"}
+                                    </button>
+                                  )}
+                                </td>
 
-                              <td className="px-3 py-4">
-                                <select
-                                  className="bg-white text-xs font-bold text-slate-700 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer w-full text-ellipsis shadow-sm"
-                                  value={room.id}
-                                  onChange={(e) => handleRelocateSelect(item, e.target.value)}
-                                  title="Transfer location"
-                                >
-                                  <option value={room.id}>{room.name}</option>
-                                  <option value="" disabled>
-                                    -- Move to --
-                                  </option>
-                                  {allRooms
-                                    .filter((r) => r.id !== room.id)
-                                    .map((r) => (
-                                      <option key={r.id} value={r.id}>
-                                        {r.name}
+                                <td className="px-3 py-4">
+                                  {readOnly ? (
+                                    <span className="text-slate-400 font-medium text-xs">{room.name}</span>
+                                  ) : (
+                                    <select
+                                      className="bg-white text-xs font-bold text-slate-700 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer w-full text-ellipsis shadow-sm"
+                                      value={room.id}
+                                      onChange={(e) => handleRelocateSelect(item, e.target.value)}
+                                      title="Transfer location"
+                                    >
+                                      <option value={room.id}>{room.name}</option>
+                                      <option value="" disabled>
+                                        -- Move to --
                                       </option>
-                                    ))}
-                                </select>
-                              </td>
-                              <td className="px-3 py-4 text-center">
-                                <button
-                                  onClick={() => requestDeleteItem(item)}
-                                  className="text-slate-300 hover:text-rose-600 transition-colors"
-                                  title="Delete item"
-                                  aria-label="Delete item"
-                                >
-                                  <Trash2 className="w-4 h-4 mx-auto" />
-                                </button>
-                              </td>
-                            </tr>
+                                      {allRooms
+                                        .filter((r) => r.id !== room.id)
+                                        .map((r) => (
+                                          <option key={r.id} value={r.id}>
+                                            {r.name}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  )}
+                                </td>
+                                <td className="px-3 py-4 text-center">
+                                  {!readOnly && (
+                                    <button
+                                      onClick={() => requestDeleteItem(item)}
+                                      className="text-slate-300 hover:text-rose-600 transition-colors"
+                                      title="Delete item"
+                                      aria-label="Delete item"
+                                    >
+                                      <Trash2 className="w-4 h-4 mx-auto" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
                               {isOpen && batches.map((b, idx) => {
                                 const bExpiry = b.expiryDate ? new Date(b.expiryDate) : null;
                                 const bExpired = bExpiry ? bExpiry < now : false;
                                 const bSoon = bExpiry ? !bExpired && bExpiry <= soonThreshold : false;
                                 return (
-                                    <tr key={idx} className={`${isOpen ? 'bg-blue-100/50' : 'bg-slate-50/60'}`}>
+                                  <tr key={idx} className={`${isOpen ? 'bg-blue-100/50' : 'bg-slate-50/60'}`}>
                                     <td className="px-3 py-2 text-[11px] text-slate-400" colSpan={3}>Batch {idx + 1}</td>
                                     <td className="px-3 py-2 text-[11px] font-bold text-slate-800 text-center">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <button
-                                          onClick={() => b.qty > 1 && onUpdateBatchQty(room.id, item.id, idx, -1)}
-                                          disabled={b.qty <= 1}
-                                          className={`w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full transition-colors ${b.qty <= 1 ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100 text-slate-400 hover:text-rose-500'}`}
-                                          aria-label="Decrease batch quantity"
-                                          title="Decrease batch quantity"
-                                        >
-                                          <Minus className="w-3 h-3" />
-                                        </button>
+                                      {readOnly ? (
                                         <span className="min-w-[22px] text-center font-bold text-slate-800">
                                           {b.qty}
                                         </span>
-                                        <button
-                                          onClick={() => onUpdateBatchQty(room.id, item.id, idx, 1)}
-                                          className="w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full hover:bg-slate-100 text-slate-400 hover:text-emerald-500 transition-colors"
-                                          aria-label="Increase batch quantity"
-                                          title="Increase batch quantity"
-                                        >
-                                          <Plus className="w-3 h-3" />
-                                        </button>
-                                      </div>
+                                      ) : (
+                                        <div className="flex items-center justify-center gap-2">
+                                          <button
+                                            onClick={() => b.qty > 1 && onUpdateBatchQty(room.id, item.id, idx, -1)}
+                                            disabled={b.qty <= 1}
+                                            className={`w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full transition-colors ${b.qty <= 1 ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100 text-slate-400 hover:text-rose-500'}`}
+                                            aria-label="Decrease batch quantity"
+                                            title="Decrease batch quantity"
+                                          >
+                                            <Minus className="w-3 h-3" />
+                                          </button>
+                                          <span className="min-w-[22px] text-center font-bold text-slate-800">
+                                            {b.qty}
+                                          </span>
+                                          <button
+                                            onClick={() => onUpdateBatchQty(room.id, item.id, idx, 1)}
+                                            className="w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full hover:bg-slate-100 text-slate-400 hover:text-emerald-500 transition-colors"
+                                            aria-label="Increase batch quantity"
+                                            title="Increase batch quantity"
+                                          >
+                                            <Plus className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      )}
                                     </td>
                                     <td className="px-3 py-2 text-[11px] text-slate-600"></td>
                                     <td className="px-3 py-2 text-[11px] text-slate-500">${b.unitPrice.toFixed(2)}</td>
                                     <td className="px-3 py-2 text-[11px] font-bold text-[#4d9678]">${(b.qty * b.unitPrice).toFixed(2)}</td>
                                     <td className="px-3 py-2 text-[11px] text-slate-400"></td>
                                     <td className="px-3 py-2 text-[11px] text-slate-400"></td>
-                                    <td className={`px-3 py-2 text-[11px] whitespace-nowrap ${
-                                      bExpired ? "text-rose-600 font-bold" : bSoon ? "text-amber-600 font-bold" : "text-slate-500"
-                                    }`}>
+                                    <td className={`px-3 py-2 text-[11px] whitespace-nowrap ${bExpired ? "text-rose-600 font-bold" : bSoon ? "text-amber-600 font-bold" : "text-slate-500"
+                                      }`}>
                                       {bExpiry ? bExpiry.toLocaleDateString() : "(No expiry)"}
                                       {bExpired && <span className="ml-1 text-[9px] uppercase font-black">(EXP)</span>}
                                       {bSoon && !bExpired && <span className="ml-1 text-[9px] uppercase font-black">(SOON)</span>}
                                     </td>
                                     <td className="px-3 py-2 text-[11px] text-slate-400">
-                                      <select
-                                        className="bg-white text-[10px] font-semibold text-slate-600 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer w-full text-ellipsis shadow-sm"
-                                        value={room.id}
-                                        onChange={(e) => handleBatchRelocateSelect(item, idx, b, e.target.value)}
-                                        title="Transfer batch"
-                                      >
-                                        <option value={room.id}>{room.name}</option>
-                                        <option value="" disabled>-- Move to --</option>
-                                        {allRooms
-                                          .filter((r) => r.id !== room.id)
-                                          .map((r) => (
-                                            <option key={r.id} value={r.id}>{r.name}</option>
-                                          ))}
-                                      </select>
+                                      {readOnly ? (
+                                        <span className="text-slate-400 font-medium text-[10px]">{room.name}</span>
+                                      ) : (
+                                        <select
+                                          className="bg-white text-[10px] font-semibold text-slate-600 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer w-full text-ellipsis shadow-sm"
+                                          value={room.id}
+                                          onChange={(e) => handleBatchRelocateSelect(item, idx, b, e.target.value)}
+                                          title="Transfer batch"
+                                        >
+                                          <option value={room.id}>{room.name}</option>
+                                          <option value="" disabled>-- Move to --</option>
+                                          {allRooms
+                                            .filter((r) => r.id !== room.id)
+                                            .map((r) => (
+                                              <option key={r.id} value={r.id}>{r.name}</option>
+                                            ))}
+                                        </select>
+                                      )}
                                     </td>
                                     <td className="px-3 py-2 text-[11px] text-center">
-                                      <button
-                                        onClick={() => requestDeleteBatch(item, idx)}
-                                        className="text-slate-300 hover:text-rose-600 transition-colors"
-                                        title="Delete batch"
-                                        aria-label="Delete batch"
-                                      >
-                                        <Trash2 className="w-4 h-4 mx-auto" />
-                                      </button>
+                                      {!readOnly && (
+                                        <button
+                                          onClick={() => requestDeleteBatch(item, idx)}
+                                          className="text-slate-300 hover:text-rose-600 transition-colors"
+                                          title="Delete batch"
+                                          aria-label="Delete batch"
+                                        >
+                                          <Trash2 className="w-4 h-4 mx-auto" />
+                                        </button>
+                                      )}
                                     </td>
                                   </tr>
                                 );
@@ -615,7 +637,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
           <div className="mt-2 border-t border-slate-100 pt-6 pb-2">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Activity Log</h4>
-              <button 
+              <button
                 onClick={() => setIsLogOpen(!isLogOpen)}
                 className="flex items-center gap-1 border border-slate-200 rounded-lg px-3 py-1.5 text-[9px] font-black uppercase text-slate-500 hover:bg-slate-50 transition-all shadow-sm tracking-widest"
               >
