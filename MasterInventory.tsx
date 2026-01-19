@@ -983,10 +983,10 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">{log.roomName}</p>
+                    <p className="text-[12px] font-black text-emerald-600 tracking-wide">{log.roomName}</p>
                     {log.actorName && (
-                      <span className="text-[9px] bg-slate-200/50 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">
-                        by {log.actorName}
+                      <span className="text-[10px] bg-slate-200/50 text-slate-500 px-1.5 py-0.5 rounded font-bold tracking-wider">
+                        By {log.actorName}
                       </span>
                     )}
                   </div>
@@ -994,7 +994,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
                   {log.beforeValue !== undefined && log.afterValue !== undefined && (
                     <div className="flex items-center gap-2 mt-2">
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Change</span>
+                      <span className="text-[10px] font-black text-slate-500 tracking-wider">Change: </span>
                       <div className="flex items-center gap-2 bg-white/80 border border-slate-100 px-2 py-1 rounded-xl shadow-sm">
                         <span className="text-[11px] font-bold text-slate-400 line-through">{log.beforeValue}</span>
                         <div className="w-3 h-px bg-slate-200" />
@@ -1005,12 +1005,12 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                <p className="text-[10px] text-slate-400 font-black tracking-widest">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 <p className="text-[10px] text-slate-400 font-bold mt-1">{new Date(log.timestamp).toLocaleDateString()}</p>
               </div>
             </div>
           )) : (
-            <div className="text-center py-12 text-slate-300 font-black uppercase tracking-[0.3em] text-xs">Awaiting clinic activity...</div>
+            <div className="text-center py-12 text-slate-300 font-black tracking-[0.3em] text-xs">Awaiting clinic activity...</div>
           )}
         </div>
       </div >

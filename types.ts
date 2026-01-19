@@ -97,3 +97,17 @@ export interface Invitation {
   status: 'pending' | 'accepted' | 'revoked';
   created_at: string;
 }
+
+export interface ExtractedItem {
+  id: string;
+  brand?: string;
+  product: string;
+  sku?: string;
+  quantity?: number;
+  uom?: string;
+  price?: number;
+  total?: number;
+  vendor?: string;
+  category?: string;
+  expiryDate?: string;
+}

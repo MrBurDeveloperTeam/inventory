@@ -8,10 +8,16 @@ import {
   Minus,
   Trash2,
   ChevronDown,
-  FileDown
+  FileDown,
+  Scan,
+  Upload,
+  Camera,
+  Loader2
 } from 'lucide-react';
 import { Room, Item, ActivityLog, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
+import { filesToImages } from './src/utils/fileHelpers';
+import { extractDataFromImage } from './services/geminiService';
 
 interface RoomModalProps {
   room: Room;
@@ -47,6 +53,14 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const targetRoomName = transferContext ? (allRooms.find(r => r.id === transferContext.toRoomId)?.name || 'Selected room') : '';
   const [bulkTransferContext, setBulkTransferContext] = useState<{ item: Item; toRoomId: string } | null>(null);
   const [deleteContext, setDeleteContext] = useState<{ item: Item; batchIndex?: number } | null>(null);
+
+  // OCR State
+  const [isOCRActive, setIsOCRActive] = useState(false);
+  const [ocrStep, setOcrStep] = useState<'upload' | 'processing' | 'review'>('upload');
+  const [ocrImage, setOcrImage] = useState<string | null>(null);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrStatusText, setOcrStatusText] = useState('');
+  const [ocrResult, setOcrResult] = useState<Partial<Item>[] | null>(null);
 
   const filteredItems = useMemo(() => {
     return room.items.filter(i =>
@@ -205,18 +219,26 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-6 custom-scrollbar bg-slate-50/50">
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             {!readOnly && (
-              !isReceiving ? (
-                <button
-                  onClick={() => setIsReceiving(true)}
-                  className="bg-[#3498db] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#2980b9] shadow-lg shadow-blue-100 transition-all"
-                >
-                  <Package className="w-4 h-4" /> Receive Stock
-                </button>
+              !isReceiving && !isOCRActive ? (
+                <>
+                  <button
+                    onClick={() => setIsReceiving(true)}
+                    className="bg-[#3498db] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#2980b9] shadow-lg shadow-blue-100 transition-all"
+                  >
+                    <Package className="w-4 h-4" /> Receive Stock
+                  </button>
+                  <button
+                    onClick={() => { setIsOCRActive(true); setOcrStep('upload'); setOcrImage(null); setOcrResult(null); }}
+                    className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all"
+                  >
+                    <Scan className="w-4 h-4" /> Add via OCR
+                  </button>
+                </>
               ) : (
                 <button
-                  onClick={() => setIsReceiving(false)}
+                  onClick={() => { setIsReceiving(false); setIsOCRActive(false); }}
                   className="bg-[#e74c3c] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#c0392b] shadow-lg shadow-rose-100 transition-all"
                 >
                   <X className="w-4 h-4" /> Cancel
@@ -224,6 +246,305 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
               )
             )}
           </div>
+
+          {isOCRActive && (
+            <div className="bg-emerald-50/50 border border-emerald-100 rounded-[1rem] p-6 shadow-sm animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-emerald-700 font-black uppercase text-xs tracking-[0.2em] flex items-center gap-2">
+                  <Scan className="w-4 h-4" /> Intelligent Shield (OCR)
+                </h4>
+              </div>
+
+              {ocrStep === 'upload' && (
+                <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-emerald-200 rounded-xl bg-white/50 gap-4">
+                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                    <Camera className="w-8 h-8" />
+                  </div>
+                  <div className="text-center">
+                    <h5 className="font-bold text-slate-700 mb-1">Upload Receipt or Label</h5>
+                    <p className="text-xs text-slate-400">Take a photo or upload an image to automatically extract details</p>
+                  </div>
+                  <label className="cursor-pointer">
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setOcrStep('processing');
+                        setOcrStatusText('Preparing image for analysis...');
+                        setOcrProgress(0); // Progress is less granular with API
+                        try {
+                          const imgs = await filesToImages([e.target.files[0]]);
+                          setOcrImage(imgs[0]);
+
+                          // Parse Base64
+                          const match = imgs[0].match(/^data:(.+);base64,(.+)$/);
+                          if (!match) throw new Error("Invalid image format");
+
+                          const mimeType = match[1];
+                          const base64Data = match[2];
+
+                          const extractedItems = await extractDataFromImage(base64Data, mimeType);
+
+                          setOcrStatusText('Processing results...');
+
+                          // Map to Item format
+                          const parsed: Partial<Item>[] = extractedItems.map(i => ({
+                            name: i.product,
+                            quantity: i.quantity || 1,
+                            price: i.price || 0,
+                            brand: i.brand || '',
+                            code: i.sku || '',
+                            uom: (i.uom as UOM) || 'box', // Fallback to box if mismatch
+                            category: (i.category as Category) || 'consumables',
+                            vendor: i.vendor || '',
+                            expiryDate: i.expiryDate || undefined,
+                            description: `Imported: ${i.product}`
+                          }));
+
+                          setOcrResult(parsed);
+                          setOcrStep('review');
+                        } catch (err) {
+                          console.error(err);
+                          setOcrStatusText('Analysis Failed');
+                          alert('Failed to analyze image. Please try again.');
+                          setOcrStep('upload');
+                        }
+                      }
+                    }} />
+                    <span className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold text-xs hover:bg-emerald-700 transition-all shadow-md inline-block">
+                      Select Image
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {ocrStep === 'processing' && (
+                <div className="flex flex-col items-center justify-center p-12 gap-6">
+                  <div className="relative w-24 h-24 flex items-center justify-center">
+                    <svg className="animate-spin text-emerald-200 w-full h-full" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center font-bold text- emerald-600 text-sm">{ocrProgress}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-bold text-slate-700 text-lg mb-1">Analysing Image...</div>
+                    <div className="text-slate-400 text-sm font-mono">{ocrStatusText}</div>
+                  </div>
+                </div>
+              )}
+
+              {ocrStep === 'review' && ocrResult && (
+                <div className="flex flex-col gap-6">
+                  <div className="flex flex-col gap-2">
+                    <div className="font-bold text-slate-500 text-[10px] uppercase tracking-widest mb-2">Original Image</div>
+                    <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm relative h-48 w-full bg-slate-900">
+                      <img src={ocrImage || ''} className="w-full h-full object-contain" />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 overflow-hidden">
+                    <div className="font-bold text-slate-500 text-[10px] uppercase tracking-widest mb-2">Extracted Data ({ocrResult.length} items)</div>
+                    <div className="overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-sm max-h-[400px]">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-100">
+                          <tr>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[180px]">Name</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[50px]">Qty</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[60px]">Price</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px]">Brand</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[80px]">Code</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[60px]">UOM</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Vendor</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Category</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Expires</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-8"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {ocrResult.map((item, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 group">
+                              <td className="px-3 py-2">
+                                <input
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded px-1 font-bold text-slate-700 text-[11px]"
+                                  value={item.name || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, name: e.target.value };
+                                    setOcrResult(newRes);
+                                  }}
+                                  placeholder="Item Name"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded px-1 text-slate-600 font-semibold text-[11px]"
+                                  value={item.quantity || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, quantity: parseInt(e.target.value) || 0 };
+                                    setOcrResult(newRes);
+                                  }}
+                                  placeholder="0"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number" step="0.01"
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded px-1 text-slate-600 font-semibold text-[11px]"
+                                  value={item.price || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, price: parseFloat(e.target.value) || 0 };
+                                    setOcrResult(newRes);
+                                  }}
+                                  placeholder="0.00"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded px-1 text-slate-600 text-[11px]"
+                                  value={item.brand || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, brand: e.target.value };
+                                    setOcrResult(newRes);
+                                  }}
+                                  placeholder="Brand"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded px-1 text-slate-600 text-[11px]"
+                                  value={item.code || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, code: e.target.value };
+                                    setOcrResult(newRes);
+                                  }}
+                                  placeholder="Code"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <select
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded text-slate-600 text-[11px]"
+                                  value={item.uom || 'box'}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, uom: e.target.value as UOM };
+                                    setOcrResult(newRes);
+                                  }}
+                                >
+                                  {UOMS.map(u => <option key={u} value={u}>{u}</option>)}
+                                </select>
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded text-slate-600 text-[11px]"
+                                  value={item.vendor || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, vendor: e.target.value };
+                                    setOcrResult(newRes);
+                                  }}
+                                  placeholder="Vendor"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <select
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded text-slate-600 text-[11px]"
+                                  value={item.category || 'consumables'}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, category: e.target.value as Category };
+                                    setOcrResult(newRes);
+                                  }}
+                                >
+                                  {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                                </select>
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="date"
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded text-slate-600 text-[11px]"
+                                  value={item.expiryDate || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, expiryDate: e.target.value };
+                                    setOcrResult(newRes);
+                                  }}
+                                />
+                              </td>
+                              <td className="p-2 text-center">
+                                <button
+                                  onClick={() => {
+                                    const newRes = ocrResult.filter((_, i) => i !== idx);
+                                    setOcrResult(newRes);
+                                  }}
+                                  className="text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          {ocrResult.length === 0 && (
+                            <tr><td colSpan={4} className="p-4 text-center text-slate-300 text-xs italic">No items detected</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                      <button
+                        onClick={() => setOcrResult([...ocrResult, { name: '', quantity: 1, price: 0 }])}
+                        className="w-full py-2 text-[10px] font-bold text-emerald-600 hover:bg-emerald-50 border-t border-slate-100 uppercase tracking-widest transition-colors"
+                      >
+                        + Add Item
+                      </button>
+                    </div>
+                  </div>
+
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => {
+                        // Bulk Add
+                        ocrResult.forEach(item => {
+                          if (item.name) {
+                            onReceive(
+                              room.id,
+                              {
+                                name: item.name,
+                                brand: item.brand || '',
+                                category: item.category || 'consumables',
+                                uom: item.uom || 'box',
+                                code: item.code || '',
+                                vendor: item.vendor || '',
+                                description: item.description || 'Imported via OCR',
+                                expiryDate: item.expiryDate || undefined
+                              },
+                              item.quantity || 1,
+                              item.price || 0,
+                              new Date().toISOString().split('T')[0], // Purchase Date
+                              item.expiryDate || undefined
+                            );
+                          }
+                        });
+                        setOcrStep('upload');
+                        setIsOCRActive(false);
+                      }}
+                      disabled={ocrResult.length === 0}
+                      className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all disabled:opacity-50 disabled:shadow-none"
+                    >
+                      Add All Items ({ocrResult.length})
+                    </button>
+                    <button
+                      onClick={() => setOcrStep('upload')}
+                      className="px-6 bg-slate-100 text-slate-500 py-3 rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {isReceiving && (
             <div className="bg-[#ebf5fb] border border-[#c4e1f3] rounded-[1rem] p-6 shadow-sm animate-in zoom-in-95 duration-200">
@@ -673,103 +994,109 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
         </div>
       </div>
 
-      {transferContext && (
-        <div className="fixed inset-0 bg-black/50 z-[110] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div>
-              <p className="text-xl font-semibold text-slate-700">
-                Transfer "{transferContext.item.name}" to {targetRoomName}
-              </p>
-              <p className="text-sm text-slate-600 mt-1">How many do you want to transfer?</p>
-              <p className="text-[12px] font-bold text-emerald-600 mt-1">Available: {transferContext.item.quantity}</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Quantity</label>
-              <input
-                type="number"
-                min={1}
-                max={transferContext.item.quantity}
-                value={transferQty || ''}
-                onChange={(e) => setTransferQty(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={cancelTransfer}
-                className="px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmTransfer}
-                className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition-colors"
-              >
-                OK
-              </button>
+      {
+        transferContext && (
+          <div className="fixed inset-0 bg-black/50 z-[110] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
+              <div>
+                <p className="text-xl font-semibold text-slate-700">
+                  Transfer "{transferContext.item.name}" to {targetRoomName}
+                </p>
+                <p className="text-sm text-slate-600 mt-1">How many do you want to transfer?</p>
+                <p className="text-[12px] font-bold text-emerald-600 mt-1">Available: {transferContext.item.quantity}</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Quantity</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={transferContext.item.quantity}
+                  value={transferQty || ''}
+                  onChange={(e) => setTransferQty(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={cancelTransfer}
+                  className="px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmTransfer}
+                  className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition-colors"
+                >
+                  OK
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {bulkTransferContext && (
-        <div className="fixed inset-0 bg-black/50 z-[115] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div>
-              <p className="text-xl font-semibold text-slate-700">
-                Transfer all batches of "{bulkTransferContext.item.name}"?
-              </p>
-              <p className="text-sm text-slate-600 mt-1">
-                This will move {bulkTransferContext.item.quantity} {bulkTransferContext.item.uom} to {allRooms.find(r => r.id === bulkTransferContext.toRoomId)?.name || 'the selected room'}.
-              </p>
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={cancelBulkTransfer}
-                className="px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmBulkTransfer}
-                className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition-colors"
-              >
-                Transfer all
-              </button>
+      {
+        bulkTransferContext && (
+          <div className="fixed inset-0 bg-black/50 z-[115] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
+              <div>
+                <p className="text-xl font-semibold text-slate-700">
+                  Transfer all batches of "{bulkTransferContext.item.name}"?
+                </p>
+                <p className="text-sm text-slate-600 mt-1">
+                  This will move {bulkTransferContext.item.quantity} {bulkTransferContext.item.uom} to {allRooms.find(r => r.id === bulkTransferContext.toRoomId)?.name || 'the selected room'}.
+                </p>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={cancelBulkTransfer}
+                  className="px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBulkTransfer}
+                  className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition-colors"
+                >
+                  Transfer all
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {deleteContext && (
-        <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div>
-              <p className="text-xl font-semibold text-slate-700">
-                {deleteContext.batchIndex !== undefined
-                  ? `Delete Batch ${deleteContext.batchIndex + 1} of "${deleteContext.item.name}" ?`
-                  : `Delete "${deleteContext.item.name}" ?`}
-              </p>
-              <p className="text-sm text-slate-500 mt-1">This action cannot be undone.</p>
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={cancelDelete}
-                className="px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="px-4 py-2 rounded-full bg-rose-600 text-white font-bold text-sm hover:bg-rose-700 transition-colors"
-              >
-                Delete
-              </button>
+      {
+        deleteContext && (
+          <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
+              <div>
+                <p className="text-xl font-semibold text-slate-700">
+                  {deleteContext.batchIndex !== undefined
+                    ? `Delete Batch ${deleteContext.batchIndex + 1} of "${deleteContext.item.name}" ?`
+                    : `Delete "${deleteContext.item.name}" ?`}
+                </p>
+                <p className="text-sm text-slate-500 mt-1">This action cannot be undone.</p>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={cancelDelete}
+                  className="px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="px-4 py-2 rounded-full bg-rose-600 text-white font-bold text-sm hover:bg-rose-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 
