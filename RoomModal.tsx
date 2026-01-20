@@ -7,6 +7,7 @@ import {
   Plus,
   Minus,
   Trash2,
+  Edit3,
   ChevronDown,
   FileDown,
   Scan,
@@ -30,12 +31,14 @@ interface RoomModalProps {
   onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
   onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
   onDeleteItem: (roomId: string, itemId: string) => void;
+  onUpdateItem: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
+  onUpdateBatch: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
   readOnly?: boolean;
 }
 
-const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem, readOnly = false }) => {
+const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem, onUpdateItem, onUpdateBatch, readOnly = false }) => {
   const [isReceiving, setIsReceiving] = useState(false);
-  const [receiveMode, setReceiveMode] = useState<'existing' | 'new'>('existing');
+  const [receiveMode, setReceiveMode] = useState<'existing' | 'new' | 'edit'>('existing');
   const [selectedItemIdx, setSelectedItemIdx] = useState<string>('');
   const [formData, setFormData] = useState<Partial<Item>>({
     name: '', brand: '', category: 'consumables', uom: 'box', code: '', vendor: '', description: ''
@@ -53,6 +56,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const targetRoomName = transferContext ? (allRooms.find(r => r.id === transferContext.toRoomId)?.name || 'Selected room') : '';
   const [bulkTransferContext, setBulkTransferContext] = useState<{ item: Item; toRoomId: string } | null>(null);
   const [deleteContext, setDeleteContext] = useState<{ item: Item; batchIndex?: number } | null>(null);
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
 
   // OCR State
   const [isOCRActive, setIsOCRActive] = useState(false);
@@ -90,6 +94,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     if (val === 'new') {
       setReceiveMode('new');
       setFormData({ name: '', brand: '', category: 'consumables', uom: 'box', code: '', vendor: '', description: '' });
+    } else if (val === 'edit') {
+      setReceiveMode('edit');
     } else if (val !== '') {
       setReceiveMode('existing');
       const item = room.items[parseInt(val)];
@@ -97,9 +103,54 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     }
   };
 
+  const handleEditItem = (item: Item) => {
+    setReceiveMode('edit');
+    setEditingBatchId(null);
+    setFormData({ ...item });
+    setReceiveQty(item.quantity);
+    setReceivePrice(item.price);
+    setHasExpiry(!!item.expiryDate);
+    setExpiry(item.expiryDate || '');
+    setSelectedItemIdx(room.items.findIndex(i => i.id === item.id).toString());
+    setIsReceiving(true);
+  };
+
+  const handleEditBatch = (item: Item, batch: ItemBatch) => {
+    setReceiveMode('edit');
+    setEditingBatchId(batch.id);
+    setFormData({ ...item });
+    setReceiveQty(batch.qty);
+    setReceivePrice(batch.unitPrice);
+    setHasExpiry(!!batch.expiryDate);
+    setExpiry(batch.expiryDate || '');
+    setSelectedItemIdx(room.items.findIndex(i => i.id === item.id).toString());
+    setIsReceiving(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onReceive(room.id, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
+    if (receiveMode === 'edit') {
+      const itemIndex = parseInt(selectedItemIdx);
+      const originalItem = room.items[itemIndex];
+      if (originalItem) {
+        if (editingBatchId) {
+          onUpdateBatch(room.id, originalItem.id, editingBatchId, {
+            qty: receiveQty,
+            unitPrice: receivePrice,
+            expiryDate: hasExpiry ? expiry : null
+          });
+        } else {
+          onUpdateItem(room.id, originalItem.id, {
+            ...formData,
+            quantity: receiveQty,
+            price: receivePrice,
+            expiryDate: hasExpiry ? expiry : null
+          });
+        }
+      }
+    } else {
+      onReceive(room.id, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
+    }
     setIsReceiving(false);
     resetForm();
   };
@@ -192,7 +243,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const newAvgPrice = newQty > 0 ? ((currentQty * currentUnitPrice) + (incomingQty * incomingPrice)) / newQty : 0;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-2">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-2">
       <div className="bg-white w-full max-w-[95vw] h-[90vh] rounded-[1.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="bg-[#4d9678] px-6 py-4 flex items-center justify-between text-white shrink-0 border-b border-white/10">
           <div className="flex-1">
@@ -433,7 +484,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                     setOcrResult(newRes);
                                   }}
                                 >
-                                  {UOMS.map(u => <option key={u} value={u}>{u}</option>)}
+                                  {UOMS.map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
                                 </select>
                               </td>
                               <td className="px-3 py-2">
@@ -594,9 +645,11 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                   </div>
                 )}
 
-                {receiveMode === 'new' && (
+                {(receiveMode === 'new' || receiveMode === 'edit') && (
                   <div className="flex flex-col gap-4 animate-in slide-in-from-top-1 duration-200 mt-2">
-                    <h5 className="text-[#3498db] font-black uppercase text-[9px] tracking-[0.2em] border-b border-slate-200/40 pb-1">New Product Details</h5>
+                    <h5 className="text-[#3498db] font-black uppercase text-[9px] tracking-[0.2em] border-b border-slate-200/40 pb-1">
+                      {receiveMode === 'edit' ? 'Edit Item Details' : 'New Product Details'}
+                    </h5>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className="flex flex-col gap-1">
                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Product Name *</label>
@@ -646,7 +699,9 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                 )}
 
                 <div className="flex gap-3 pt-2">
-                  <button type="submit" className="bg-[#3498db] text-white px-6 py-2 rounded-lg font-black uppercase text-[10px] tracking-[0.2em] hover:bg-[#2980b9] shadow-md shadow-blue-100 transition-all">Receive Stock</button>
+                  <button type="submit" className="bg-[#3498db] text-white px-6 py-2 rounded-lg font-black uppercase text-[10px] tracking-[0.2em] hover:bg-[#2980b9] shadow-md shadow-blue-100 transition-all">
+                    {receiveMode === 'edit' ? 'Update Item' : 'Receive Stock'}
+                  </button>
                   <button type="button" onClick={resetForm} className="bg-slate-500 text-white px-6 py-2 rounded-lg font-black uppercase text-[10px] tracking-[0.2em] hover:bg-slate-600 shadow-md shadow-slate-100 transition-all">Cancel</button>
                 </div>
               </form>
@@ -841,14 +896,24 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                 </td>
                                 <td className="px-3 py-4 text-center">
                                   {!readOnly && (
-                                    <button
-                                      onClick={() => requestDeleteItem(item)}
-                                      className="text-slate-300 hover:text-rose-600 transition-colors"
-                                      title="Delete item"
-                                      aria-label="Delete item"
-                                    >
-                                      <Trash2 className="w-4 h-4 mx-auto" />
-                                    </button>
+                                    <div className="flex items-center justify-center gap-3">
+                                      <button
+                                        onClick={() => handleEditItem(item)}
+                                        className="text-slate-300 hover:text-indigo-600 transition-colors"
+                                        title="Edit item"
+                                        aria-label="Edit item"
+                                      >
+                                        <Edit3 className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => requestDeleteItem(item)}
+                                        className="text-slate-300 hover:text-rose-600 transition-colors"
+                                        title="Delete item"
+                                        aria-label="Delete item"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
                                   )}
                                 </td>
                               </tr>
@@ -922,14 +987,24 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                     </td>
                                     <td className="px-3 py-2 text-[11px] text-center">
                                       {!readOnly && (
-                                        <button
-                                          onClick={() => requestDeleteBatch(item, idx)}
-                                          className="text-slate-300 hover:text-rose-600 transition-colors"
-                                          title="Delete batch"
-                                          aria-label="Delete batch"
-                                        >
-                                          <Trash2 className="w-4 h-4 mx-auto" />
-                                        </button>
+                                        <div className="flex items-center justify-center gap-2">
+                                          <button
+                                            onClick={() => handleEditBatch(item, b)}
+                                            className="text-slate-300 hover:text-indigo-600 transition-colors"
+                                            title="Edit batch"
+                                            aria-label="Edit batch"
+                                          >
+                                            <Edit3 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            onClick={() => requestDeleteBatch(item, idx)}
+                                            className="text-slate-300 hover:text-rose-600 transition-colors"
+                                            title="Delete batch"
+                                            aria-label="Delete batch"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
                                       )}
                                     </td>
                                   </tr>
@@ -996,7 +1071,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
       {
         transferContext && (
-          <div className="fixed inset-0 bg-black/50 z-[110] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50 z-[10100] flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
               <div>
                 <p className="text-xl font-semibold text-slate-700">
@@ -1037,7 +1112,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
       {
         bulkTransferContext && (
-          <div className="fixed inset-0 bg-black/50 z-[115] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50 z-[10100] flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
               <div>
                 <p className="text-xl font-semibold text-slate-700">
@@ -1068,7 +1143,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
       {
         deleteContext && (
-          <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50 z-[10100] flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
               <div>
                 <p className="text-xl font-semibold text-slate-700">

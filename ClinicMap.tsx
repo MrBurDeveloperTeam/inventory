@@ -8,11 +8,9 @@ import {
   Map as MapIcon,
   ChevronDown,
   Layout,
-  Image as ImageIcon,
-  MessageCircle,
-  Volume2
+  Image as ImageIcon
 } from 'lucide-react';
-import { Room, CatPosition } from './types';
+import { Room, CatPosition, Item, ActivityLog, Category, UOM, ItemBatch } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 
 interface ClinicMapProps {
@@ -32,6 +30,8 @@ interface ClinicMapProps {
   onSelectTemplate?: (url: string) => void;
   catPosition: CatPosition;
   onCatPositionChange?: (pos: CatPosition) => void;
+  onReceive?: (roomId: string, itemData: any, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
+  onOpenChat?: () => void;
   readOnly?: boolean;
   syncStatus?: 'synced' | 'syncing' | 'error';
 }
@@ -58,7 +58,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   onAddRoom, onDeleteRoom, onSelectRoom, onUpdateRooms,
   onDragEnd,
   onSelectTemplate,
-  catPosition, onCatPositionChange, readOnly = false,
+  catPosition, onCatPositionChange, onOpenChat, readOnly = false,
   syncStatus = 'synced'
 }) => {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
@@ -116,8 +116,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
 
   /**
    * Calculates the current interpolated visual position of the cat mascot
-   * during an active CSS transition. This allows us to calculate accurate
-   * distances for new movement commands and prevent the "sliding" glitch.
+   * during an active CSS transition.
    */
   const getInterpolatedPos = () => {
     if (!isWalking) return catPos;
@@ -131,9 +130,6 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
 
   const handleMapClick = (e: React.MouseEvent) => {
     if (!mapRef.current) return;
-
-    // Fix for the double-click slide bug:
-    // 1. Ignore double-click events as they can disrupt the linear movement state.
     if (e.detail > 1) return;
 
     const rect = mapRef.current.getBoundingClientRect();
@@ -143,23 +139,18 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
     if (isAddMode && onAddRoom && !readOnly) {
       onAddRoom(targetX, targetY);
     } else if (!isDeleteMode && !isLocked && !readOnly) {
-      // 2. Fix the "slide" bug by calculating distance from the ACTUAL visual position
-      // rather than the previous logical target.
       const currentVisualPos = getInterpolatedPos();
       const distance = Math.sqrt(Math.pow(targetX - currentVisualPos.x, 2) + Math.pow(targetY - currentVisualPos.y, 2));
 
-      // 3. Ignore redundant clicks if already very close to the intended spot
       if (distance < 1) return;
 
       const calculatedDuration = Math.max(0.3, distance * CAT_SPEED);
 
-      // Update movement refs to track current journey state
       lastMoveStartPos.current = currentVisualPos;
       lastMoveTarget.current = { x: targetX, y: targetY };
       lastMoveStartTime.current = Date.now();
       lastMoveDuration.current = calculatedDuration;
 
-      // Update React state for visual representation
       setFacingLeft(targetX < currentVisualPos.x);
       setWalkDuration(calculatedDuration);
       setCatPos({ x: targetX, y: targetY });
@@ -176,14 +167,11 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   const handleCatClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     playMeow();
-    const randomQuote = CAT_QUOTES[Math.floor(Math.random() * CAT_QUOTES.length)];
-    setBubbleText(randomQuote);
-    setShowBubble(true);
-    setTimeout(() => setShowBubble(false), 3000);
+    onOpenChat?.();
   };
 
   const handleMouseDown = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation(); // stop map click/add handlers from firing
+    e.stopPropagation();
     if (readOnly || isLocked || isAddMode || isDeleteMode) return;
     setDraggedRoomId(id);
     wasDraggingRef.current = false;
@@ -211,7 +199,6 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
         onDragEnd(room.id, room.x, room.y);
       }
       justDraggedRef.current = true;
-      // Clear the drag flag shortly after to avoid click firing the modal
       setTimeout(() => {
         wasDraggingRef.current = false;
         justDraggedRef.current = false;
@@ -328,7 +315,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
         {/* Cat Mascot "Molar" */}
         <div
           onClick={handleCatClick}
-          className={`absolute z-30 cursor-pointer hover:scale-110`}
+          className={`absolute z-30 cursor-pointer hover:scale-110 group`}
           style={{
             left: `${catPos.x}%`,
             top: `${catPos.y}%`,
@@ -341,6 +328,17 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
           )}
 
           <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-2 bg-black rounded-[100%] blur-[2px] transition-opacity ${isWalking ? 'animate-cat-shadow' : 'opacity-15'}`} />
+
+          {/* Tooltip - shows on hover */}
+          <div
+            className="absolute bottom-full left-1/2 mb-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-50"
+            style={{ transform: `translateX(-50%) scaleX(${facingLeft ? 1 : -1})` }}
+          >
+            <div className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold whitespace-nowrap shadow-lg">
+              💬 Click to chat with AI
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45" />
+            </div>
+          </div>
 
           {showBubble && (
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-white text-slate-800 px-4 py-2 rounded-2xl shadow-xl border border-slate-100 text-[10px] font-bold whitespace-nowrap animate-in fade-in slide-in-from-bottom-2 duration-300 z-40" style={{ transform: `translateX(-50%) scaleX(${facingLeft ? 1 : -1})` }}>

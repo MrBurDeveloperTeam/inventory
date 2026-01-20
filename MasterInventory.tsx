@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   RefreshCcw,
   Trash2,
+  Edit3,
   Calendar,
   Minus,
   Map as MapIcon
@@ -32,6 +33,8 @@ interface MasterInventoryProps {
   onTransfer?: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
   onUpdateBatchQty?: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
   onDeleteItem?: (roomId: string, itemId: string) => void;
+  onUpdateItem?: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
+  onUpdateBatch?: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
   readOnly?: boolean;
 }
 
@@ -44,6 +47,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   onTransfer,
   onUpdateBatchQty,
   onDeleteItem,
+  onUpdateItem,
+  onUpdateBatch,
   readOnly = false
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
@@ -61,7 +66,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
   // Form State for Master Receiving
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
-  const [receiveMode, setReceiveMode] = useState<'existing' | 'new'>('existing');
+  const [receiveMode, setReceiveMode] = useState<'existing' | 'new' | 'edit'>('existing');
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
   const [selectedProductKey, setSelectedProductKey] = useState<string>('');
   const [formData, setFormData] = useState<Partial<Item>>({
     name: '', brand: '', category: 'consumables', uom: 'pcs', code: '', vendor: '', description: ''
@@ -207,6 +213,32 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     return entries.sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
   }, [rooms]);
 
+  const handleEditItem = (item: any) => {
+    setActiveTab('receive');
+    setReceiveMode('edit');
+    setEditingBatchId(null);
+    setFormData({ ...item });
+    setReceiveQty(item.quantity);
+    setReceivePrice(item.price);
+    setHasExpiry(!!item.expiryDate);
+    setExpiry(item.expiryDate || '');
+    setSelectedProductKey(`${item.roomId}|${item.id}`);
+    setSelectedRoomId(item.roomId);
+  };
+
+  const handleEditBatch = (item: any, batch: any) => {
+    setActiveTab('receive');
+    setReceiveMode('edit');
+    setEditingBatchId(batch.id);
+    setFormData({ ...item });
+    setReceiveQty(batch.qty);
+    setReceivePrice(batch.unitPrice);
+    setHasExpiry(!!batch.expiryDate);
+    setExpiry(batch.expiryDate || '');
+    setSelectedProductKey(`${item.roomId}|${item.id}`);
+    setSelectedRoomId(item.roomId);
+  };
+
   const handleProductSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setSelectedProductKey(val);
@@ -233,8 +265,30 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       alert('Please select a room and enter a valid quantity.');
       return;
     }
-    if (!onReceive) return;
-    onReceive(selectedRoomId, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
+    if (!onReceive || !onUpdateItem || !onUpdateBatch) return;
+
+    if (receiveMode === 'edit') {
+      const iId = selectedProductKey.split('|')[1];
+      if (iId) {
+        if (editingBatchId) {
+          onUpdateBatch(selectedRoomId, iId, editingBatchId, {
+            qty: receiveQty,
+            unitPrice: receivePrice,
+            expiryDate: hasExpiry ? expiry : null
+          });
+        } else {
+          onUpdateItem(selectedRoomId, iId, {
+            ...formData,
+            quantity: receiveQty,
+            price: receivePrice,
+            expiryDate: hasExpiry ? expiry : null
+          });
+        }
+      }
+    } else {
+      onReceive(selectedRoomId, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
+    }
+
     setActiveTab('all');
     resetReceiveForm();
   };
@@ -386,6 +440,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       <th className="px-6 py-5 w-[100px]">Category</th>
                       <th className="px-6 py-5 w-[100px]">Expires</th>
                       <th className="px-6 py-5 w-[110px]">Location</th>
+
                     </tr>
                   </thead>
 
@@ -525,6 +580,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                       {item.roomName}
                                     </span>
                                   </td>
+
                                 </tr>
                                 {isOpen && (
                                   batches.map((b: any, idx: number) => {
@@ -576,6 +632,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                           {bSoon && !bExpired && <span className="ml-1 text-[9px] uppercase font-black">(SOON)</span>}
                                         </td>
                                         <td className="px-6 py-2 text-[11px] text-slate-400"></td>
+
                                       </tr>
                                     );
                                   })
@@ -609,7 +666,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <div className="animate-in zoom-in-95 duration-200 w-full">
               <div className="flex items-center gap-3 mb-8">
                 <div className="bg-blue-100 p-3 rounded-2xl text-[#3498db]"><Package className="w-6 h-6" /></div>
-                <h4 className="text-[#3498db] font-bold text-xl tracking-tight">Receive New Stock</h4>
+                <h4 className="text-[#3498db] font-bold text-xl tracking-tight">
+                  {receiveMode === ('edit' as any) ? 'Edit Item Details' : 'Receive New Stock'}
+                </h4>
               </div>
               <form onSubmit={handleReceiveSubmit} className="flex flex-col gap-8 w-full">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
@@ -698,9 +757,11 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   );
                 })()}
 
-                {receiveMode === 'new' && (
+                {(receiveMode === 'new' || receiveMode === ('edit' as any)) && (
                   <div className="flex flex-col gap-6 animate-in slide-in-from-top-4 duration-300 pt-4 border-t border-slate-50">
-                    <h5 className="text-[#3498db] font-black uppercase text-[10px] tracking-[0.2em] pb-1">New Product Registration</h5>
+                    <h5 className="text-[#3498db] font-black uppercase text-[10px] tracking-[0.2em] pb-1">
+                      {receiveMode === ('edit' as any) ? 'Edit Product Registration' : 'New Product Registration'}
+                    </h5>
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                       <div className="flex flex-col gap-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Product Name *</label>
@@ -744,7 +805,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   </div>
                 )}
                 <div className="flex gap-4">
-                  <button type="submit" className="bg-[#3498db] text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] hover:bg-[#2980b9] shadow-sm shadow-blue-200 transition-all">Submit Entry</button>
+                  <button type="submit" className="bg-[#3498db] text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] hover:bg-[#2980b9] shadow-sm shadow-blue-200 transition-all">
+                    {receiveMode === ('edit' as any) ? 'Update Item' : 'Submit Entry'}
+                  </button>
                   <button type="button" onClick={resetReceiveForm} className="bg-slate-200 text-slate-600 px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-sm hover:bg-slate-300 transition-all">Reset Form</button>
                 </div>
               </form>
@@ -1016,7 +1079,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       </div >
 
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-[10000] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
             <div>
               <p className="text-[18px] font-semibold text-slate-700">

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
 import Header from './Header';
@@ -10,7 +10,10 @@ import LandingModal from './LandingModal';
 import ProfilePage from './ProfilePage';
 import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
+import { MolarChat } from './MolarChat';
+import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
+import { MessageCircle } from 'lucide-react';
 
 type ManagedInventory = {
   userId: string;
@@ -179,15 +182,146 @@ const App: React.FC = () => {
   const [isAddMode, setIsAddMode] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [catPosition, setCatPosition] = useState<CatPosition>({ x: 20, y: 20 });
-  const syncInFlight = useRef(false);
   const isHydrated = useRef(false);
   const [isLoadingMain, setIsLoadingMain] = useState(true);
   const [isReloading, setIsReloading] = useState(false);
   const lastLocalMutation = useRef(0);
   const isDirty = useRef(false);
-  const pendingSyncNeeded = useRef(false);
   const lastLoadRequestId = useRef(0);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+
+  // Global Chat State
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    chatAudioRef.current = new Audio(`${import.meta.env.BASE_URL || '/'}images/cat-meow.mp3`);
+  }, []);
+
+  const playMeowChat = () => {
+    if (chatAudioRef.current) {
+      chatAudioRef.current.currentTime = 0;
+      chatAudioRef.current.play().catch(err => console.log("Audio blocked:", err));
+    }
+  };
+
+  useEffect(() => {
+    if (isChatOpen && chatHistory.length > 0 && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [chatHistory, isChatOpen]);
+
+  const handleSendChat = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!chatInput.trim() || isChatLoading) return;
+
+    const userMsg = chatInput;
+    setChatInput("");
+
+    const newHistory: ChatHistory[] = [
+      ...chatHistory,
+      { role: "user", parts: [{ text: userMsg }] }
+    ];
+    setChatHistory(newHistory);
+    setIsChatLoading(true);
+
+    try {
+      const simpleInventory = rooms.map(r => ({
+        id: r.id,
+        room: r.name,
+        items: r.items.map(i => ({
+          name: i.name,
+          brand: i.brand,
+          code: i.code,
+          category: i.category,
+          uom: i.uom,
+          totalQty: i.quantity,
+          avgPrice: i.price,
+          location: r.name,
+          batches: i.batches?.map(b => ({
+            qty: b.qty,
+            unitPrice: b.unitPrice,
+            expiryDate: b.expiryDate
+          }))
+        }))
+      }));
+
+      // Prepare purchase history (last 100 records for performance)
+      const recentPurchases = history.slice(0, 100).map(h => ({
+        date: h.timestamp,
+        product: h.productName,
+        brand: h.brand,
+        vendor: h.vendor,
+        qty: h.qty,
+        unitPrice: h.unitPrice,
+        total: h.totalPrice,
+        location: h.location,
+        category: h.category
+      }));
+
+      // Prepare activity logs (last 100 records for performance)
+      const recentLogs = logs.slice(0, 100).map(l => ({
+        date: l.timestamp,
+        room: l.roomName,
+        action: l.action,
+        details: l.details,
+        actor: l.actorName
+      }));
+
+      const contextStr = JSON.stringify(simpleInventory);
+      const purchaseHistoryStr = recentPurchases.length ? JSON.stringify(recentPurchases) : undefined;
+      const activityLogsStr = recentLogs.length ? JSON.stringify(recentLogs) : undefined;
+
+      const response = await chatWithGemini(chatHistory, userMsg, contextStr, purchaseHistoryStr, activityLogsStr);
+
+      let finalResponseText = response;
+      const actionMatch = response.match(/<ACTION>(.*?)<\/ACTION>/);
+
+      if (actionMatch && actionMatch[1]) {
+        try {
+          const actionData = JSON.parse(actionMatch[1]);
+          if (actionData.type === 'receive') {
+            receiveStock(
+              actionData.roomId,
+              {
+                name: actionData.itemName,
+                brand: actionData.brand || '',
+                code: actionData.code || '',
+                uom: (actionData.uom || 'pcs').toLowerCase() as any,
+                vendor: actionData.vendor || '',
+                category: (actionData.category || 'consumables').toLowerCase() as any
+              },
+              actionData.qty,
+              actionData.price,
+              new Date().toISOString().split('T')[0],
+              actionData.expiry
+            );
+          }
+          finalResponseText = response.replace(/<ACTION>.*?<\/ACTION>/s, '').trim();
+        } catch (err) {
+          console.error('Failed to parse AI action:', err);
+        }
+      }
+
+      setChatHistory(prev => [
+        ...prev,
+        { role: "model", parts: [{ text: finalResponseText }] }
+      ]);
+      playMeowChat();
+    } catch (err) {
+      console.error(err);
+      setChatHistory([
+        ...newHistory,
+        { role: "model", parts: [{ text: "Meow... I coughed up a hairball (error). Try again?" }] }
+      ]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
 
   // Sharing Logic
   const [currentInventoryOwnerId, setCurrentInventoryOwnerId] = useState<string | null>(null);
@@ -518,6 +652,8 @@ const App: React.FC = () => {
       email: finalProfile?.email || authUser.user?.email || '',
       name: finalProfile?.name || 'User',
       accountType: finalProfile?.account_type as any || 'individual',
+      phone: finalProfile?.phone || '',
+      position: finalProfile?.position || '',
       clinicName: finalProfile?.company_name || undefined,
       avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
       backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
@@ -884,7 +1020,7 @@ const App: React.FC = () => {
         account_type: userProfile.accountType,
         phone: userProfile.phone,
         position: userProfile.position,
-        company_name: userProfile.companyName,
+        company_name: userProfile.clinicName,
         avatar_url: storedImages.avatarUrl || null,
         background_url: storedImages.backgroundUrl || null
       });
@@ -947,7 +1083,7 @@ const App: React.FC = () => {
         account_type: user?.accountType || 'individual',
         phone: user?.phone || '',
         position: user?.position || '',
-        company_name: user?.companyName || null,
+        company_name: user?.clinicName || null,
         avatar_url: finalAvatar,
         background_url: finalBackground
       };
@@ -1090,7 +1226,7 @@ const App: React.FC = () => {
     }
   };
 
-  const addActivity = (
+  const addActivity = async (
     roomId: string,
     roomName: string,
     action: ActivityLog['action'],
@@ -1098,8 +1234,9 @@ const App: React.FC = () => {
     options?: { beforeValue?: string; afterValue?: string }
   ) => {
     const timestamp = new Date().toISOString();
+    const newLogId = generateId();
     const newLog: ActivityLog = {
-      id: generateId(),
+      id: newLogId,
       timestamp,
       roomId,
       roomName,
@@ -1110,16 +1247,29 @@ const App: React.FC = () => {
       beforeValue: options?.beforeValue,
       afterValue: options?.afterValue
     };
-    setLogs(prev => {
-      const isDuplicate = prev.some(l =>
-        l.action === action &&
-        l.roomId === roomId &&
-        l.details === details &&
-        Math.abs(new Date(l.timestamp).getTime() - new Date(timestamp).getTime()) < 1500 // within 1.5s
-      );
-      if (isDuplicate) return prev;
-      return [newLog, ...prev].slice(0, 100);
-    });
+
+    // Optimistic Update
+    setLogs(prev => [newLog, ...prev].slice(0, 100));
+
+    // Direct Persistence
+    if (currentInventoryOwnerId) {
+      try {
+        await supabase.from('inventory_activity_logs').insert({
+          id: newLogId,
+          user_id: currentInventoryOwnerId,
+          room_id: roomId,
+          room_name: roomName,
+          action,
+          details,
+          created_at: timestamp,
+          actor_id: supabaseUserId || null,
+          before_value: options?.beforeValue || null,
+          after_value: options?.afterValue || null
+        });
+      } catch (err) {
+        console.error('Failed to persist activity log:', err);
+      }
+    }
   };
 
   const updateRoomPosition = async (id: string, x: number, y: number) => {
@@ -1466,6 +1616,168 @@ const App: React.FC = () => {
     }
   };
 
+  const updateItemMetadata = async (roomId: string, itemId: string, itemData: Partial<Item>) => {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    const room = rooms.find(r => r.id === roomId);
+    const item = room?.items.find(i => i.id === itemId);
+    if (!room || !item) {
+      isDirty.current = false;
+      return;
+    }
+
+    // Merge metadata
+    const updatedItem: Item = { ...item, ...itemData };
+
+    // If quantity or price was provided in itemData, ensure the first batch (latest) reflects it if appropriate
+    // Or just let user manage batches separately? 
+    // Usually, "Edit Item" from the simple UI should probably update the primary/summary fields and the latest batch.
+    if (updatedItem.batches && updatedItem.batches.length > 0) {
+      // Update the most recent batch to match the summary if they are different
+      // For simplicity, if editing from modal, we update the summary and the first batch.
+      updatedItem.batches[0] = {
+        ...updatedItem.batches[0],
+        qty: updatedItem.quantity,
+        unitPrice: updatedItem.price,
+        expiryDate: updatedItem.expiryDate
+      };
+    } else {
+      // Create a batch if missing
+      updatedItem.batches = [{
+        id: crypto.randomUUID(),
+        qty: updatedItem.quantity,
+        unitPrice: updatedItem.price,
+        expiryDate: updatedItem.expiryDate || null
+      }];
+    }
+
+    // Optimistic Update
+    setRooms(prev => prev.map(r => {
+      if (r.id !== roomId) return r;
+      return {
+        ...r,
+        items: r.items.map(i => i.id === itemId ? updatedItem : i)
+      };
+    }));
+
+    addActivity(roomId, room.name, 'edit', `Updated details for "${item.name}"`);
+
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      try {
+        // 1. Update main item
+        const { error } = await supabase.from('inventory_items').update({
+          name: updatedItem.name,
+          brand: updatedItem.brand,
+          code: updatedItem.code,
+          uom: updatedItem.uom,
+          vendor: updatedItem.vendor,
+          category: updatedItem.category,
+          description: updatedItem.description,
+          expiry_date: updatedItem.expiryDate,
+          quantity: updatedItem.quantity,
+          price: updatedItem.price,
+          user_id: currentInventoryOwnerId
+        }).eq('id', itemId);
+        if (error) throw error;
+
+        // 2. Update the batch (primary)
+        if (updatedItem.batches && updatedItem.batches[0]) {
+          const b = updatedItem.batches[0];
+          await supabase.from('inventory_item_batches').upsert({
+            id: b.id,
+            item_id: itemId,
+            qty: b.qty,
+            unit_price: b.unitPrice,
+            expiry_date: b.expiryDate
+          });
+        }
+
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to update item metadata:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+      }
+    } else {
+      isDirty.current = false;
+    }
+  };
+
+  const updateBatchMetadata = async (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    const room = rooms.find(r => r.id === roomId);
+    const item = room?.items.find(i => i.id === itemId);
+    if (!room || !item) {
+      isDirty.current = false;
+      return;
+    }
+
+    const batches = item.batches ? item.batches.map(b => b.id === batchId ? { ...b, ...batchData } : b) : [];
+
+    // Recalculate item totals
+    let totalQty = 0;
+    let totalCost = 0;
+    let earliestExpiry: string | null = null;
+
+    batches.forEach(b => {
+      totalQty += b.qty;
+      totalCost += b.qty * b.unitPrice;
+      if (b.expiryDate) {
+        if (!earliestExpiry || b.expiryDate < earliestExpiry) {
+          earliestExpiry = b.expiryDate;
+        }
+      }
+    });
+
+    const avgPrice = totalQty > 0 ? totalCost / totalQty : 0;
+    const updatedItem = { ...item, batches, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
+
+    // Optimistic Update
+    setRooms(prev => prev.map(r => {
+      if (r.id !== roomId) return r;
+      return {
+        ...r,
+        items: r.items.map(i => i.id === itemId ? updatedItem : i)
+      };
+    }));
+
+    addActivity(roomId, room.name, 'edit', `Updated batch details for "${item.name}"`);
+
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      try {
+        // 1. Update batch
+        const { error: batchErr } = await supabase.from('inventory_item_batches').update({
+          qty: batchData.qty,
+          unit_price: batchData.unitPrice,
+          expiry_date: batchData.expiryDate,
+        }).eq('id', batchId);
+        if (batchErr) throw batchErr;
+
+        // 2. Update parent item summary
+        const { error: itemErr } = await supabase.from('inventory_items').update({
+          quantity: updatedItem.quantity,
+          price: updatedItem.price,
+          expiry_date: updatedItem.expiryDate,
+          user_id: currentInventoryOwnerId
+        }).eq('id', itemId);
+        if (itemErr) throw itemErr;
+
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to update batch metadata:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+      }
+    } else {
+      isDirty.current = false;
+    }
+  };
+
   const deleteItem = async (roomId: string, itemId: string) => {
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
@@ -1569,95 +1881,114 @@ const App: React.FC = () => {
       isDirty.current = false;
       return;
     }
-    let affectedItem: Item | null = null;
-    let targetRoomName = '';
-    let fromRoomName = '';
 
-    setRooms(prev => {
-      const fromRoom = prev.find(r => r.id === fromRoomId);
-      const toRoom = prev.find(r => r.id === toRoomId);
-      if (!fromRoom || !toRoom) return prev;
-      fromRoomName = fromRoom.name;
-      targetRoomName = toRoom.name;
+    const fromRoom = rooms.find(r => r.id === fromRoomId);
+    const toRoom = rooms.find(r => r.id === toRoomId);
+    if (!fromRoom || !toRoom) {
+      isDirty.current = false;
+      return;
+    }
 
-      const item = fromRoom.items.find(i => i.id === itemId);
-      if (!item) return prev;
+    const item = fromRoom.items.find(i => i.id === itemId);
+    if (!item) {
+      isDirty.current = false;
+      return;
+    }
 
-      const { kept, moved } = (typeof batchIndex === 'number')
-        ? {
-          kept: item.batches?.map((b, idx) => idx === batchIndex ? { ...b, qty: Math.max(0, b.qty - quantity) } : b).filter(b => b.qty > 0) || [],
-          moved: [{ ...item.batches![batchIndex], qty: quantity, id: crypto.randomUUID() }]
+    // 1. Calculate Movements
+    const { kept, moved } = (typeof batchIndex === 'number')
+      ? {
+        kept: item.batches?.map((b, idx) => idx === batchIndex ? { ...b, qty: Math.max(0, b.qty - quantity) } : b).filter(b => b.qty > 0) || [],
+        moved: [{ ...item.batches![batchIndex], qty: quantity, id: crypto.randomUUID() }]
+      }
+      : splitBatchesForTransfer(item.batches, quantity);
+
+    const keptSummary = summarizeBatches(kept);
+    const updatedFromItem = { ...item, batches: kept, quantity: keptSummary.totalQty, price: keptSummary.avgPrice, expiryDate: keptSummary.earliestExpiry };
+
+    const movedSummary = summarizeBatches(moved);
+    const movedItemTemplate = { ...item, id: crypto.randomUUID(), batches: moved, quantity: movedSummary.totalQty, price: movedSummary.avgPrice, expiryDate: movedSummary.earliestExpiry, roomId: toRoomId };
+
+    let finalMovedItem: Item = movedItemTemplate;
+    const existingInTarget = toRoom.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
+    if (existingInTarget) {
+      finalMovedItem = mergeBatchAdd(existingInTarget, movedItemTemplate.quantity, movedItemTemplate.price, movedItemTemplate.expiryDate);
+    }
+
+    // 2. Optimistic Update
+    setRooms(prev => prev.map(r => {
+      if (r.id === fromRoomId) {
+        return { ...r, items: updatedFromItem.quantity > 0 ? r.items.map(i => i.id === itemId ? updatedFromItem : i) : r.items.filter(i => i.id !== itemId) };
+      }
+      if (r.id === toRoomId) {
+        if (existingInTarget) {
+          return { ...r, items: r.items.map(i => i.id === existingInTarget.id ? finalMovedItem : i) };
         }
-        : splitBatchesForTransfer(item.batches, quantity);
+        return { ...r, items: [...r.items, finalMovedItem] };
+      }
+      return r;
+    }));
 
-      const keptSummary = summarizeBatches(kept);
-      const updatedFromItem = { ...item, batches: kept, quantity: keptSummary.totalQty, price: keptSummary.avgPrice, expiryDate: keptSummary.earliestExpiry };
+    addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Moved ${quantity} of "${item.name}" to ${toRoom.name}`);
+    addActivity(toRoomId, toRoom.name, 'transfer_in', `Received ${quantity} of "${item.name}" from ${fromRoom.name}`);
 
-      const movedSummary = summarizeBatches(moved);
-      const movedItem = { ...item, id: crypto.randomUUID(), batches: moved, quantity: movedSummary.totalQty, price: movedSummary.avgPrice, expiryDate: movedSummary.earliestExpiry, roomId: toRoomId };
-      affectedItem = movedItem;
-
-      addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Moved ${quantity} of "${item.name}" to ${toRoom.name}`);
-      addActivity(toRoomId, toRoom.name, 'transfer_in', `Received ${quantity} of "${item.name}" from ${fromRoom.name}`);
-
-      return prev.map(r => {
-        if (r.id === fromRoomId) {
-          return { ...r, items: updatedFromItem.quantity > 0 ? r.items.map(i => i.id === itemId ? updatedFromItem : i) : r.items.filter(i => i.id !== itemId) };
-        }
-        if (r.id === toRoomId) {
-          const existing = r.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
-          if (existing) {
-            const merged = mergeBatchAdd(existing, movedItem.quantity, movedItem.price, movedItem.expiryDate);
-            affectedItem = merged;
-            return { ...r, items: r.items.map(i => i.id === existing.id ? merged : i) };
-          }
-          return { ...r, items: [...r.items, movedItem] };
-        }
-        return r;
-      });
-    });
-
-    if (affectedItem && currentInventoryOwnerId) {
+    // 3. Direct Persistence
+    if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       try {
-        const item = affectedItem as Item;
-        const { error } = await supabase.from('inventory_items').upsert({
-          id: item.id,
+        // A. PERSIST SOURCE (Update or Delete)
+        if (updatedFromItem.quantity > 0) {
+          await supabase.from('inventory_items').update({
+            quantity: updatedFromItem.quantity,
+            price: updatedFromItem.price,
+            expiry_date: updatedFromItem.expiryDate,
+            user_id: currentInventoryOwnerId
+          }).eq('id', updatedFromItem.id);
+
+          // Update batches for source
+          const { data: dbBatches } = await supabase.from('inventory_item_batches').select('id').eq('item_id', updatedFromItem.id);
+          const currentBatchIds = new Set(updatedFromItem.batches!.map(b => b.id));
+          const idsToDelete = dbBatches ? dbBatches.filter(dbB => !currentBatchIds.has(dbB.id)).map(dbB => dbB.id) : [];
+          if (idsToDelete.length > 0) await supabase.from('inventory_item_batches').delete().in('id', idsToDelete);
+          for (const b of updatedFromItem.batches!) {
+            await supabase.from('inventory_item_batches').upsert({ id: b.id, item_id: updatedFromItem.id, qty: b.qty, unit_price: b.unitPrice, expiry_date: b.expiryDate });
+          }
+        } else {
+          // Full move - delete source
+          await supabase.from('inventory_item_batches').delete().eq('item_id', item.id);
+          await supabase.from('inventory_items').delete().eq('id', item.id);
+        }
+
+        // B. PERSIST DESTINATION
+        await supabase.from('inventory_items').upsert({
+          id: finalMovedItem.id,
           room_id: toRoomId,
-          name: item.name,
-          brand: item.brand,
-          category: item.category,
-          uom: item.uom,
-          quantity: item.quantity,
-          price: item.price,
-          expiry_date: item.expiryDate,
-          code: item.code,
-          vendor: item.vendor,
-          description: item.description,
+          name: finalMovedItem.name,
+          brand: finalMovedItem.brand,
+          category: finalMovedItem.category,
+          uom: finalMovedItem.uom,
+          quantity: finalMovedItem.quantity,
+          price: finalMovedItem.price,
+          expiry_date: finalMovedItem.expiryDate,
+          code: finalMovedItem.code,
+          vendor: finalMovedItem.vendor,
+          description: finalMovedItem.description,
           user_id: currentInventoryOwnerId
         });
-        if (error) throw error;
 
-        if (item.batches) {
-          for (const b of item.batches) {
-            await supabase.from('inventory_item_batches').upsert({
-              id: b.id,
-              item_id: item.id,
-              qty: b.qty,
-              unit_price: b.unitPrice,
-              expiry_date: b.expiryDate
-            });
+        if (finalMovedItem.batches) {
+          for (const b of finalMovedItem.batches) {
+            await supabase.from('inventory_item_batches').upsert({ id: b.id, item_id: finalMovedItem.id, qty: b.qty, unit_price: b.unitPrice, expiry_date: b.expiryDate });
           }
         }
+
         setSyncStatus('synced');
       } catch (err) {
-        console.error('Failed to move item:', err);
+        console.error('Failed to persist item move:', err);
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
       }
-    } else {
-      isDirty.current = false;
     }
   };
 
@@ -1668,119 +1999,7 @@ const App: React.FC = () => {
     return user.name.split(' ').map(n => n[0]).join('').toUpperCase();
   }, [user]);
 
-  useEffect(() => {
-    const sync = async () => {
-      const userId = currentInventoryOwnerId;
-      if (!userId) return;
-      if (!isHydrated.current) {
-        console.log('Sync skipped: Not yet hydrated');
-        return;
-      }
-      if (syncInFlight.current) {
-        console.log('Sync already in flight, marking pending');
-        pendingSyncNeeded.current = true;
-        return;
-      }
-      const targetOwnerId = currentInventoryOwnerId || userId;
-      if (!targetOwnerId) {
-        console.warn('Sync aborted: No target owner id');
-        return;
-      }
 
-      syncInFlight.current = true;
-
-      try {
-        console.group('Surgical Sync Execution');
-        const logMap = new Map<string, ActivityLog>();
-        logs.forEach(l => logMap.set(l.id, l));
-        const uniqueLogs = Array.from(logMap.values());
-
-        const historyMap = new Map<string, PurchaseHistory>();
-        history.forEach(h => historyMap.set(h.id, h));
-        const uniqueHistory = Array.from(historyMap.values());
-
-        const uniqueRooms = rooms.map((r) => {
-          // Note: room name deduping happens in the UI or during add, 
-          // but we'll keep it simple for the sync payload.
-          return r;
-        });
-
-        const metaPayload = {
-          user_id: targetOwnerId,
-          blueprint: blueprint || PRESET_BLUEPRINTS[0].url,
-          cat_position_x: catPosition.x,
-          cat_position_y: catPosition.y
-        };
-
-        const metaRes = await supabase.from('inventory_meta').upsert(metaPayload, { onConflict: 'user_id' });
-        if (metaRes.error) throw new Error(`inventory_meta upsert error: ${metaRes.error.message}`);
-
-        // Note: Inventory reconciliation (Rooms/Items/Batches) is now handled 
-        // by Direct Persistence in mutation handlers + Incremental Realtime.
-        // We only sync History and Logs globally for background consistency.
-        const allowedRoomIds = new Set(rooms.map(r => r.id));
-
-        const historyRows = uniqueHistory.map(h => ({
-          id: h.id,
-          user_id: targetOwnerId,
-          room_id: (h.roomId && allowedRoomIds.has(h.roomId)) ? h.roomId : null,
-          occurred_at: h.timestamp,
-          product_name: h.productName,
-          brand: h.brand,
-          code: h.code,
-          vendor: h.vendor,
-          qty: h.qty,
-          unit_price: h.unitPrice,
-          total_price: h.totalPrice,
-          location: h.location,
-          category: h.category,
-          uom: h.uom,
-          expiry_date: h.expiryDate || null
-        })).sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
-
-        if (historyRows.length) {
-          const res = await supabase.from('inventory_purchase_history').upsert(historyRows, { onConflict: 'id' });
-          if (res.error) console.error('purchase_history upsert error', res.error);
-        }
-
-        const logRows = uniqueLogs.map(l => ({
-          id: l.id,
-          user_id: targetOwnerId,
-          room_id: (l.roomId && allowedRoomIds.has(l.roomId)) ? l.roomId : null,
-          room_name: l.roomName,
-          action: l.action,
-          details: l.details,
-          created_at: l.timestamp,
-          actor_id: l.actorId || null,
-          before_value: l.beforeValue || null,
-          after_value: l.afterValue || null
-        }));
-        const logsToSync = logRows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 100);
-        if (logsToSync.length) {
-          const res = await supabase.from('inventory_activity_logs').upsert(logsToSync, { onConflict: 'id' });
-          if (res.error) console.error('activity_logs upsert error', res.error);
-        }
-
-        console.log('Surgical Sync Completed Successfully');
-        isDirty.current = false;
-      } catch (err: any) {
-        console.error('Surgical Sync Failed:', err.message || err);
-      } finally {
-        console.groupEnd();
-        syncInFlight.current = false;
-        if (pendingSyncNeeded.current) {
-          console.log('Executing pending sync retry');
-          sync();
-        }
-      }
-    };
-    if (isAuthenticated && isBootstrapped) {
-      const timer = setTimeout(() => {
-        sync();
-      }, 400); // Reduce debounce to 400ms for snappier performance
-      return () => clearTimeout(timer);
-    }
-  }, [rooms, history, logs, blueprint, catPosition, isAuthenticated, isBootstrapped, currentInventoryOwnerId, isAdmin]);
 
   const adminRooms = useMemo(() => managedInventories.flatMap((inv) => inv.rooms || []), [managedInventories]);
   const adminHistory = useMemo(() => managedInventories.flatMap((inv) => inv.history || []), [managedInventories]);
@@ -1867,18 +2086,33 @@ const App: React.FC = () => {
                   isDirty.current = true;
                   setRooms(newRooms);
                 } : undefined}
-                onSelectTemplate={canManageStructure ? (url) => {
+                onSelectTemplate={canManageStructure ? async (url) => {
                   console.log('onSelectTemplate called');
                   lastLocalMutation.current = Date.now();
                   isDirty.current = true;
                   setBlueprint(url);
+                  if (currentInventoryOwnerId) {
+                    await supabase.from('inventory_meta').upsert({
+                      user_id: currentInventoryOwnerId,
+                      blueprint: url
+                    }, { onConflict: 'user_id' });
+                  }
                 } : undefined}
                 catPosition={catPosition}
-                onCatPositionChange={canManageStructure ? (pos) => {
+                onCatPositionChange={canManageStructure ? async (pos) => {
                   lastLocalMutation.current = Date.now();
                   isDirty.current = true;
                   setCatPosition(pos);
+                  if (currentInventoryOwnerId) {
+                    await supabase.from('inventory_meta').upsert({
+                      user_id: currentInventoryOwnerId,
+                      cat_position_x: pos.x,
+                      cat_position_y: pos.y
+                    }, { onConflict: 'user_id' });
+                  }
                 } : undefined}
+                onReceive={receiveStock}
+                onOpenChat={() => setIsChatOpen(true)}
                 readOnly={!canManageStructure || isLoadingMain}
                 syncStatus={syncStatus}
               />
@@ -1892,6 +2126,8 @@ const App: React.FC = () => {
                 onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
                 onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
                 onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
+                onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
+                onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
                 readOnly={!canEditItems || isLoadingMain}
               />
             </>
@@ -1920,6 +2156,8 @@ const App: React.FC = () => {
           onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
           onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
+          onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
+          onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
           readOnly={!canEditItems}
         />
       )}
@@ -1928,6 +2166,37 @@ const App: React.FC = () => {
         isOpen={isCollaboratorModalOpen}
         onClose={() => setIsCollaboratorModalOpen(false)}
         currentUser={user}
+      />
+
+      {/* Global Molar AI Chat */}
+      {!isChatOpen && (
+        <button
+          onClick={() => setIsChatOpen(true)}
+          className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-[9999]"
+        >
+          <div className="relative w-full h-full rounded-full overflow-hidden p-2">
+            <img
+              src="/images/MolarAI.png"
+              alt="Molar AI"
+              className="w-full h-full object-contain scale-[1.6] translate-y-[0.35rem]"
+            />
+          </div>
+          {/* Tooltip */}
+          <div className="absolute right-full mr-4 bg-slate-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            Chat with Molar AI
+          </div>
+        </button>
+      )}
+
+      <MolarChat
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        chatHistory={chatHistory}
+        isChatLoading={isChatLoading}
+        chatInput={chatInput}
+        setChatInput={setChatInput}
+        onSendMessage={handleSendChat}
+        chatEndRef={chatEndRef}
       />
     </div>
   );

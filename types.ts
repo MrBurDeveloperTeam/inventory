@@ -64,12 +64,13 @@ export interface PurchaseHistory {
 }
 
 export interface UserProfile {
+  id: string;
   name: string;
   email: string;
   accountType: 'individual' | 'company' | 'admin';
   phone: string;
   position: string;
-  companyName?: string;
+  clinicName?: string;
   avatarUrl?: string;
   backgroundUrl?: string;
 }
@@ -111,3 +112,8 @@ export interface ExtractedItem {
   category?: string;
   expiryDate?: string;
 }
+
+export type ChatHistory = {
+  role: "user" | "model";
+  parts: { text: string }[];
+};
