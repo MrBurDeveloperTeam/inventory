@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Sparkles, Activity, Zap, ShieldCheck } from 'lucide-react';
+import { MessageCircle, X, Send, Sparkles, Activity, Zap, ShieldCheck, AlertCircle, BarChart3 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatHistory } from './types';
@@ -150,31 +150,40 @@ export const MolarChat = React.memo(({
                 <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-4 scroll-smooth scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent relative z-10">
                     {chatHistory.length === 0 && (
                         <div className="flex flex-col items-center justify-center h-full text-center pb-12 animate-in fade-in zoom-in-95 duration-700">
-                            <div className="w-20 h-20 rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-white flex items-center justify-center mb-6 shadow-xl shadow-slate-200/60 rotate-3">
-                                <Sparkles className="w-8 h-8 text-emerald-500" />
-                            </div>
                             <p className="text-slate-500 text-sm max-w-[260px] leading-relaxed mb-8 font-medium">
                                 Ready to analyze inventory streams and track supply metrics.
                             </p>
 
-                            <div className="grid grid-cols-1 gap-2.5 w-full max-w-[280px]">
-                                <button onClick={() => setChatInput("Check expiring stock")} className="group flex items-center gap-3 w-full p-3 rounded-2xl bg-white border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all shadow-sm hover:shadow-md text-left">
-                                    <div className="w-8 h-8 rounded-full bg-emerald-100/50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <div className="grid grid-cols-1 gap-2.5 w-full max-w-[320px]">
+                                <button onClick={() => setChatInput("Check expiring stock")} className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all shadow-sm hover:shadow-md text-left">
+                                    <div className="w-8 h-8 rounded-xl bg-emerald-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-emerald-50">
                                         <Zap className="w-4 h-4 text-emerald-600" />
                                     </div>
-                                    <span className="text-xs font-semibold text-slate-600 group-hover:text-emerald-700">Check expiring stock</span>
+                                    <span className="text-[12px] font-bold text-slate-700 group-hover:text-emerald-800 leading-tight">Check expiring stock</span>
                                 </button>
-                                <button onClick={() => setChatInput("Total inventory value")} className="group flex items-center gap-3 w-full p-3 rounded-2xl bg-white border border-slate-100 hover:border-teal-200 hover:bg-teal-50/30 transition-all shadow-sm hover:shadow-md text-left">
-                                    <div className="w-8 h-8 rounded-full bg-teal-100/50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <button onClick={() => setChatInput("Total inventory value")} className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white border border-slate-100 hover:border-teal-200 hover:bg-teal-50/30 transition-all shadow-sm hover:shadow-md text-left">
+                                    <div className="w-8 h-8 rounded-xl bg-teal-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-teal-50">
                                         <ShieldCheck className="w-4 h-4 text-teal-600" />
                                     </div>
-                                    <span className="text-xs font-semibold text-slate-600 group-hover:text-teal-700">Total inventory value</span>
+                                    <span className="text-[12px] font-bold text-slate-700 group-hover:text-teal-800 leading-tight">Total inventory value</span>
+                                </button>
+                                <button onClick={() => setChatInput("Low supply alerts")} className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white border border-slate-100 hover:border-rose-200 hover:bg-rose-50/30 transition-all shadow-sm hover:shadow-md text-left">
+                                    <div className="w-8 h-8 rounded-xl bg-rose-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-rose-50">
+                                        <AlertCircle className="w-4 h-4 text-rose-600" />
+                                    </div>
+                                    <span className="text-[12px] font-bold text-slate-700 group-hover:text-rose-800 leading-tight">Low supply alerts</span>
+                                </button>
+                                <button onClick={() => setChatInput("Usage analytics")} className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all shadow-sm hover:shadow-md text-left">
+                                    <div className="w-8 h-8 rounded-xl bg-indigo-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-indigo-50">
+                                        <BarChart3 className="w-4 h-4 text-indigo-600" />
+                                    </div>
+                                    <span className="text-[12px] font-bold text-slate-700 group-hover:text-indigo-800 leading-tight">Usage analytics</span>
                                 </button>
                             </div>
                         </div>
                     )}
 
-                    <div className="space-y-5 pt-2 pb-0">
+                    <div className="space-y-5 pb-0">
                         {chatHistory.map((msg, idx) => {
                             const isUser = msg.role === 'user';
                             return (

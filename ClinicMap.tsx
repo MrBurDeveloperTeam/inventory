@@ -48,6 +48,8 @@ const CAT_QUOTES = [
 
 // High-quality static meow sound (respect base path for GH Pages / subfolders)
 const MEOW_SOUND_URL = `${import.meta.env.BASE_URL || '/'}images/cat-meow.mp3`;
+const CAT_IMAGE_URL = `${import.meta.env.BASE_URL || '/'}images/cat.gif`;
+const CAT_WALK_IMAGE_URL = `${import.meta.env.BASE_URL || '/'}images/catwalk.gif`;
 
 // Walking configuration
 const CAT_SPEED = 0.08; // Seconds per % of distance
@@ -219,19 +221,9 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   return (
     <section className="w-full bg-white rounded-[2rem] shadow-xl overflow-hidden relative border border-slate-100 h-[650px] flex flex-col">
       <style>{`
-        @keyframes cat-walk {
-          0% { transform: translateY(0) rotate(0); }
-          25% { transform: translateY(-3px) rotate(-4deg); }
-          50% { transform: translateY(0) rotate(0); }
-          75% { transform: translateY(-3px) rotate(4deg); }
-          100% { transform: translateY(0) rotate(0); }
-        }
         @keyframes shadow-breathe {
           0%, 50%, 100% { transform: scale(1); opacity: 0.15; }
           25%, 75% { transform: scale(0.85); opacity: 0.1; }
-        }
-        .animate-cat-natural-walk {
-          animation: cat-walk 0.3s infinite ease-in-out;
         }
         .animate-cat-shadow {
           animation: shadow-breathe 0.3s infinite ease-in-out;
@@ -245,11 +237,11 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
         }
       `}</style>
 
-      <div className="p-5 bg-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="p-4 md:p-5 bg-slate-50 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between shrink-0 gap-4">
+        <div className="flex flex-wrap items-center gap-3 justify-between md:justify-start w-full md:w-auto">
           <div className="flex items-center gap-2">
-            <MapIcon className="w-5 h-5 text-emerald-600" />
-            <span className="text-xl font-bold text-slate-700 tracking-wide">Interactive Clinic Blueprint</span>
+            <MapIcon className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span className="text-lg md:text-xl font-bold text-slate-700 tracking-wide">Interactive Clinic</span>
           </div>
 
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all duration-300 ${syncStatus === 'syncing' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
@@ -260,38 +252,75 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
               syncStatus === 'error' ? 'bg-rose-500' :
                 'bg-emerald-500'
               }`} />
-            {syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'error' ? 'Sync Error' : 'Live & Synced'}
+            <span className="whitespace-nowrap">
+              {syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'error' ? 'Sync Error' : 'LIVE & SYNCED'}
+            </span>
           </div>
         </div>
 
         {!readOnly && (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <button onClick={() => onSetLocked?.(!isLocked)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all shadow-sm border ${isLocked ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-[#f0f4f8] text-[#475569] border-transparent hover:bg-slate-200'}`}>
-                {isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />} {isLocked ? 'Locked' : 'Unlocked'}
+          <div className="flex flex-nowrap items-center gap-2 md:gap-4 justify-start md:justify-end w-full md:w-auto select-none">
+            <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+              <button
+                onClick={() => onSetLocked?.(!isLocked)}
+                title={isLocked ? 'Locked' : 'Unlocked'}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isLocked ? 'bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/20' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+              >
+                {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5 text-emerald-500" />}
+                <span className="hidden md:inline">{isLocked ? 'Locked' : 'Unlocked'}</span>
               </button>
-              <div className="h-5 w-px bg-slate-200" />
-              <button disabled={isLocked} onClick={() => { onSetAddMode?.(!isAddMode); onSetDeleteMode?.(false); }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all shadow-sm border ${isAddMode ? 'bg-[#e7f9f2] text-[#059669] border-[#059669]/20' : 'bg-[#e7f9f2] text-[#059669] hover:bg-[#d1f2e6] border-transparent disabled:opacity-50'}`}>
-                <Plus className="w-3 h-3" /> Add Room
+
+              <div className="h-5 w-px bg-slate-200 shrink-0" />
+
+              <button
+                disabled={isLocked}
+                onClick={() => { onSetAddMode?.(!isAddMode); onSetDeleteMode?.(false); }}
+                title="Add Room"
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isAddMode ? 'bg-emerald-500 text-white border-transparent shadow-emerald-200/50' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-100/50 disabled:opacity-40 disabled:grayscale'}`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add</span>
               </button>
-              <button disabled={isLocked} onClick={() => { onSetDeleteMode?.(!isDeleteMode); onSetAddMode?.(false); }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all shadow-sm border ${isDeleteMode ? 'bg-[#fff1f2] text-[#e11d48] border-[#e11d48]/20' : 'bg-[#fff1f2] text-[#e11d48] hover:bg-[#ffe4e6] border-transparent disabled:opacity-50'}`}>
-                <Trash2 className="w-3 h-3" /> Delete Mode
+
+              <button
+                disabled={isLocked}
+                onClick={() => { onSetDeleteMode?.(!isDeleteMode); onSetAddMode?.(false); }}
+                title="Delete Mode"
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isDeleteMode ? 'bg-rose-500 text-white border-transparent shadow-rose-200/50' : 'bg-rose-50 text-rose-600 hover:bg-rose-100 border-rose-100/50 disabled:opacity-40 disabled:grayscale'}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
               </button>
             </div>
-            <div className="h-6 w-px bg-slate-200" />
-            <div className="flex items-center gap-3 relative" ref={templateMenuRef}>
-              <button onClick={() => setShowTemplateMenu(!showTemplateMenu)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm tracking-wide">
-                <Layout className="w-4 h-4 text-emerald-600" /> {activeTemplate ? activeTemplate.name : 'Select Template'} <ChevronDown className={`w-4 h-4 transition-transform ${showTemplateMenu ? 'rotate-180' : ''}`} />
+
+            <div className="h-6 w-px bg-slate-200 shrink-0" />
+
+            <div className="flex items-center relative shrink-0" ref={templateMenuRef}>
+              <button
+                onClick={() => setShowTemplateMenu(!showTemplateMenu)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[12px] font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm tracking-wide active:scale-95"
+              >
+                <Layout className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="max-w-[100px] truncate">{activeTemplate ? activeTemplate.name : 'Template'}</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showTemplateMenu ? 'rotate-180' : ''}`} />
               </button>
+
               {showTemplateMenu && (
-                <div className="absolute top-full right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                  <div className="p-3 space-y-1">
+                <div className="absolute top-full right-0 mt-3 w-64 sm:w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                  <div className="p-2 space-y-1">
                     {PRESET_BLUEPRINTS.map(t => (
-                      <button key={t.id} onClick={() => { onSelectTemplate?.(t.url); setShowTemplateMenu(false); }} className="w-full flex items-start gap-4 p-4 rounded-xl hover:bg-emerald-50 group transition-colors text-left">
-                        <div className="w-14 h-14 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200 shadow-sm">
+                      <button
+                        key={t.id}
+                        onClick={() => { onSelectTemplate?.(t.url); setShowTemplateMenu(false); }}
+                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-emerald-50 group transition-all text-left border border-transparent hover:border-emerald-100"
+                      >
+                        <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200 shadow-sm transition-transform group-hover:scale-105">
                           <img src={t.url} className="w-full h-full object-cover" alt={t.name} />
                         </div>
-                        <div><p className="text-xs font-black text-slate-800 group-hover:text-emerald-700">{t.name}</p><p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-1">{t.description}</p></div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-700 truncate">{t.name}</p>
+                          <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5 line-clamp-2">{t.description}</p>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -320,7 +349,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
             left: `${catPos.x}%`,
             top: `${catPos.y}%`,
             transition: `left ${walkDuration}s linear, top ${walkDuration}s linear, transform 0.2s ease-out`,
-            transform: `translate(-50%, -100%) scaleX(${facingLeft ? 1 : -1})`,
+            transform: `translate(-50%, -100%) scaleX(${facingLeft ? -1 : 1})`,
           }}
         >
           {isMeowing && (
@@ -332,7 +361,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
           {/* Tooltip - shows on hover */}
           <div
             className="absolute bottom-full left-1/2 mb-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-50"
-            style={{ transform: `translateX(-50%) scaleX(${facingLeft ? 1 : -1})` }}
+            style={{ transform: `translateX(-50%) scaleX(${facingLeft ? -1 : 1})` }}
           >
             <div className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold whitespace-nowrap shadow-lg">
               💬 Click to chat with AI
@@ -341,7 +370,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
           </div>
 
           {showBubble && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-white text-slate-800 px-4 py-2 rounded-2xl shadow-xl border border-slate-100 text-[10px] font-bold whitespace-nowrap animate-in fade-in slide-in-from-bottom-2 duration-300 z-40" style={{ transform: `translateX(-50%) scaleX(${facingLeft ? 1 : -1})` }}>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-white text-slate-800 px-4 py-2 rounded-2xl shadow-xl border border-slate-100 text-[10px] font-bold whitespace-nowrap animate-in fade-in slide-in-from-bottom-2 duration-300 z-40" style={{ transform: `translateX(-50%) scaleX(${facingLeft ? -1 : 1})` }}>
               <div className="relative">
                 {bubbleText}
                 <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white"></div>
@@ -349,8 +378,13 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
             </div>
           )}
 
-          <div className={`text-4xl select-none relative z-10 ${isWalking ? 'animate-cat-natural-walk' : ''}`}>
-            🐈
+          <div className="w-14 h-14 select-none relative z-10 transition-transform duration-200">
+            <img
+              src={isWalking ? CAT_WALK_IMAGE_URL : CAT_IMAGE_URL}
+              alt="Molar the Cat"
+              className="w-full h-full object-contain"
+              draggable={false}
+            />
           </div>
         </div>
 

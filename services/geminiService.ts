@@ -26,9 +26,10 @@ export const extractDataFromImage = async (base64Image: string, mimeType: string
       - CATEGORY: Categorize the item into one of these EXACT values: Consumables, Equipment, Instruments, Materials, Medication, PPE, Other. Default to 'Consumables' if unsure.
       - EXPIRES: Expiry date if visible (YYYY-MM-DD), otherwise empty.
       - UOM: Unit of measure. Use one of these EXACT values: pcs, box, unit, kit. Default to 'pcs' if unsure.
+      - PURCHASE_DATE: The date of the invoice or purchase (YYYY-MM-DD). If present at the top of the document, apply it to all items.
 
       If a field is not explicitly present, try to infer it from context or leave it as an empty string (or 0 for numbers).
-      For VENDOR, if it appears at the top of the document, apply it to all items.
+      For VENDOR and PURCHASE_DATE, if they appear at the top of the document, apply them to all items.
     `;
 
     const response = await ai.models.generateContent({
@@ -63,6 +64,7 @@ export const extractDataFromImage = async (base64Image: string, mimeType: string
               vendor: { type: Type.STRING },
               category: { type: Type.STRING },
               expiryDate: { type: Type.STRING },
+              purchaseDate: { type: Type.STRING },
             },
             required: ["product"],
           },
@@ -84,6 +86,7 @@ export const extractDataFromImage = async (base64Image: string, mimeType: string
       id: crypto.randomUUID(),
       category: item.category || 'Consumables',
       expiryDate: item.expiryDate || '',
+      purchaseDate: item.purchaseDate || '',
       uom: item.uom || 'ea'
     }));
 

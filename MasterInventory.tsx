@@ -20,7 +20,7 @@ import {
   Minus,
   Map as MapIcon
 } from 'lucide-react';
-import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
 import ClinicAnalytics from './ClinicAnalytics';
 
@@ -92,8 +92,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       (inventoryVendor === 'all' || item.vendor === inventoryVendor) &&
       (inventoryLocation === 'all' || String(item.roomId) === inventoryLocation)
     ).sort((a, b) => {
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : Date.now();
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : Date.now();
       return dateA - dateB;
     });
   }, [rooms, searchTerm, inventoryCategory, inventoryVendor, inventoryLocation]);
@@ -153,13 +153,20 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     setOpenBatchRows(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Group by category for the table
-  const itemsByCategory = useMemo(() => {
-    const groups: Record<string, any[]> = {};
+  // Group by category for the table - and preserve category encounter order
+  // Since allItems is sorted old -> new, the groups array will be sorted by the oldest item in each category
+  const groupedItems = useMemo(() => {
+    const groups: Array<{ category: string; items: any[] }> = [];
+    const categoryMap = new Map<string, any[]>();
+
     allItems.forEach(item => {
       const cat = (item.category || 'other').toUpperCase();
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(item);
+      if (!categoryMap.has(cat)) {
+        const newGroup: any[] = [];
+        categoryMap.set(cat, newGroup);
+        groups.push({ category: cat, items: newGroup });
+      }
+      categoryMap.get(cat)!.push(item);
     });
     return groups;
   }, [allItems]);
@@ -382,7 +389,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
           </button>
         </div>
       </div>
-      < div className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100 p-6 md:p-8 min-h-[500px]" >
+      <div className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100 p-6 md:p-8 min-h-[500px]">
 
         {/* VIEW: ALL INVENTORY */}
         {
@@ -425,7 +432,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 </div>
               </div>
 
-              <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm custom-scrollbar">
+              <div className="hidden md:block border border-slate-200 rounded-2xl overflow-x-auto shadow-sm custom-scrollbar">
                 <table className="w-full text-left border-collapse min-w-[1100px] text-xs">
                   <thead className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200 sticky top-0 z-10">
                     <tr>
@@ -445,16 +452,17 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   </thead>
 
                   {/* Match Purchase History look */}
+                  {/* Chronological groupings */}
                   <tbody className="bg-white divide-y divide-slate-50">
-                    {Object.entries(itemsByCategory).length > 0 ? (
-                      Object.entries(itemsByCategory).map(([cat, items]) => (
-                        <React.Fragment key={cat}>
+                    {groupedItems.length > 0 ? (
+                      groupedItems.map(({ category, items }) => (
+                        <React.Fragment key={category}>
                           <tr className="bg-slate-100/70 border-y border-slate-200">
                             <td
                               colSpan={11}
                               className="px-6 py-3 text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]"
                             >
-                              {cat}
+                              {category}
                             </td>
                           </tr>
 
@@ -655,6 +663,186 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   </tbody>
                 </table>
               </div>
+
+              {/* MOBILE LIST VIEW */}
+              <div className="md:hidden space-y-6 pb-20">
+                {groupedItems.length > 0 ? (
+                  groupedItems.map(({ category, items }) => (
+                    <div key={category} className="space-y-3">
+                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
+                        <div className="h-px bg-slate-100 flex-1" />
+                        {category}
+                        <div className="h-px bg-slate-100 flex-1" />
+                      </h3>
+
+                      {(items as any[]).map((item) => {
+                        const expiryDateObj = item.expiryDate ? new Date(item.expiryDate) : null;
+                        const now = new Date();
+                        const soonThreshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+                        const isExpired = expiryDateObj ? expiryDateObj < now : false;
+                        const isExpiringSoon = expiryDateObj ? !isExpired && expiryDateObj <= soonThreshold : false;
+                        const batches = item.batches && item.batches.length ? item.batches : [{ qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }];
+                        const batchKey = `${item.roomId}-${item.id}`;
+                        const isOpen = !!openBatchRows[batchKey];
+
+                        return (
+                          <div key={batchKey} className={`bg-white rounded-2xl border ${isOpen ? 'border-blue-200 ring-4 ring-blue-50' : 'border-slate-100 shadow-sm'} overflow-hidden transition-all duration-300`}>
+                            {/* Card Header */}
+                            <div className="p-4 border-b border-slate-50 flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[120px]">
+                                    {item.brand || 'No Brand'}
+                                  </span>
+                                  {item.code && (
+                                    <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono font-bold">
+                                      {item.code}
+                                    </span>
+                                  )}
+                                </div>
+                                <h4 className="font-bold text-slate-800 leading-tight">{item.name}</h4>
+                              </div>
+                            </div>
+
+                            {/* Main Info Area */}
+                            <div className="px-4 py-5 bg-gradient-to-br from-white to-slate-50/50 flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                {readOnly || batches.length > 1 || !onUpdateQty ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Quantity</span>
+                                    <span className="text-xl font-black text-slate-800">{item.quantity}</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm">
+                                    <button
+                                      onClick={() => item.quantity > 1 && onUpdateQty(item.roomId, item.id, -1)}
+                                      disabled={item.quantity <= 1}
+                                      className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all active:scale-90"
+                                    >
+                                      <Minus className="w-4 h-4" />
+                                    </button>
+                                    <span className="w-10 text-center font-black text-lg text-slate-800">
+                                      {item.quantity}
+                                    </span>
+                                    <button
+                                      onClick={() => onUpdateQty(item.roomId, item.id, 1)}
+                                      className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-emerald-50 hover:text-emerald-500 transition-all active:scale-90"
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                )}
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Unit</span>
+                                  <span className="text-sm font-bold text-slate-600 capitalize">{item.uom}</span>
+                                </div>
+                              </div>
+
+                              <div className="text-right">
+                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Value</div>
+                                <div className="text-xl font-black text-[#4d9678] tracking-tight">
+                                  ${(item.quantity * item.price).toFixed(2)}
+                                </div>
+                                <div className="text-[10px] font-bold text-slate-400 mt-1">
+                                  ${item.price.toFixed(2)} / ea
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Secondary Details Area */}
+                            <div className="p-4 bg-white border-t border-slate-50 space-y-4">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Location</span>
+                                  <div className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-black inline-flex items-center gap-1.5 border border-emerald-100">
+                                    <MapIcon className="w-3 h-3" />
+                                    {item.roomName}
+                                  </div>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Expiration</span>
+                                  <div className={`flex items-center justify-end gap-1.5 text-[11px] font-bold ${isExpired ? "text-rose-600" : isExpiringSoon ? "text-amber-600" : "text-slate-600"}`}>
+                                    <Calendar className="w-3.5 h-3.5" />
+                                    {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'No Date'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-3 pt-2">
+                                <div className="flex flex-col">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Vendor</span>
+                                  <span className="text-[11px] font-bold text-slate-600">{item.vendor || 'Unknown'}</span>
+                                </div>
+
+                                {batches.length > 1 && (
+                                  <button
+                                    onClick={() => toggleBatchRow(batchKey)}
+                                    className={`px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${isOpen ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                                  >
+                                    {isOpen ? `Hide ${batches.length} Batches` : `View ${batches.length} Batches`}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Mobile Batches Expansion */}
+                            {isOpen && (
+                              <div className="bg-blue-50/50 border-t border-blue-100 p-3 space-y-2">
+                                {batches.map((b: any, bIdx: number) => {
+                                  const bExpDate = b.expiryDate ? new Date(b.expiryDate) : null;
+                                  const bExp = bExpDate ? bExpDate < now : false;
+                                  const bSoon = bExpDate ? !bExp && bExpDate <= soonThreshold : false;
+                                  return (
+                                    <div key={bIdx} className="bg-white rounded-xl p-3 border border-blue-100 shadow-sm flex items-center justify-between">
+                                      <div className="flex items-center gap-4">
+                                        {!readOnly && onUpdateBatchQty ? (
+                                          <div className="flex items-center bg-slate-50 rounded-lg p-0.5 border border-slate-100">
+                                            <button
+                                              onClick={() => b.qty > 1 && onUpdateBatchQty(item.roomId, item.id, bIdx, -1)}
+                                              className="w-6 h-6 flex items-center justify-center text-slate-400"
+                                            >
+                                              <Minus className="w-2.5 h-2.5" />
+                                            </button>
+                                            <span className="w-6 text-center text-xs font-black text-slate-700">{b.qty}</span>
+                                            <button
+                                              onClick={() => onUpdateBatchQty(item.roomId, item.id, bIdx, 1)}
+                                              className="w-6 h-6 flex items-center justify-center text-slate-400"
+                                            >
+                                              <Plus className="w-2.5 h-2.5" />
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="text-center w-8">
+                                            <div className="text-[10px] font-black text-slate-800">{b.qty}</div>
+                                          </div>
+                                        )}
+                                        <div className="space-y-1">
+                                          <div className="text-[11px] font-black text-[#4d9678]">${(b.qty * b.unitPrice).toFixed(2)}</div>
+                                          <div className={`text-[9px] font-bold flex items-center gap-1 ${bExp ? 'text-rose-500' : bSoon ? 'text-amber-500' : 'text-slate-400'}`}>
+                                            <Calendar className="w-2.5 h-2.5" />
+                                            {b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : 'No Exp'}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-20 text-center flex flex-col items-center justify-center text-slate-300 gap-4">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
+                      <Package className="w-10 h-10" />
+                    </div>
+                    <div className="text-sm font-black uppercase tracking-[0.2em] opacity-50">No Items Found</div>
+                  </div>
+                )}
+              </div>
             </div>
           )
         }
@@ -676,12 +864,12 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Select Product *</label>
                     <select value={selectedProductKey} onChange={handleProductSelect} className="px-4 py-3 rounded-xl border border-slate-200 bg-white font-normal text-slate-800 text-sm focus:ring-2 focus:ring-[#3498db] outline-none shadow-sm" required>
                       <option value="">Choose existing product...</option>
+                      <option value="new" className="text-[#3498db] font-bold">⊕ Create New Product...</option>
                       {rooms.flatMap(r => r.items.map(i => (
                         <option key={`${r.id}|${i.id}`} value={`${r.id}|${i.id}`}>
                           {i.name} ({i.brand})
                         </option>
                       )))}
-                      <option value="new" className="text-[#3498db] font-bold">⊕ Create New Product...</option>
                     </select>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -804,11 +992,11 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     </div>
                   </div>
                 )}
-                <div className="flex gap-4">
-                  <button type="submit" className="bg-[#3498db] text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] hover:bg-[#2980b9] shadow-sm shadow-blue-200 transition-all">
+                <div className="flex flex-col md:flex-row gap-3 md:gap-4">
+                  <button type="submit" className="w-full md:w-auto bg-[#3498db] text-white px-10 py-4 rounded-2xl font-bold text-sm tracking-wider hover:bg-[#2980b9] shadow-sm shadow-blue-200 transition-all">
                     {receiveMode === ('edit' as any) ? 'Update Item' : 'Submit Entry'}
                   </button>
-                  <button type="button" onClick={resetReceiveForm} className="bg-slate-200 text-slate-600 px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-sm hover:bg-slate-300 transition-all">Reset Form</button>
+                  <button type="button" onClick={resetReceiveForm} className="w-full md:w-auto bg-slate-200 text-slate-600 px-10 py-4 rounded-2xl font-bold text-sm tracking-wider shadow-sm hover:bg-slate-300 transition-all">Reset Form</button>
                 </div>
               </form>
             </div>
@@ -1027,10 +1215,10 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             </div>
           )
         }
-      </div >
+      </div>
 
       {/* Activity Log (Footer) */}
-      < div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8" >
+      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
             <div className="bg-slate-100 p-2 rounded-xl"><FileText className="w-5 h-5 text-slate-500" /></div>
@@ -1078,47 +1266,49 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         </div>
       </div >
 
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 z-[10000] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div>
-              <p className="text-[18px] font-semibold text-slate-700">
-                {typeof deleteTarget.batchIndex === 'number'
-                  ? `Delete batch ${deleteTarget.batchIndex + 1} of "${deleteTarget.name}"?`
-                  : `Delete "${deleteTarget.name}" from inventory?`}
-              </p>
-              <p className="text-sm text-slate-500 mt-1">
-                {typeof deleteTarget.batchIndex === 'number'
-                  ? `Qty: ${deleteTarget.qty ?? 0} ${deleteTarget.expiryDate ? `| Exp: ${deleteTarget.expiryDate}` : ''}`
-                  : 'This action cannot be undone.'}
-              </p>
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (typeof deleteTarget.batchIndex === 'number') {
-                    const delta = -(deleteTarget.qty || 0);
-                    onUpdateBatchQty?.(deleteTarget.roomId, deleteTarget.itemId, deleteTarget.batchIndex, delta);
-                  } else {
-                    onDeleteItem?.(deleteTarget.roomId, deleteTarget.itemId);
-                  }
-                  setDeleteTarget(null);
-                }}
-                className="px-4 py-2 rounded-full bg-rose-600 text-white font-bold text-sm hover:bg-rose-700 transition-colors"
-              >
-                Delete
-              </button>
+      {
+        deleteTarget && (
+          <div className="fixed inset-0 bg-black/50 z-[10000] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
+              <div>
+                <p className="text-[18px] font-semibold text-slate-700">
+                  {typeof deleteTarget.batchIndex === 'number'
+                    ? `Delete batch ${deleteTarget.batchIndex + 1} of "${deleteTarget.name}"?`
+                    : `Delete "${deleteTarget.name}" from inventory?`}
+                </p>
+                <p className="text-sm text-slate-500 mt-1">
+                  {typeof deleteTarget.batchIndex === 'number'
+                    ? `Qty: ${deleteTarget.qty ?? 0} ${deleteTarget.expiryDate ? `| Exp: ${deleteTarget.expiryDate}` : ''}`
+                    : 'This action cannot be undone.'}
+                </p>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (typeof deleteTarget.batchIndex === 'number') {
+                      const delta = -(deleteTarget.qty || 0);
+                      onUpdateBatchQty?.(deleteTarget.roomId, deleteTarget.itemId, deleteTarget.batchIndex, delta);
+                    } else {
+                      onDeleteItem?.(deleteTarget.roomId, deleteTarget.itemId);
+                    }
+                    setDeleteTarget(null);
+                  }}
+                  className="px-4 py-2 rounded-full bg-rose-600 text-white font-bold text-sm hover:bg-rose-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div >
+        )
+      }
+    </div>
   );
 };
 

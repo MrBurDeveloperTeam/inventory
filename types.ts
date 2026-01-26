@@ -111,6 +111,7 @@ export interface ExtractedItem {
   vendor?: string;
   category?: string;
   expiryDate?: string;
+  purchaseDate?: string;
 }
 
 export type ChatHistory = {

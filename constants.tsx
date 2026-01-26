@@ -1,13 +1,13 @@
 
 import React from 'react';
-import { 
-  Package, 
-  Stethoscope, 
-  Scissors, 
-  Droplets, 
-  Pill, 
-  ShieldCheck, 
-  Box 
+import {
+  Package,
+  Stethoscope,
+  Scissors,
+  Droplets,
+  Pill,
+  ShieldCheck,
+  Box
 } from 'lucide-react';
 
 export const CATEGORIES = [
@@ -25,34 +25,34 @@ export const UOMS = ['pcs', 'box', 'unit', 'kit'];
 export const CATEGORY_ORDER = ['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other'];
 
 export const PRESET_BLUEPRINTS = [
-  { 
-    id: 'template-1', 
-    name: 'Clinical 1', 
+  {
+    id: 'template-1',
+    name: 'Blue Lab',
     url: '/images/template1.png',
     description: 'Advanced blue laboratory aesthetic'
   },
-  { 
-    id: 'template-2', 
-    name: 'Clinical 2', 
+  {
+    id: 'template-2',
+    name: 'City Clinic',
     url: '/images/template2.png',
-    description: 'Wide isometric city-clinic layout' 
+    description: 'Wide isometric city-clinic layout'
   },
-  { 
-    id: 'template-3', 
-    name: 'Clinical 3', 
+  {
+    id: 'template-3',
+    name: 'Classic Layout',
     url: '/images/template3.png',
-    description: 'Alternate clinic layout' 
+    description: 'Alternate clinic layout'
   },
-  { 
-    id: 'template-4', 
-    name: 'Clinical 4', 
+  {
+    id: 'template-4',
+    name: 'Treatment Hub',
     url: '/images/template4.png',
-    description: 'High-density treatment layout' 
+    description: 'High-density treatment layout'
   },
-  { 
-    id: 'template-5', 
-    name: 'Clinical 5', 
+  {
+    id: 'template-5',
+    name: 'Open Floor',
     url: '/images/template5.png',
-    description: 'Open concept clinic floor' 
+    description: 'Open concept clinic floor'
   },
 ];

@@ -183,11 +183,13 @@ const App: React.FC = () => {
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [catPosition, setCatPosition] = useState<CatPosition>({ x: 20, y: 20 });
   const isHydrated = useRef(false);
+  const syncInFlight = useRef(false);
   const [isLoadingMain, setIsLoadingMain] = useState(true);
   const [isReloading, setIsReloading] = useState(false);
   const lastLocalMutation = useRef(0);
   const isDirty = useRef(false);
   const lastLoadRequestId = useRef(0);
+  const metaSyncTimer = useRef<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
 
   // Global Chat State
@@ -199,7 +201,16 @@ const App: React.FC = () => {
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    chatAudioRef.current = new Audio(`${import.meta.env.BASE_URL || '/'}images/cat-meow.mp3`);
+    try {
+      const baseUrl = import.meta.env.BASE_URL || '/';
+      const audioPath = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}images/cat-meow.mp3`.replace(/\/+/g, '/');
+      chatAudioRef.current = new Audio(audioPath);
+      chatAudioRef.current.addEventListener('error', (e) => {
+        console.warn("Failed to load cat audio (this is often a browser cache issue):", e);
+      });
+    } catch (err) {
+      console.error("Audio initialization error:", err);
+    }
   }, []);
 
   const playMeowChat = () => {
@@ -981,12 +992,63 @@ const App: React.FC = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'inventory_purchase_history' },
-        () => debouncedReload()
+        (payload) => {
+          if (Date.now() - lastLocalMutation.current < 800) return;
+          console.log('Realtime History Change:', payload.eventType);
+
+          if (payload.eventType === 'INSERT') {
+            if (payload.new.user_id !== currentInventoryOwnerId) return;
+            const h = payload.new;
+            const newEntry: PurchaseHistory = {
+              id: h.id,
+              timestamp: h.occurred_at || h.created_at,
+              productName: h.product_name || '',
+              brand: h.brand || '',
+              code: h.code || '',
+              vendor: h.vendor || '',
+              qty: Number(h.qty) || 0,
+              unitPrice: Number(h.unit_price) || 0,
+              totalPrice: Number(h.total_price) || (Number(h.qty) || 0) * (Number(h.unit_price) || 0),
+              location: h.location || '',
+              category: h.category || 'other',
+              roomId: h.room_id || '',
+              uom: h.uom || 'pcs',
+              expiryDate: h.expiry_date || null
+            };
+            setHistory(prev => {
+              if (prev.find(x => x.id === newEntry.id)) return prev;
+              return [newEntry, ...prev].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setHistory(prev => prev.filter(h => h.id !== payload.old.id));
+          }
+        }
       )
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'inventory_activity_logs', filter: `user_id=eq.${currentInventoryOwnerId}` },
-        () => debouncedReload() // Logs are fine to reload periodically
+        { event: 'INSERT', schema: 'public', table: 'inventory_activity_logs' },
+        (payload) => {
+          if (Date.now() - lastLocalMutation.current < 800) return;
+          if (payload.new.user_id !== currentInventoryOwnerId) return;
+          console.log('Realtime Log Change: INSERT');
+          const l = payload.new;
+          const newLog: ActivityLog = {
+            id: l.id,
+            timestamp: l.created_at,
+            roomId: l.room_id || '',
+            roomName: l.room_name || '',
+            action: l.action,
+            details: l.details,
+            actorId: l.actor_id || undefined,
+            actorName: undefined, // Will be hydrated on next full load or by a separate lookup if needed
+            beforeValue: l.before_value || undefined,
+            afterValue: l.after_value || undefined
+          };
+          setLogs(prev => {
+            if (prev.find(x => x.id === newLog.id)) return prev;
+            return [newLog, ...prev].slice(0, 100);
+          });
+        }
       )
       .subscribe((status) => {
         console.log(`Realtime Subscription Status for ${currentInventoryOwnerId}:`, status);
@@ -1127,6 +1189,7 @@ const App: React.FC = () => {
     // 2. Direct Persistence
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
+      syncInFlight.current = true;
       const { error } = await supabase.from('inventory_rooms').insert({
         id: newRoomId,
         user_id: currentInventoryOwnerId,
@@ -1141,6 +1204,7 @@ const App: React.FC = () => {
         setSyncStatus('synced');
       }
       isDirty.current = false;
+      syncInFlight.current = false;
     }
   };
 
@@ -1159,6 +1223,7 @@ const App: React.FC = () => {
     // 2. Direct Persistence
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
+      syncInFlight.current = true;
       try {
         // Since we might not have server-side CASCADE, we perform a manual cascade delete logic.
         // Identify all items in this room
@@ -1196,6 +1261,7 @@ const App: React.FC = () => {
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
+        syncInFlight.current = false;
       }
     }
   };
@@ -1216,13 +1282,17 @@ const App: React.FC = () => {
     }
 
     // 2. Direct Persistence
-    setSyncStatus('syncing');
-    const { error } = await supabase.from('inventory_rooms').update({ name, user_id: currentInventoryOwnerId }).eq('id', id);
-    if (error) {
-      console.error('Failed to update room name in DB:', error);
-      setSyncStatus('error');
-    } else {
-      setSyncStatus('synced');
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      syncInFlight.current = true;
+      const { error } = await supabase.from('inventory_rooms').update({ name, user_id: currentInventoryOwnerId }).eq('id', id);
+      if (error) {
+        console.error('Failed to update room name in DB:', error);
+        setSyncStatus('error');
+      } else {
+        setSyncStatus('synced');
+      }
+      syncInFlight.current = false;
     }
   };
 
@@ -1253,22 +1323,21 @@ const App: React.FC = () => {
 
     // Direct Persistence
     if (currentInventoryOwnerId) {
-      try {
-        await supabase.from('inventory_activity_logs').insert({
-          id: newLogId,
-          user_id: currentInventoryOwnerId,
-          room_id: roomId,
-          room_name: roomName,
-          action,
-          details,
-          created_at: timestamp,
-          actor_id: supabaseUserId || null,
-          before_value: options?.beforeValue || null,
-          after_value: options?.afterValue || null
-        });
-      } catch (err) {
-        console.error('Failed to persist activity log:', err);
-      }
+      syncInFlight.current = true;
+      const { error } = await supabase.from('inventory_activity_logs').insert({
+        id: newLogId,
+        user_id: currentInventoryOwnerId,
+        room_id: roomId,
+        room_name: roomName,
+        action,
+        details,
+        created_at: timestamp,
+        actor_id: supabaseUserId || null,
+        before_value: options?.beforeValue || null,
+        after_value: options?.afterValue || null
+      });
+      if (error) console.error('Failed to persist activity log:', error);
+      syncInFlight.current = false;
     }
   };
 
@@ -1325,6 +1394,7 @@ const App: React.FC = () => {
         category: itemData.category || 'other',
         description: itemData.description || '',
         expiryDate: expiry || null,
+        createdAt: new Date().toISOString(),
         batches: [{
           id: generateId(),
           qty,
@@ -1376,6 +1446,7 @@ const App: React.FC = () => {
     // 3. Direct Persistence
     if (affectedItemToSync && currentInventoryOwnerId) {
       setSyncStatus('syncing');
+      syncInFlight.current = true;
       try {
         const itm = affectedItemToSync as Item;
         const { error: itemErr } = await supabase.from('inventory_items').upsert({
@@ -1433,6 +1504,7 @@ const App: React.FC = () => {
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
+        syncInFlight.current = false;
       }
     }
   };
@@ -1470,6 +1542,7 @@ const App: React.FC = () => {
 
     if (updatedItem && currentInventoryOwnerId) {
       setSyncStatus('syncing');
+      syncInFlight.current = true;
       try {
         const itm = updatedItem as Item;
         // 1. Update parent item
@@ -1515,6 +1588,7 @@ const App: React.FC = () => {
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
+        syncInFlight.current = false;
       }
     } else {
       isDirty.current = false;
@@ -1574,6 +1648,7 @@ const App: React.FC = () => {
 
     if (updatedItem && currentInventoryOwnerId) {
       setSyncStatus('syncing');
+      syncInFlight.current = true;
       try {
         const itm = updatedItem as Item;
         // 1. Update parent item
@@ -1610,6 +1685,7 @@ const App: React.FC = () => {
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
+        syncInFlight.current = false;
       }
     } else {
       isDirty.current = false;
@@ -1664,6 +1740,7 @@ const App: React.FC = () => {
 
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
+      syncInFlight.current = true;
       try {
         // 1. Update main item
         const { error } = await supabase.from('inventory_items').update({
@@ -1699,6 +1776,7 @@ const App: React.FC = () => {
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
+        syncInFlight.current = false;
       }
     } else {
       isDirty.current = false;
@@ -1748,6 +1826,7 @@ const App: React.FC = () => {
 
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
+      syncInFlight.current = true;
       try {
         // 1. Update batch
         const { error: batchErr } = await supabase.from('inventory_item_batches').update({
@@ -1772,6 +1851,7 @@ const App: React.FC = () => {
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
+        syncInFlight.current = false;
       }
     } else {
       isDirty.current = false;
@@ -1800,16 +1880,20 @@ const App: React.FC = () => {
       addActivity(roomId, roomName, 'delete', `Deleted "${itemName}"`, { beforeValue: beforeQty, afterValue: '0' });
     }
 
-    setSyncStatus('syncing');
-    try {
-      const { error } = await supabase.from('inventory_items').delete().eq('id', itemId);
-      if (error) throw error;
-      setSyncStatus('synced');
-    } catch (err) {
-      console.error('Failed to delete item:', err);
-      setSyncStatus('error');
-    } finally {
-      isDirty.current = false;
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      syncInFlight.current = true;
+      try {
+        const { error } = await supabase.from('inventory_items').delete().eq('id', itemId);
+        if (error) throw error;
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to delete item:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+        syncInFlight.current = false;
+      }
     }
   };
 
@@ -1935,6 +2019,7 @@ const App: React.FC = () => {
     // 3. Direct Persistence
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
+      syncInFlight.current = true;
       try {
         // A. PERSIST SOURCE (Update or Delete)
         if (updatedFromItem.quantity > 0) {
@@ -1988,6 +2073,7 @@ const App: React.FC = () => {
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
+        syncInFlight.current = false;
       }
     }
   };
@@ -2086,29 +2172,46 @@ const App: React.FC = () => {
                   isDirty.current = true;
                   setRooms(newRooms);
                 } : undefined}
-                onSelectTemplate={canManageStructure ? async (url) => {
+                onSelectTemplate={canManageStructure ? (url) => {
                   console.log('onSelectTemplate called');
                   lastLocalMutation.current = Date.now();
                   isDirty.current = true;
                   setBlueprint(url);
+
                   if (currentInventoryOwnerId) {
-                    await supabase.from('inventory_meta').upsert({
-                      user_id: currentInventoryOwnerId,
-                      blueprint: url
-                    }, { onConflict: 'user_id' });
+                    if (metaSyncTimer.current) window.clearTimeout(metaSyncTimer.current);
+                    metaSyncTimer.current = window.setTimeout(async () => {
+                      setSyncStatus('syncing');
+                      await supabase.from('inventory_meta').upsert({
+                        user_id: currentInventoryOwnerId,
+                        blueprint: url,
+                        // Include latest cat position from state or just rely on current local state
+                        cat_position_x: catPosition.x,
+                        cat_position_y: catPosition.y
+                      }, { onConflict: 'user_id' });
+                      setSyncStatus('synced');
+                    }, 1000);
                   }
                 } : undefined}
                 catPosition={catPosition}
-                onCatPositionChange={canManageStructure ? async (pos) => {
+                onCatPositionChange={canManageStructure ? (pos) => {
                   lastLocalMutation.current = Date.now();
                   isDirty.current = true;
                   setCatPosition(pos);
+
                   if (currentInventoryOwnerId) {
-                    await supabase.from('inventory_meta').upsert({
-                      user_id: currentInventoryOwnerId,
-                      cat_position_x: pos.x,
-                      cat_position_y: pos.y
-                    }, { onConflict: 'user_id' });
+                    if (metaSyncTimer.current) window.clearTimeout(metaSyncTimer.current);
+                    metaSyncTimer.current = window.setTimeout(async () => {
+                      setSyncStatus('syncing');
+                      console.log('Debounced Meta Sync: Saving cat position', pos);
+                      await supabase.from('inventory_meta').upsert({
+                        user_id: currentInventoryOwnerId,
+                        cat_position_x: pos.x,
+                        cat_position_y: pos.y,
+                        blueprint: blueprint || PRESET_BLUEPRINTS[0].url
+                      }, { onConflict: 'user_id' });
+                      setSyncStatus('synced');
+                    }, 1000);
                   }
                 } : undefined}
                 onReceive={receiveStock}

@@ -50,16 +50,31 @@ const CollaboratorModal: React.FC<CollaboratorModalProps> = ({ isOpen, onClose, 
         const userIds = collabData.map((c: any) => c.user_id);
         const { data: profilesData } = await supabase
             .from('profiles')
-            .select('user_id, name, email, avatar_url')
+            .select('user_id, name, email, avatar_url, account_type, phone, position, company_name')
             .in('user_id', userIds);
 
-        const profileMap = new Map<string, any>();
-        (profilesData || []).forEach((p: any) => profileMap.set(p.user_id, p));
+        const profileMap = new Map<string, UserProfile>();
+        (profilesData || []).forEach((p: any) => {
+            profileMap.set(p.user_id, {
+                id: p.user_id,
+                name: p.name || 'User',
+                email: p.email || '',
+                accountType: p.account_type || 'individual',
+                phone: p.phone || '',
+                position: p.position || '',
+                clinicName: p.company_name || undefined,
+                avatarUrl: p.avatar_url || undefined
+            });
+        });
 
         // Combine data
-        const combined = collabData.map((c: any) => ({
-            ...c,
-            profile: profileMap.get(c.user_id) || null
+        const combined: Collaborator[] = collabData.map((c: any) => ({
+            id: c.id,
+            owner_id: c.owner_id,
+            user_id: c.user_id,
+            role: c.role,
+            created_at: c.created_at,
+            profile: profileMap.get(c.user_id)
         }));
 
         setCollaborators(combined);
@@ -255,8 +270,8 @@ const CollaboratorModal: React.FC<CollaboratorModalProps> = ({ isOpen, onClose, 
                                 {collaborators.map((collab) => (
                                     <div key={collab.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
                                         <div className="flex items-center gap-3">
-                                            {collab.profile?.avatar_url ? (
-                                                <img src={collab.profile.avatar_url} alt={collab.profile.name || 'User'} className="w-10 h-10 rounded-full object-cover" />
+                                            {collab.profile?.avatarUrl ? (
+                                                <img src={collab.profile.avatarUrl} alt={collab.profile.name || 'User'} className="w-10 h-10 rounded-full object-cover" />
                                             ) : (
                                                 <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm">
                                                     {(collab.profile?.name || collab.profile?.email || '?').charAt(0).toUpperCase()}

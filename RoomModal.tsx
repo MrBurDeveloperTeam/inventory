@@ -13,7 +13,9 @@ import {
   Scan,
   Upload,
   Camera,
-  Loader2
+  Loader2,
+  AlertCircle,
+  Calendar
 } from 'lucide-react';
 import { Room, Item, ActivityLog, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
@@ -57,6 +59,44 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const [bulkTransferContext, setBulkTransferContext] = useState<{ item: Item; toRoomId: string } | null>(null);
   const [deleteContext, setDeleteContext] = useState<{ item: Item; batchIndex?: number } | null>(null);
   const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [localRoomName, setLocalRoomName] = useState(room.name);
+  const [errorModal, setErrorModal] = useState<{ title: string; message: string } | null>(null);
+
+  // Sync local name with prop if it changes externally
+  React.useEffect(() => {
+    setLocalRoomName(room.name);
+  }, [room.name]);
+
+  const handleRoomNameBlur = () => {
+    const trimmedNewName = localRoomName.trim();
+
+    // 1. Basic check: non-empty and changed
+    if (trimmedNewName && trimmedNewName !== room.name) {
+      // 2. Uniqueness check: check allRooms excluding current room
+      const isDuplicate = allRooms.some(r =>
+        r.id !== room.id &&
+        r.name.toLowerCase() === trimmedNewName.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        setErrorModal({
+          title: 'Existing Room Name',
+          message: `A room named "${trimmedNewName}" already exists. Please choose a unique name.`
+        });
+        setLocalRoomName(room.name); // Revert to original
+      } else {
+        onUpdateName(room.id, trimmedNewName);
+      }
+    } else {
+      setLocalRoomName(room.name); // Reset if empty or unchanged
+    }
+  };
+
+  const handleRoomNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    }
+  };
 
   // OCR State
   const [isOCRActive, setIsOCRActive] = useState(false);
@@ -64,7 +104,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const [ocrImage, setOcrImage] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrStatusText, setOcrStatusText] = useState('');
-  const [ocrResult, setOcrResult] = useState<Partial<Item>[] | null>(null);
+  const [ocrResult, setOcrResult] = useState<(Partial<Item> & { purchaseDate?: string })[] | null>(null);
 
   const filteredItems = useMemo(() => {
     return room.items.filter(i =>
@@ -243,8 +283,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const newAvgPrice = newQty > 0 ? ((currentQty * currentUnitPrice) + (incomingQty * incomingPrice)) / newQty : 0;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-2">
-      <div className="bg-white w-full max-w-[95vw] h-[90vh] rounded-[1.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center md:p-2">
+      <div className="bg-white w-full md:max-w-[95vw] h-full md:h-[90vh] rounded-none md:rounded-[1.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="bg-[#4d9678] px-6 py-4 flex items-center justify-between text-white shrink-0 border-b border-white/10">
           <div className="flex-1">
             {readOnly ? (
@@ -252,16 +292,22 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
             ) : (
               <input
                 type="text"
-                value={room.name}
-                onChange={(e) => onUpdateName(room.id, e.target.value)}
-                className="bg-transparent border-b border-white/30 text-xl font-bold focus:border-white focus:outline-none w-full max-w-2xl placeholder:text-white/40 transition-colors"
+                value={localRoomName}
+                onChange={(e) => setLocalRoomName(e.target.value)}
+                onBlur={handleRoomNameBlur}
+                onKeyDown={handleRoomNameKeyDown}
+                style={{
+                  caretColor: 'white',
+                  cursor: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'24\' viewBox=\'0 0 16 24\'%3E%3Cpath d=\'M8 5v14M6 5h4M6 19h4\' stroke=\'white\' stroke-width=\'1.5\'/%3E%3C/svg%3E") 8 12, text'
+                }}
+                className="bg-transparent border-b border-white/30 text-xl font-bold focus:border-white focus:outline-none w-full max-w-[250px] placeholder:text-white/40 transition-colors"
                 placeholder="Enter room name..."
               />
             )}
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-sm transition-all border border-white/20">
-              <FileDown className="w-4 h-4" /> Download PDF
+            <button className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-sm transition-all border border-white/20">
+              <FileDown className="w-4 h-4" /> <span className="hidden sm:inline">Download PDF</span>
             </button>
             <button onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition-all border border-white/10">
               <X className="w-6 h-6" />
@@ -337,7 +383,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                           setOcrStatusText('Processing results...');
 
                           // Map to Item format
-                          const parsed: Partial<Item>[] = extractedItems.map(i => ({
+                          const parsed = extractedItems.map(i => ({
                             name: i.product,
                             quantity: i.quantity || 1,
                             price: i.price || 0,
@@ -347,6 +393,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                             category: (i.category as Category) || 'consumables',
                             vendor: i.vendor || '',
                             expiryDate: i.expiryDate || undefined,
+                            purchaseDate: i.purchaseDate || new Date().toISOString().split('T')[0],
                             description: `Imported: ${i.product}`
                           }));
 
@@ -405,6 +452,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                             <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[60px]">UOM</th>
                             <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Vendor</th>
                             <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Category</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Purchased</th>
                             <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Expires</th>
                             <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-8"></th>
                           </tr>
@@ -516,6 +564,18 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                 <input
                                   type="date"
                                   className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded text-slate-600 text-[11px]"
+                                  value={item.purchaseDate || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, purchaseDate: e.target.value };
+                                    setOcrResult(newRes);
+                                  }}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="date"
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded text-slate-600 text-[11px]"
                                   value={item.expiryDate || ''}
                                   onChange={e => {
                                     const newRes = [...ocrResult];
@@ -543,7 +603,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                         </tbody>
                       </table>
                       <button
-                        onClick={() => setOcrResult([...ocrResult, { name: '', quantity: 1, price: 0 }])}
+                        onClick={() => setOcrResult([...ocrResult, { name: '', quantity: 1, price: 0, purchaseDate: new Date().toISOString().split('T')[0] }])}
                         className="w-full py-2 text-[10px] font-bold text-emerald-600 hover:bg-emerald-50 border-t border-slate-100 uppercase tracking-widest transition-colors"
                       >
                         + Add Item
@@ -572,7 +632,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                               },
                               item.quantity || 1,
                               item.price || 0,
-                              new Date().toISOString().split('T')[0], // Purchase Date
+                              item.purchaseDate || new Date().toISOString().split('T')[0], // Purchase Date
                               item.expiryDate || undefined
                             );
                           }
@@ -608,8 +668,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Select Product *</label>
                     <select value={selectedItemIdx} onChange={handleProductSelect} className="px-3 py-2 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 text-xs focus:ring-1 focus:ring-[#3498db] outline-none shadow-sm" required>
                       <option value="">Choose existing product...</option>
-                      {room.items.map((item, idx) => <option key={idx} value={idx}>{item.name} ({item.brand})</option>)}
                       <option value="new" className="text-[#3498db] font-bold">⊕ Create New Product...</option>
+                      {room.items.map((item, idx) => <option key={idx} value={idx}>{item.name} ({item.brand})</option>)}
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -723,7 +783,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-[1rem] overflow-x-auto shadow-sm custom-scrollbar">
+            {/* DESKTOP TABLE VIEW */}
+            <div className="hidden md:block bg-white border border-slate-200 rounded-[1rem] overflow-x-auto shadow-sm custom-scrollbar">
               <table className="w-full text-left border-collapse min-w-[1000px] text-xs">
                 <thead className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200 sticky top-0 z-10">
                   <tr>
@@ -1028,6 +1089,228 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                 </tbody>
               </table>
             </div>
+
+            {/* MOBILE LIST VIEW */}
+            <div className="md:hidden space-y-6 pb-20">
+              {Object.keys(itemsByCategory).length > 0 ? (
+                Object.entries(itemsByCategory).map(([category, items]) => (
+                  <div key={category} className="space-y-3">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
+                      <div className="h-px bg-slate-100 flex-1" />
+                      {category}
+                      <div className="h-px bg-slate-100 flex-1" />
+                    </h3>
+
+                    {items.map((item) => {
+                      const expiryDateObj = item.expiryDate ? new Date(item.expiryDate) : null;
+                      const now = new Date();
+                      const soonThreshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+                      const isExpired = expiryDateObj ? expiryDateObj < now : false;
+                      const isExpiringSoon = expiryDateObj ? !isExpired && expiryDateObj <= soonThreshold : false;
+                      const batches = item.batches && item.batches.length ? item.batches : [{ qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }];
+                      const isOpen = !!openBatchRows[item.id];
+
+                      return (
+                        <div key={item.id} className={`bg-white rounded-2xl border ${isOpen ? 'border-blue-200 ring-4 ring-blue-50' : 'border-slate-100 shadow-sm'} overflow-hidden transition-all duration-300`}>
+                          {/* Card Header */}
+                          <div className="p-4 border-b border-slate-50 flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[120px]">
+                                  {item.brand || 'No Brand'}
+                                </span>
+                                {item.code && (
+                                  <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono font-bold">
+                                    {item.code}
+                                  </span>
+                                )}
+                              </div>
+                              <h4 className="font-bold text-slate-800 leading-tight">{item.name}</h4>
+                            </div>
+
+                            {!readOnly && (
+                              <div className="flex items-center gap-1 shrink-0 bg-slate-50 p-1 rounded-xl">
+                                <button onClick={() => handleEditItem(item)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                                  <Edit3 className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => requestDeleteItem(item)} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Main Controls Overlay */}
+                          <div className="px-4 py-5 bg-gradient-to-br from-white to-slate-50/50 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              {readOnly || batches.length > 1 ? (
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Quantity</span>
+                                  <span className="text-xl font-black text-slate-800">{item.quantity}</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm">
+                                  <button
+                                    onClick={() => item.quantity > 1 && onUpdateQty(room.id, item.id, -1)}
+                                    disabled={item.quantity <= 1}
+                                    className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all active:scale-90"
+                                  >
+                                    <Minus className="w-4 h-4" />
+                                  </button>
+                                  <span className="w-10 text-center font-black text-lg text-slate-800">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    onClick={() => onUpdateQty(room.id, item.id, 1)}
+                                    className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-emerald-50 hover:text-emerald-500 transition-all active:scale-90"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Unit</span>
+                                <span className="text-sm font-bold text-slate-600 capitalize">{item.uom}</span>
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Value</div>
+                              <div className="text-xl font-black text-[#4d9678] tracking-tight">
+                                ${(item.quantity * item.price).toFixed(2)}
+                              </div>
+                              <div className="text-[10px] font-bold text-slate-400 mt-1">
+                                ${item.price.toFixed(2)} / ea
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Secondary Info & Relocate */}
+                          <div className="p-4 bg-white border-t border-slate-50 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Expiration</span>
+                                <div className={`flex items-center gap-1.5 text-[11px] font-bold ${isExpired ? "text-rose-600" : isExpiringSoon ? "text-amber-600" : "text-slate-600"}`}>
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'No Date'}
+                                  {isExpired && <span className="text-[8px] bg-rose-100 px-1 rounded tracking-tighter">(EXP)</span>}
+                                  {isExpiringSoon && <span className="text-[8px] bg-amber-100 px-1 rounded tracking-tighter">(SOON)</span>}
+                                </div>
+                              </div>
+                              <div className="space-y-1 text-right">
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Vendor</span>
+                                <span className="text-[11px] font-bold text-slate-600 truncate block">
+                                  {item.vendor || 'Unknown'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1">
+                                {readOnly ? (
+                                  <div className="bg-slate-50 px-3 py-2 rounded-xl text-[11px] font-bold text-slate-500 flex items-center gap-2">
+                                    <Package className="w-3.5 h-3.5" /> {room.name}
+                                  </div>
+                                ) : (
+                                  <div className="relative">
+                                    <select
+                                      className="w-full bg-slate-50 text-[11px] font-bold text-slate-700 border border-slate-100 rounded-xl px-3 py-2.5 appearance-none focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                                      value={room.id}
+                                      onChange={(e) => handleRelocateSelect(item, e.target.value)}
+                                    >
+                                      <option value={room.id}>Current: {room.name}</option>
+                                      {allRooms.filter(r => r.id !== room.id).map(r => (
+                                        <option key={r.id} value={r.id}>Move to: {r.name}</option>
+                                      ))}
+                                    </select>
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                      <ChevronDown className="w-4 h-4" />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {batches.length > 1 && (
+                                <button
+                                  onClick={() => toggleBatchRow(item.id)}
+                                  className={`px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${isOpen ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                                >
+                                  {isOpen ? `Hide ${batches.length} Batches` : `View ${batches.length} Batches`}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Mobile Batches */}
+                          {isOpen && (
+                            <div className="bg-blue-50/50 border-t border-blue-100 p-3 space-y-2">
+                              {batches.map((b, bIdx) => {
+                                const bExpDate = b.expiryDate ? new Date(b.expiryDate) : null;
+                                const bExp = bExpDate ? bExpDate < now : false;
+                                const bSoon = bExpDate ? !bExp && bExpDate <= soonThreshold : false;
+                                return (
+                                  <div key={bIdx} className="bg-white rounded-xl p-3 border border-blue-100 shadow-sm flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                      {readOnly ? (
+                                        <div className="text-center">
+                                          <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Qty</div>
+                                          <div className="text-sm font-black text-slate-800">{b.qty}</div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center bg-slate-50 rounded-lg p-0.5 border border-slate-100">
+                                          <button
+                                            onClick={() => b.qty > 1 && onUpdateBatchQty(room.id, item.id, bIdx, -1)}
+                                            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-rose-500"
+                                          >
+                                            <Minus className="w-2.5 h-2.5" />
+                                          </button>
+                                          <span className="w-6 text-center text-xs font-black text-slate-700">{b.qty}</span>
+                                          <button
+                                            onClick={() => onUpdateBatchQty(room.id, item.id, bIdx, 1)}
+                                            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-emerald-500"
+                                          >
+                                            <Plus className="w-2.5 h-2.5" />
+                                          </button>
+                                        </div>
+                                      )}
+                                      <div className="space-y-1">
+                                        <div className="text-[11px] font-black text-[#4d9678]">${(b.qty * b.unitPrice).toFixed(2)}</div>
+                                        <div className={`text-[9px] font-bold flex items-center gap-1 ${bExp ? 'text-rose-500' : bSoon ? 'text-amber-500' : 'text-slate-400'}`}>
+                                          <Calendar className="w-2.5 h-2.5" />
+                                          {b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : 'No Exp'}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {!readOnly && (
+                                      <div className="flex gap-1">
+                                        <button onClick={() => handleEditBatch(item, b)} className="p-1.5 text-slate-400 hover:text-indigo-600">
+                                          <Edit3 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button onClick={() => requestDeleteBatch(item, bIdx)} className="p-1.5 text-slate-400 hover:text-rose-600">
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              ) : (
+                <div className="py-20 text-center flex flex-col items-center justify-center text-slate-300 gap-4">
+                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
+                    <Package className="w-10 h-10" />
+                  </div>
+                  <div className="text-sm font-black uppercase tracking-[0.2em] opacity-50">Empty Room</div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="mt-2 border-t border-slate-100 pt-6 pb-2">
@@ -1167,6 +1450,29 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                   Delete
                 </button>
               </div>
+            </div>
+          </div>
+        )
+      }
+      {
+        errorModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10200] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 border border-slate-100 animate-in zoom-in-95 duration-200 text-center">
+              <div className="flex justify-center mb-4">
+                <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500">
+                  <AlertCircle className="w-10 h-10" />
+                </div>
+              </div>
+              <h3 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight">{errorModal.title}</h3>
+              <p className="text-slate-500 text-sm leading-relaxed mb-8">
+                {errorModal.message}
+              </p>
+              <button
+                onClick={() => setErrorModal(null)}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+              >
+                Got it
+              </button>
             </div>
           </div>
         )
