@@ -92,8 +92,11 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   const dragStartPosRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    setCatPos({ x: catPosition.x, y: catPosition.y });
-  }, [catPosition.x, catPosition.y]);
+    // Only sync from props if we are NOT currently walking to avoid glitching/lag
+    if (!isWalking) {
+      setCatPos({ x: catPosition.x, y: catPosition.y });
+    }
+  }, [catPosition.x, catPosition.y, isWalking]);
 
   useEffect(() => {
     audioRef.current = new Audio(MEOW_SOUND_URL);
