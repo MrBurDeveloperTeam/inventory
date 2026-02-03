@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Users, UserPlus, UserCheck, UserX, Building2, User as UserIcon, 
+import {
+  Users, UserPlus, UserCheck, UserX, Building2, User as UserIcon,
   MoreVertical, Edit2, Trash2, RotateCcw, Mail, Phone, Briefcase, Clock, X, FilterX, Lock
 } from 'lucide-react';
 import StatCard from './StatCard';
@@ -28,12 +28,12 @@ const JOB_POSITIONS = [
   'Administrator'
 ];
 
-const UserManagement: React.FC<UserManagementProps> = ({ 
-  users, 
+const UserManagement: React.FC<UserManagementProps> = ({
+  users,
   /* Provide default functions that accept the correct arguments to avoid TS errors */
-  setUsers = (_action: React.SetStateAction<User[]>) => {}, 
+  setUsers = (_action: React.SetStateAction<User[]>) => { },
   userInventoryStats = {},
-  onSelectUser = (_id: string | null) => {}
+  onSelectUser = (_id: string | null) => { }
 }) => {
   const [userFilter, setUserFilter] = useState<UserFilterType>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -102,7 +102,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
         const isSuspended = u.lastActive === 'Suspended';
         return {
           ...u,
-          lastActive: isSuspended ? new Date().toISOString().split('T')[0] : 'Suspended'
+          lastActive: isSuspended ? new Date().toLocaleDateString('en-GB') : 'Suspended'
         };
       }
       return u;
@@ -128,21 +128,21 @@ const UserManagement: React.FC<UserManagementProps> = ({
       type: newUser.type,
       jobPosition: newUser.jobPosition,
       clinicName: newUser.type === 'Company' ? newUser.name : 'Independent Clinic',
-      role: newUser.jobPosition === 'Administrator' ? 'Admin' : 
-            newUser.jobPosition === 'Dentist' ? 'Dentist' : 'Assistant',
-      lastActive: new Date().toISOString().split('T')[0]
+      role: newUser.jobPosition === 'Administrator' ? 'Admin' :
+        newUser.jobPosition === 'Dentist' ? 'Dentist' : 'Assistant',
+      lastActive: new Date().toLocaleDateString('en-GB')
     };
 
     setUsers(prev => [...prev, userToAdd]);
-    setNewUser({ 
-      name: '', 
+    setNewUser({
+      name: '',
       contactName: '',
-      email: '', 
-      phone: '', 
-      type: 'Individual', 
-      jobPosition: 'Dentist', 
-      password: '', 
-      confirmPassword: '' 
+      email: '',
+      phone: '',
+      type: 'Individual',
+      jobPosition: 'Dentist',
+      password: '',
+      confirmPassword: ''
     });
     setIsAddModalOpen(false);
   };
@@ -150,7 +150,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
   const handleUpdateUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    
+
     setUsers(prev => prev.map(u => u.id === editingUser.id ? editingUser : u));
     setIsEditModalOpen(false);
     setEditingUser(null);
@@ -159,13 +159,13 @@ const UserManagement: React.FC<UserManagementProps> = ({
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <button 
+        <button
           onClick={() => onSelectUser(null)}
           className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
         >
           View Global Data
         </button>
-        <button 
+        <button
           onClick={() => setIsAddModalOpen(true)}
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm shadow-blue-200"
         >
@@ -175,38 +175,38 @@ const UserManagement: React.FC<UserManagementProps> = ({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-        <StatCard 
-          title="All Users" 
-          value={users.length} 
-          icon={<Users size={20} />} 
+        <StatCard
+          title="All Users"
+          value={users.length}
+          icon={<Users size={20} />}
           onClick={() => setUserFilter('all')}
           isActive={userFilter === 'all'}
         />
-        <StatCard 
-          title="Active" 
-          value={activeCount} 
-          icon={<UserCheck size={20} />} 
+        <StatCard
+          title="Active"
+          value={activeCount}
+          icon={<UserCheck size={20} />}
           onClick={() => setUserFilter('active')}
           isActive={userFilter === 'active'}
         />
-        <StatCard 
-          title="Suspended" 
-          value={suspendedCount} 
-          icon={<UserX size={20} />} 
+        <StatCard
+          title="Suspended"
+          value={suspendedCount}
+          icon={<UserX size={20} />}
           onClick={() => setUserFilter('suspended')}
           isActive={userFilter === 'suspended'}
         />
-        <StatCard 
-          title="Individual" 
-          value={individualCount} 
-          icon={<UserIcon size={20} />} 
+        <StatCard
+          title="Individual"
+          value={individualCount}
+          icon={<UserIcon size={20} />}
           onClick={() => setUserFilter('individual')}
           isActive={userFilter === 'individual'}
         />
-        <StatCard 
-          title="Companies" 
-          value={companyCount} 
-          icon={<Building2 size={20} />} 
+        <StatCard
+          title="Companies"
+          value={companyCount}
+          icon={<Building2 size={20} />}
           onClick={() => setUserFilter('company')}
           isActive={userFilter === 'company'}
         />
@@ -217,7 +217,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
           Displaying {filteredUsers.length} {userFilter === 'all' ? 'total' : userFilter} users
         </h4>
         {userFilter !== 'all' && (
-          <button 
+          <button
             onClick={() => setUserFilter('all')}
             className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"
           >
@@ -235,42 +235,40 @@ const UserManagement: React.FC<UserManagementProps> = ({
           const avatarUrl = avatarMap[u.id] || u.avatarUrl || null;
 
           return (
-            <div 
-              key={u.id} 
+            <div
+              key={u.id}
               onClick={() => onSelectUser(u.id)}
               className={`bg-white rounded-3xl border transition-all p-6 relative flex flex-col cursor-pointer group ${isSuspended ? 'border-rose-100 shadow-sm opacity-80' : 'border-slate-100 shadow-sm hover:shadow-lg hover:border-blue-200'}`}
             >
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-4">
                   {avatarUrl ? (
-                    <img 
-                      src={avatarUrl} 
-                      alt={u.name} 
+                    <img
+                      src={avatarUrl}
+                      alt={u.name}
                       className="w-12 h-12 rounded-full object-cover border border-slate-100 shadow-sm"
                     />
                   ) : (
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-black text-lg transition-colors ${
-                      isSuspended ? 'bg-slate-300' :
-                      u.role === 'Admin' ? 'bg-indigo-500' :
-                      u.role === 'Dentist' ? 'bg-emerald-500' : 'bg-slate-400'
-                    }`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-black text-lg transition-colors ${isSuspended ? 'bg-slate-300' :
+                        u.role === 'Admin' ? 'bg-indigo-500' :
+                          u.role === 'Dentist' ? 'bg-emerald-500' : 'bg-slate-400'
+                      }`}>
                       {initials}
                     </div>
                   )}
                   <div>
                     <h4 className={`font-bold leading-tight ${isSuspended ? 'text-slate-500' : 'text-slate-800'}`}>{u.name}</h4>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide transition-colors ${
-                        isSuspended ? 'text-slate-400 bg-slate-50 border-slate-200' : 'text-slate-500 bg-slate-100 border-slate-200'
-                      }`}>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide transition-colors ${isSuspended ? 'text-slate-400 bg-slate-50 border-slate-200' : 'text-slate-500 bg-slate-100 border-slate-200'
+                        }`}>
                         {u.type}
                       </span>
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="relative" onClick={(e) => e.stopPropagation()}>
-                  <button 
+                  <button
                     onClick={() => setActiveMenuId(isMenuOpen ? null : u.id)}
                     className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
                   >
@@ -278,11 +276,11 @@ const UserManagement: React.FC<UserManagementProps> = ({
                   </button>
 
                   {isMenuOpen && (
-                    <div 
+                    <div
                       ref={menuRef}
                       className="absolute right-0 top-10 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-[60] overflow-hidden transform origin-top-right transition-all animate-in fade-in zoom-in duration-100"
                     >
-                      <button 
+                      <button
                         onClick={() => {
                           setEditingUser(u);
                           setIsEditModalOpen(true);
@@ -293,11 +291,10 @@ const UserManagement: React.FC<UserManagementProps> = ({
                         <Edit2 size={16} className="text-slate-400" />
                         Edit Profile
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleToggleSuspend(u.id)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium border-t border-slate-50 transition-colors ${
-                          isSuspended ? 'text-emerald-600 hover:bg-emerald-50' : 'text-rose-600 hover:bg-rose-50'
-                        }`}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium border-t border-slate-50 transition-colors ${isSuspended ? 'text-emerald-600 hover:bg-emerald-50' : 'text-rose-600 hover:bg-rose-50'
+                          }`}
                       >
                         {isSuspended ? <RotateCcw size={16} /> : <Trash2 size={16} />}
                         {isSuspended ? 'Reactivate User' : 'Suspend User'}
@@ -351,7 +348,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
 
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div 
+          <div
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             onClick={() => setIsAddModalOpen(false)}
           />
@@ -361,27 +358,27 @@ const UserManagement: React.FC<UserManagementProps> = ({
                 <h3 className="text-2xl font-bold text-slate-800">Add New User</h3>
                 <p className="text-slate-500 text-sm mt-1">Configure profile and access credentials.</p>
               </div>
-              <button 
+              <button
                 onClick={() => setIsAddModalOpen(false)}
                 className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"
               >
                 <X size={24} />
               </button>
             </div>
-            
+
             <form onSubmit={handleAddUser} className="p-8 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
               <div className="p-1 bg-slate-100 rounded-2xl flex">
-                <button 
+                <button
                   type="button"
-                  onClick={() => setNewUser({...newUser, type: 'Individual'})}
+                  onClick={() => setNewUser({ ...newUser, type: 'Individual' })}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black transition-all ${newUser.type === 'Individual' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   <UserIcon size={14} />
                   Individual
                 </button>
-                <button 
+                <button
                   type="button"
-                  onClick={() => setNewUser({...newUser, type: 'Company'})}
+                  onClick={() => setNewUser({ ...newUser, type: 'Company' })}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black transition-all ${newUser.type === 'Company' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   <Building2 size={14} />
@@ -395,14 +392,14 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <UserIcon size={12} className="text-slate-400" />
                     {newUser.type === 'Company' ? 'Company Name' : 'Full Name'}
                   </label>
-                  <input 
+                  <input
                     autoFocus
                     required
-                    type="text" 
+                    type="text"
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                     placeholder={newUser.type === 'Company' ? "e.g. Apex Dental Supplies" : "e.g. Dr. Jane Smith"}
                     value={newUser.name}
-                    onChange={e => setNewUser({...newUser, name: e.target.value})}
+                    onChange={e => setNewUser({ ...newUser, name: e.target.value })}
                   />
                 </div>
 
@@ -412,13 +409,13 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <UserIcon size={12} className="text-slate-400" />
                       Contact Name
                     </label>
-                    <input 
+                    <input
                       required
-                      type="text" 
+                      type="text"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                       placeholder="e.g. Michael Scott"
                       value={newUser.contactName}
-                      onChange={e => setNewUser({...newUser, contactName: e.target.value})}
+                      onChange={e => setNewUser({ ...newUser, contactName: e.target.value })}
                     />
                   </div>
                 )}
@@ -429,13 +426,13 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <Mail size={12} className="text-slate-400" />
                       Email Address
                     </label>
-                    <input 
+                    <input
                       required
-                      type="email" 
+                      type="email"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                       placeholder="jane@clinic.com"
                       value={newUser.email}
-                      onChange={e => setNewUser({...newUser, email: e.target.value})}
+                      onChange={e => setNewUser({ ...newUser, email: e.target.value })}
                     />
                   </div>
                   <div>
@@ -443,13 +440,13 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <Phone size={12} className="text-slate-400" />
                       Phone
                     </label>
-                    <input 
+                    <input
                       required
-                      type="tel" 
+                      type="tel"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                       placeholder="+1 234 567 890"
                       value={newUser.phone}
-                      onChange={e => setNewUser({...newUser, phone: e.target.value})}
+                      onChange={e => setNewUser({ ...newUser, phone: e.target.value })}
                     />
                   </div>
                 </div>
@@ -459,10 +456,10 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <Briefcase size={12} className="text-slate-400" />
                     Job Position
                   </label>
-                  <select 
+                  <select
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm appearance-none bg-slate-50/50"
                     value={newUser.jobPosition}
-                    onChange={e => setNewUser({...newUser, jobPosition: e.target.value})}
+                    onChange={e => setNewUser({ ...newUser, jobPosition: e.target.value })}
                   >
                     {JOB_POSITIONS.map(pos => (
                       <option key={pos} value={pos}>{pos}</option>
@@ -476,13 +473,13 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <Lock size={12} className="text-slate-400" />
                       Password
                     </label>
-                    <input 
+                    <input
                       required
-                      type="password" 
+                      type="password"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                       placeholder="••••••••"
                       value={newUser.password}
-                      onChange={e => setNewUser({...newUser, password: e.target.value})}
+                      onChange={e => setNewUser({ ...newUser, password: e.target.value })}
                     />
                   </div>
                   <div>
@@ -490,27 +487,27 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <Lock size={12} className="text-slate-400" />
                       Confirm
                     </label>
-                    <input 
+                    <input
                       required
-                      type="password" 
+                      type="password"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                       placeholder="••••••••"
                       value={newUser.confirmPassword}
-                      onChange={e => setNewUser({...newUser, confirmPassword: e.target.value})}
+                      onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })}
                     />
                   </div>
                 </div>
               </div>
 
               <div className="pt-6 flex gap-4">
-                <button 
+                <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
                   className="flex-1 px-4 py-3.5 rounded-2xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   type="submit"
                   className="flex-1 px-4 py-3.5 rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 active:scale-95"
                 >
@@ -524,7 +521,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
 
       {isEditModalOpen && editingUser && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div 
+          <div
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             onClick={() => { setIsEditModalOpen(false); setEditingUser(null); }}
           />
@@ -534,14 +531,14 @@ const UserManagement: React.FC<UserManagementProps> = ({
                 <h3 className="text-2xl font-bold text-slate-800">Edit Profile</h3>
                 <p className="text-slate-500 text-sm mt-1">Modify user information and clinic details.</p>
               </div>
-              <button 
+              <button
                 onClick={() => { setIsEditModalOpen(false); setEditingUser(null); }}
                 className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"
               >
                 <X size={24} />
               </button>
             </div>
-            
+
             <form onSubmit={handleUpdateUser} className="p-8 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
               <div className="space-y-4">
                 <div>
@@ -549,12 +546,12 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <UserIcon size={12} className="text-slate-400" />
                     {editingUser.type === 'Company' ? 'Company Name' : 'Full Name'}
                   </label>
-                  <input 
+                  <input
                     required
-                    type="text" 
+                    type="text"
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                     value={editingUser.name}
-                    onChange={e => setEditingUser({...editingUser, name: e.target.value})}
+                    onChange={e => setEditingUser({ ...editingUser, name: e.target.value })}
                   />
                 </div>
 
@@ -564,12 +561,12 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <UserIcon size={12} className="text-slate-400" />
                       Contact Name
                     </label>
-                    <input 
+                    <input
                       required
-                      type="text" 
+                      type="text"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                       value={editingUser.contactName || ''}
-                      onChange={e => setEditingUser({...editingUser, contactName: e.target.value})}
+                      onChange={e => setEditingUser({ ...editingUser, contactName: e.target.value })}
                     />
                   </div>
                 )}
@@ -580,12 +577,12 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <Mail size={12} className="text-slate-400" />
                       Email Address
                     </label>
-                    <input 
+                    <input
                       required
-                      type="email" 
+                      type="email"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                       value={editingUser.email}
-                      onChange={e => setEditingUser({...editingUser, email: e.target.value})}
+                      onChange={e => setEditingUser({ ...editingUser, email: e.target.value })}
                     />
                   </div>
                   <div>
@@ -593,12 +590,12 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <Phone size={12} className="text-slate-400" />
                       Phone
                     </label>
-                    <input 
+                    <input
                       required
-                      type="tel" 
+                      type="tel"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm bg-slate-50/50"
                       value={editingUser.phone}
-                      onChange={e => setEditingUser({...editingUser, phone: e.target.value})}
+                      onChange={e => setEditingUser({ ...editingUser, phone: e.target.value })}
                     />
                   </div>
                 </div>
@@ -608,16 +605,16 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <Briefcase size={12} className="text-slate-400" />
                     Job Position
                   </label>
-                  <select 
+                  <select
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm appearance-none bg-slate-50/50"
                     value={editingUser.jobPosition}
                     onChange={e => {
                       const pos = e.target.value;
                       setEditingUser({
-                        ...editingUser, 
+                        ...editingUser,
                         jobPosition: pos,
-                        role: pos === 'Administrator' ? 'Admin' : 
-                              pos === 'Dentist' ? 'Dentist' : 'Assistant'
+                        role: pos === 'Administrator' ? 'Admin' :
+                          pos === 'Dentist' ? 'Dentist' : 'Assistant'
                       });
                     }}
                   >
@@ -629,14 +626,14 @@ const UserManagement: React.FC<UserManagementProps> = ({
               </div>
 
               <div className="pt-6 flex gap-4">
-                <button 
+                <button
                   type="button"
                   onClick={() => { setIsEditModalOpen(false); setEditingUser(null); }}
                   className="flex-1 px-4 py-3.5 rounded-2xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   type="submit"
                   className="flex-1 px-4 py-3.5 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95"
                 >

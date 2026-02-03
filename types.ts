@@ -61,6 +61,7 @@ export interface PurchaseHistory {
   roomId: string; // Changed to string
   uom?: UOM;
   expiryDate?: string | null;
+  description?: string;
 }
 
 export interface UserProfile {

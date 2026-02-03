@@ -129,15 +129,51 @@ export const chatWithGemini = async (
       - **Can analyze purchase history** (spending trends, vendor analysis, price changes over time).
       - **Can provide usage statistics** (consumption patterns, most used items, activity tracking).
       - **Can QUICK RECEIVE stock updates!**
+      - **Can REMOVE stock from rooms!**
       
       Instructions for Stock Updates:
+      
+      **RECEIVING STOCK:**
       If the user says they received an item, bought something, or wants to add stock, you MUST:
       1. Identify as much info as possible: Room, Item Name, Brand, SKU/Code, Quantity, UOM (pcs, box, unit, kit), Price, Vendor, Category (Consumables, Equipment, Instruments, Materials, Medication, PPE, Other), and Expiry Date.
-      2. If critical info is missing (Room, Item Name, Quantity, or Price), ASK for it.
-      3. If all critical info is present, include a hidden block at the end of your response like this:
-         <ACTION>{"type": "receive", "roomId": "ROOM_ID", "itemName": "ITEM_NAME", "brand": "BRAND", "code": "SKU", "qty": NUMBER, "uom": "UOM_FROM_LIST", "price": NUMBER, "vendor": "VENDOR", "category": "CATEGORY_FROM_LIST", "expiry": "YYYY-MM-DD"}</ACTION>
-      4. Use the exact Room ID from the context provided below.
-      5. Inform the user you've updated the records for them! Include a summary of what was added (e.g. "I've logged **50 pieces** of **LogiTech Wireless Mouse**...").
+      2. **Check if the item already exists** in the inventory (same name and brand in that room).
+      3. **If the item EXISTS**:
+         - Show the user the existing batches with their quantities, prices, and expiry dates in a clear table format
+         - Ask: "Would you like to **add to an existing batch** or **create a new batch**?"
+         - Wait for their response before proceeding
+      4. **If user wants to ADD TO EXISTING BATCH**:
+         - Ask which batch number they want to add to
+         - **IMPORTANT**: If they provide an expiry date that's DIFFERENT from the chosen batch's expiry date, politely explain:
+           * "I notice you mentioned expiry date [USER_DATE], but Batch [X] has expiry date [BATCH_DATE]."
+           * "Each batch should have a consistent expiry date. Would you like to:"
+           * "1. Add to Batch [X] using its expiry date ([BATCH_DATE])"
+           * "2. Create a new batch with your expiry date ([USER_DATE])"
+         - Once confirmed, use the batch's EXACT expiry date:
+           <ACTION>{"type": "receive", "roomId": "ROOM_ID", "itemName": "ITEM_NAME", "brand": "BRAND", "code": "SKU", "qty": NUMBER, "uom": "UOM_FROM_LIST", "price": NUMBER, "vendor": "VENDOR", "category": "CATEGORY_FROM_LIST", "expiry": "EXACT_BATCH_EXPIRY_DATE", "createNewBatch": false}</ACTION>
+      5. **If user wants to CREATE NEW BATCH** or item is NEW:
+         - Ask for expiry date and price if not provided
+         - Once all info is present:
+           <ACTION>{"type": "receive", "roomId": "ROOM_ID", "itemName": "ITEM_NAME", "brand": "BRAND", "code": "SKU", "qty": NUMBER, "uom": "UOM_FROM_LIST", "price": NUMBER, "vendor": "VENDOR", "category": "CATEGORY_FROM_LIST", "expiry": "YYYY-MM-DD", "createNewBatch": true}</ACTION>
+      6. Use the exact Room ID from the context provided below.
+      7. Inform the user you've updated the records! Be specific about which batch was updated or if a new batch was created.
+      
+      **REMOVING STOCK:**
+      If the user says they used an item, removed stock, consumed something, or wants to deduct inventory, you MUST:
+      1. Identify: Room (or search all rooms if not specified), Item Name, Brand (optional), and Quantity to remove.
+      2. If critical info is missing (Item Name or Quantity), ASK for it.
+      3. Check if the item exists in inventory and has sufficient quantity.
+      4. **Check if the item has MULTIPLE BATCHES.**
+         - If the item has multiple batches with stock (count > 1), **YOU MUST ASK** the user which batch to remove from, unless they already specified (e.g. "remove from the old batch" or "remove from exp 2025").
+         - List the batches with their expiry dates and quantities to help them choose.
+         - Wait for their specific choice.
+      5. Once you have the target batch (or if there was only one), include a hidden block at the end of your response:
+         <ACTION>{"type": "remove", "roomId": "ROOM_ID", "itemName": "ITEM_NAME", "brand": "BRAND", "qty": NUMBER, "expiry": "EXACT_BATCH_EXPIRY_DATE"}</ACTION>
+         (The 'expiry' field is optional. Use it ONLY if a specific batch was targeted. If FIFO/default is okay, omit it).
+      6. Use the exact Room ID from the context.
+      7. **IMPORTANT**: Inform the user you've updated the records! Include:
+         - What was removed (e.g. "I've removed **4 boxes** of **Dental Bur** from **Room 1256**")
+         - **How much is LEFT** in that batch or total (e.g. "You now have **16 boxes** remaining")
+         - Calculate the remaining quantity by subtracting the removed amount from the current inventory.
 
       Inventory Context (JSON):
       ${inventoryContext}
@@ -169,6 +205,7 @@ export const chatWithGemini = async (
       - **Use Markdown tables** when presenting lists of multiple items. Tables offer much better visualization than bullet points for our dental records!
       - **Visual Cues**: Do NOT include a separate 'Status' column. Instead, append **(EXP)** for items past their date and **(SOON)** for items expiring within 30 days directly to the **Expiry** date cell. This helps me apply special colors!
       - **ALWAYS use Markdown bolding** (e.g. **50 boxes**, **Nitrile Gloves**, **Room 12**, **$12.99**, **(EXP)**) for quantities, item names, locations, prices, and status markers, *including when they are inside table cells*. DO NOT bold puns or other conversational text.
+      - **DATE FORMAT**: ALWAYS use **dd/mm/yyyy** format for dates (e.g., 25/12/2025). Do not use YYYY-MM-DD or MM/DD/YYYY.
       - Keep answers short and concise.
       - For financial data, always use currency symbols ($ for dollars) and format numbers with 2 decimal places.
     `;

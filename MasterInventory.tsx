@@ -18,7 +18,11 @@ import {
   Edit3,
   Calendar,
   Minus,
-  Map as MapIcon
+  Map as MapIcon,
+  Activity,
+  ArrowDownLeft,
+  ArrowRight,
+  Clock
 } from 'lucide-react';
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
@@ -87,7 +91,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       (item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.roomName.toLowerCase().includes(searchTerm.toLowerCase())) &&
+        item.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)) &&
       (inventoryCategory === 'all' || item.category === inventoryCategory) &&
       (inventoryVendor === 'all' || item.vendor === inventoryVendor) &&
       (inventoryLocation === 'all' || String(item.roomId) === inventoryLocation)
@@ -115,7 +120,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       const matchDateStart = !startBoundary || recordDate >= startBoundary;
       const matchDateEnd = !endBoundary || recordDate <= endBoundary;
       const matchSearch = h.productName.toLowerCase().includes(historySearch.toLowerCase()) ||
-        h.brand.toLowerCase().includes(historySearch.toLowerCase());
+        h.brand.toLowerCase().includes(historySearch.toLowerCase()) ||
+        (h.description?.toLowerCase().includes(historySearch.toLowerCase()) ?? false);
       return matchCat && matchVendor && matchDateStart && matchDateEnd && matchSearch;
     });
   }, [history, historyCategory, historyVendor, historySearch, historyStartDate, historyEndDate]);
@@ -314,7 +320,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return d.toLocaleDateString('en-GB');
   };
 
   const getDaysDiff = (dateStr: string) => {
@@ -432,21 +438,21 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 </div>
               </div>
 
-              <div className="hidden md:block border border-slate-200 rounded-2xl overflow-x-auto shadow-sm custom-scrollbar">
-                <table className="w-full text-left border-collapse min-w-[1100px] text-xs">
+              <div className="hidden md:block border border-slate-200 rounded-2xl overflow-hidden shadow-sm custom-scrollbar">
+                <table className="w-full text-left border-collapse text-xs">
                   <thead className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200 sticky top-0 z-10">
                     <tr>
-                      <th className="px-6 py-5 w-[100px]">Brand</th>
-                      <th className="px-6 py-5 w-[180px]">Product</th>
-                      <th className="px-6 py-5 w-[90px]">Code</th>
-                      <th className="px-6 py-5 w-[60px] text-center">Qty</th>
-                      <th className="px-6 py-5 w-[60px]">UOM</th>
-                      <th className="px-6 py-5 w-[80px]">Price</th>
-                      <th className="px-6 py-5 w-[90px]">Total</th>
-                      <th className="px-6 py-5 w-[100px]">Vendor</th>
-                      <th className="px-6 py-5 w-[100px]">Category</th>
-                      <th className="px-6 py-5 w-[100px]">Expires</th>
-                      <th className="px-6 py-5 w-[110px]">Location</th>
+                      <th className="px-3 py-5 w-[80px]">Brand</th>
+                      <th className="px-3 py-5 w-[240px]">Product</th>
+                      <th className="px-3 py-5 w-[70px]">Code</th>
+                      <th className="px-3 py-5 w-[50px] text-center">Qty</th>
+                      <th className="px-3 py-5 w-[50px]">UOM</th>
+                      <th className="px-3 py-5 w-[70px]">Price</th>
+                      <th className="px-3 py-5 w-[80px]">Total</th>
+                      <th className="px-3 py-5 w-[80px]">Vendor</th>
+                      <th className="px-3 py-5 w-[80px]">Category</th>
+                      <th className="px-3 py-5 w-[80px]">Expires</th>
+                      <th className="px-3 py-5 w-[80px]">Location</th>
 
                     </tr>
                   </thead>
@@ -482,19 +488,24 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                 <tr
                                   className={`${rowHighlight} transition-colors`}
                                 >
-                                  <td className="px-6 py-4 text-slate-500 whitespace-nowrap text-xs">
+                                  <td className="px-3 py-4 text-slate-500 whitespace-nowrap text-xs">
                                     #{item.brand || '-'}
                                   </td>
 
-                                  <td className="px-6 py-4 font-bold text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis">
-                                    {item.name}
+                                  <td className="px-3 py-4 text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis">
+                                    <div className="font-bold truncate max-w-[200px]" title={item.name}>{item.name}</div>
+                                    {item.description && (
+                                      <div className="text-[10px] text-slate-500 italic mt-0.5 truncate max-w-[200px]" title={item.description}>
+                                        {item.description}
+                                      </div>
+                                    )}
                                   </td>
 
-                                  <td className="px-6 py-4 text-slate-500 text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">
+                                  <td className="px-3 py-4 text-slate-500 text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">
                                     {item.code || '-'}
                                   </td>
 
-                                  <td className="px-6 py-4">
+                                  <td className="px-3 py-4">
                                     <div className="flex items-center justify-center gap-2">
                                       {(!readOnly && batches.length === 1 && onUpdateQty) ? (
                                         <>
@@ -525,30 +536,30 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                     </div>
                                   </td>
 
-                                  <td className="px-6 py-4 text-slate-600 font-medium text-xs capitalize whitespace-nowrap">
+                                  <td className="px-3 py-4 text-slate-600 font-medium text-xs capitalize whitespace-nowrap">
                                     {item.uom}
                                   </td>
 
-                                  <td className="px-6 py-4 text-slate-500 font-semibold whitespace-nowrap">
+                                  <td className="px-3 py-4 text-slate-500 font-semibold whitespace-nowrap">
                                     ${item.price.toFixed(2)}
                                   </td>
 
-                                  <td className="px-6 py-4 font-black text-[#4d9678] tracking-tight whitespace-nowrap">
+                                  <td className="px-3 py-4 font-black text-[#4d9678] tracking-tight whitespace-nowrap">
                                     ${(item.quantity * item.price).toFixed(2)}
                                   </td>
 
-                                  <td className="px-6 py-4 text-slate-600 font-medium text-xs whitespace-nowrap overflow-hidden text-ellipsis">
+                                  <td className="px-3 py-4 text-slate-600 font-medium text-xs whitespace-nowrap overflow-hidden text-ellipsis">
                                     {item.vendor || '-'}
                                   </td>
 
-                                  <td className="px-6 py-4">
+                                  <td className="px-3 py-4">
                                     <span className="text-[10px] font-medium text-slate-500 capitalize tracking-wide">
                                       {item.category}
                                     </span>
                                   </td>
 
                                   <td
-                                    className={`px-6 py-4 text-xs whitespace-nowrap ${isExpired
+                                    className={`px-3 py-4 text-xs whitespace-nowrap ${isExpired
                                       ? 'text-rose-600 font-bold'
                                       : isExpiringSoon
                                         ? 'text-amber-600 font-bold'
@@ -557,7 +568,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   >
                                     {item.expiryDate ? (
                                       <>
-                                        {new Date(item.expiryDate).toLocaleDateString()}
+                                        {new Date(item.expiryDate).toLocaleDateString('en-GB')}
                                         {isExpired && (
                                           <span className="ml-1 text-[9px] uppercase tracking-tight font-black">
                                             (EXP)
@@ -583,7 +594,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                     )}
                                   </td>
 
-                                  <td className="px-6 py-4">
+                                  <td className="px-3 py-4">
                                     <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
                                       {item.roomName}
                                     </span>
@@ -635,7 +646,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                         <td className="px-6 py-2 text-[11px] text-slate-400"></td>
                                         <td className={`px-6 py-2 text-[11px] whitespace-nowrap ${bExpired ? 'text-rose-600 font-bold' : bSoon ? 'text-amber-600 font-bold' : 'text-slate-500'
                                           }`}>
-                                          {bExpiry ? bExpiry.toLocaleDateString() : '(No expiry)'}
+                                          {bExpiry ? bExpiry.toLocaleDateString('en-GB') : '(No expiry)'}
                                           {bExpired && <span className="ml-1 text-[9px] uppercase font-black">(EXP)</span>}
                                           {bSoon && !bExpired && <span className="ml-1 text-[9px] uppercase font-black">(SOON)</span>}
                                         </td>
@@ -700,7 +711,12 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                     </span>
                                   )}
                                 </div>
-                                <h4 className="font-bold text-slate-800 leading-tight">{item.name}</h4>
+                                <h4 className="font-bold text-slate-800 leading-tight truncate" title={item.name}>{item.name}</h4>
+                                {item.description && (
+                                  <p className="text-[11px] text-slate-500 italic mt-1 leading-relaxed">
+                                    {item.description}
+                                  </p>
+                                )}
                               </div>
                             </div>
 
@@ -763,7 +779,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Expiration</span>
                                   <div className={`flex items-center justify-end gap-1.5 text-[11px] font-bold ${isExpired ? "text-rose-600" : isExpiringSoon ? "text-amber-600" : "text-slate-600"}`}>
                                     <Calendar className="w-3.5 h-3.5" />
-                                    {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'No Date'}
+                                    {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-GB') : 'No Date'}
                                   </div>
                                 </div>
                               </div>
@@ -1046,8 +1062,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <input type="text" placeholder="Search records..." className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-slate-600 outline-none" value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
                 </div>
               </div>
-              <div className="overflow-x-auto bg-white rounded-3xl shadow-sm border border-slate-100 custom-scrollbar">
-                <table className="w-full text-[11px] text-left border-collapse min-w-[1000px]">
+              <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 custom-scrollbar">
+                <table className="w-full text-[11px] text-left border-collapse">
                   <thead>
                     <tr className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200">
                       <th className="px-6 py-5">Date</th>
@@ -1082,7 +1098,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                             <tr key={h.id} className="hover:bg-purple-50/20 transition-colors">
                               <td className="px-6 py-4 text-slate-500 whitespace-nowrap text-xs">{formatDate(h.timestamp)}</td>
                               <td className="px-6 py-4 text-slate-500 text-xs">#{h.brand || '-'}</td>
-                              <td className="px-6 py-4 font-bold text-slate-800">{h.productName}</td>
+                              <td className="px-6 py-4 text-slate-800">
+                                <div className="font-bold">{h.productName}</div>
+                                {h.description && (
+                                  <div className="text-[10px] text-slate-500 italic mt-0.5">
+                                    {h.description}
+                                  </div>
+                                )}
+                              </td>
                               <td className="px-6 py-4 text-slate-500 text-[10px]">{h.code || '-'}</td>
                               <td className="px-6 py-4 font-bold text-[#9b59b6] text-center">{h.qty}</td>
                               <td className="px-6 py-4 text-slate-600 font-medium text-xs capitalize">{h.uom || 'pcs'}</td>
@@ -1093,7 +1116,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                               <td className={`px-6 py-4 text-xs whitespace-nowrap ${isExpired ? 'text-rose-600 font-bold' : isExpiringSoon ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>
                                 {expiryDate ? (
                                   <>
-                                    {expiryDate.toLocaleDateString()}
+                                    {expiryDate.toLocaleDateString('en-GB')}
                                     {isExpired && <span className="ml-1 text-[9px] uppercase tracking-tight font-black">(EXP)</span>}
                                     {isExpiringSoon && <span className="ml-1 text-[9px] uppercase tracking-tight font-black">(SOON)</span>}
                                   </>
@@ -1180,7 +1203,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                               </span>
                               <div className="flex flex-col">
                                 <span className={`text-base font-black ${isExpired ? 'text-rose-600' : 'text-slate-700'}`}>
-                                  {new Date(item.expiryDate!).toISOString().split('T')[0]}
+                                  {new Date(item.expiryDate!).toLocaleDateString('en-GB')}
                                 </span>
                               </div>
                             </div>
@@ -1217,54 +1240,98 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         }
       </div>
 
-      {/* Activity Log (Footer) */}
-      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8">
+      {/* Global Activity Feed (Footer) */}
+      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-10 mt-6 mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
         <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="bg-slate-100 p-2 rounded-xl"><FileText className="w-5 h-5 text-slate-500" /></div>
-            <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Global Activity Feed</h4>
+          <div className="flex items-center gap-4">
+            <div className="bg-slate-800 p-3 rounded-2xl">
+              <Activity className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h4 className="text-lg font-extrabold text-slate-800 tracking-wider uppercase">Recent Global Activity</h4>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-full border border-slate-100">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live System</span>
           </div>
         </div>
-        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-4 custom-scrollbar">
+
+        <div className="grid grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">
           {logs.length > 0 ? logs.map((log) => (
-            <div key={log.id} className="flex items-start justify-between p-5 bg-slate-50/50 rounded-2xl border border-transparent hover:border-slate-200 hover:bg-white group transition-all">
-              <div className="flex items-start gap-4">
-                <div className={`mt-1 p-2 rounded-xl ${log.action === 'receive' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
-                  {log.action === 'receive' ? <Plus className="w-4 h-4" /> : <Package className="w-4 h-4" />}
+            <div key={log.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-slate-50/30 rounded-3xl border border-transparent hover:border-slate-200 hover:bg-white group transition-all duration-300">
+              <div className="flex items-start gap-5">
+                <div className={`mt-1 p-3 rounded-2xl shadow-sm transition-transform group-hover:scale-110 duration-300 ${log.action === 'receive' || log.action === 'add' || log.action === 'transfer_in'
+                  ? 'bg-emerald-100 text-emerald-600'
+                  : log.action === 'remove' || log.action === 'delete' || log.action === 'transfer_out'
+                    ? 'bg-rose-100 text-rose-600'
+                    : 'bg-blue-100 text-blue-600'
+                  }`}>
+                  {log.action === 'receive' || log.action === 'add' || log.action === 'transfer_in' ? (
+                    <Plus className="w-5 h-5" />
+                  ) : log.action === 'remove' || log.action === 'delete' || log.action === 'transfer_out' ? (
+                    <ArrowDownLeft className="w-5 h-5" />
+                  ) : (
+                    <RefreshCcw className="w-5 h-5" />
+                  )}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="text-[12px] font-black text-emerald-600 tracking-wide">{log.roomName}</p>
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100/50">
+                      {log.roomName}
+                    </span>
+                    <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${log.action === 'receive' || log.action === 'add' || log.action === 'transfer_in'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : log.action === 'remove' || log.action === 'delete' || log.action === 'transfer_out'
+                        ? 'bg-rose-50 text-rose-700'
+                        : 'bg-blue-50 text-blue-700'
+                      }`}>
+                      {log.action.replace('_', ' ')}
+                    </span>
                     {log.actorName && (
-                      <span className="text-[10px] bg-slate-200/50 text-slate-500 px-1.5 py-0.5 rounded font-bold tracking-wider">
+                      <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded-md font-bold shadow-sm">
                         By {log.actorName}
                       </span>
                     )}
                   </div>
-                  <p className="text-sm font-semibold text-slate-700 leading-relaxed">{log.details}</p>
+                  <p className="text-[15px] font-bold text-slate-700 leading-snug group-hover:text-slate-900 transition-colors">
+                    {log.details}
+                  </p>
 
                   {log.beforeValue !== undefined && log.afterValue !== undefined && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-[10px] font-black text-slate-500 tracking-wider">Change: </span>
-                      <div className="flex items-center gap-2 bg-white/80 border border-slate-100 px-2 py-1 rounded-xl shadow-sm">
-                        <span className="text-[11px] font-bold text-slate-400 line-through">{log.beforeValue}</span>
-                        <div className="w-3 h-px bg-slate-200" />
-                        <span className="text-[11px] font-black text-emerald-600">{log.afterValue}</span>
+                    <div className="flex items-center gap-3 mt-1">
+                      <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-slate-100 px-3 py-1.5 rounded-xl shadow-sm">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Delta</span>
+                        <span className="text-[12px] font-bold text-slate-400 line-through decoration-slate-300">{log.beforeValue}</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
+                        <span className={`text-[12px] font-black ${Number(log.afterValue) > Number(log.beforeValue) ? 'text-emerald-600' : 'text-rose-600'
+                          }`}>
+                          {log.afterValue}
+                        </span>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-[10px] text-slate-400 font-black tracking-widest">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                <p className="text-[10px] text-slate-400 font-bold mt-1">{new Date(log.timestamp).toLocaleDateString()}</p>
+              <div className="flex flex-row sm:flex-col items-center sm:items-end gap-3 sm:gap-2 mt-4 sm:mt-0 text-right shrink-0 bg-white/50 sm:bg-transparent p-3 sm:p-0 rounded-2xl border border-slate-100 sm:border-none w-full sm:w-auto justify-between sm:justify-start">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Clock className="w-3.5 h-3.5 text-slate-700" />
+                  <p className="text-[13px] font-extrabold tracking-wider">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+                <div className="flex items-center gap-2 text-slate-500">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <p className="text-[12px] font-bold">{new Date(log.timestamp).toLocaleDateString('en-GB')}</p>
+                </div>
               </div>
             </div>
           )) : (
-            <div className="text-center py-12 text-slate-300 font-black tracking-[0.3em] text-xs">Awaiting clinic activity...</div>
+            <div className="flex flex-col items-center justify-center py-24 bg-slate-50/30 rounded-[2.5rem] border border-dashed border-slate-200">
+              <History className="w-16 h-16 text-slate-200 mb-6" />
+              <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-300">Awaiting Clinic Activity</p>
+            </div>
           )}
         </div>
-      </div >
+      </div>
 
       {
         deleteTarget && (

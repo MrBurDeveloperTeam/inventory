@@ -309,6 +309,15 @@ const App: React.FC = () => {
               actionData.qty,
               actionData.price,
               new Date().toISOString().split('T')[0],
+              actionData.expiry,
+              actionData.createNewBatch
+            );
+          } else if (actionData.type === 'remove') {
+            removeStock(
+              actionData.roomId,
+              actionData.itemName,
+              actionData.brand,
+              actionData.qty,
               actionData.expiry
             );
           }
@@ -565,7 +574,8 @@ const App: React.FC = () => {
           category: h.category || 'other',
           roomId: h.room_id || '',
           uom: h.uom || 'pcs',
-          expiryDate: h.expiry_date || null
+          expiryDate: h.expiry_date || null,
+          description: h.description || ''
         });
         historyByUser.set(h.user_id, arr);
       });
@@ -782,7 +792,8 @@ const App: React.FC = () => {
           category: h.category || 'other',
           roomId: h.room_id || '',
           uom: h.uom || 'pcs',
-          expiryDate: h.expiry_date || null
+          expiryDate: h.expiry_date || null,
+          description: h.description || ''
         }))
       );
       setLogs(
@@ -1363,7 +1374,7 @@ const App: React.FC = () => {
     }
   };
 
-  const receiveStock = async (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => {
+  const receiveStock = async (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string, createNewBatch?: boolean) => {
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
     let affectedItemToSync: Item | null = null;
@@ -1380,7 +1391,23 @@ const App: React.FC = () => {
     );
 
     if (existingItem) {
-      affectedItemToSync = mergeBatchAdd(existingItem, qty, price, expiry);
+      // If createNewBatch is explicitly true, force creation of a new batch
+      if (createNewBatch === true) {
+        // Create a new batch by adding it to the batches array
+        const normalized = ensureBatches(existingItem);
+        const batches = normalized.batches ? [...normalized.batches] : [];
+        batches.push({
+          id: crypto.randomUUID(),
+          qty,
+          unitPrice: price,
+          expiryDate: expiry || null
+        });
+        const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(batches);
+        affectedItemToSync = { ...normalized, batches, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
+      } else {
+        // Default behavior: merge with existing batch if expiry matches
+        affectedItemToSync = mergeBatchAdd(existingItem, qty, price, expiry);
+      }
     } else {
       affectedItemToSync = {
         id: generateId(),
@@ -1439,7 +1466,8 @@ const App: React.FC = () => {
       category: itemData.category || 'other',
       roomId: roomId,
       uom: itemData.uom || existingItem?.uom || 'pcs',
-      expiryDate: expiry
+      expiryDate: expiry,
+      description: itemData.description || existingItem?.description || ''
     };
     setHistory(h => [historyEntry, ...h]);
 
@@ -1494,13 +1522,155 @@ const App: React.FC = () => {
           location: historyEntry.location,
           category: historyEntry.category,
           uom: historyEntry.uom,
-          expiry_date: historyEntry.expiryDate
+          expiry_date: historyEntry.expiryDate,
+          description: historyEntry.description
         });
         if (historyErr) throw historyErr;
 
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to persist received stock:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+        syncInFlight.current = false;
+      }
+    }
+  };
+
+  const removeStock = async (roomId: string, itemName: string, brand: string | undefined, qty: number, targetExpiry?: string) => {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    let affectedItemToSync: Item | null = null;
+    let roomNameForLog = '';
+
+    // 1. Find the room and item
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) {
+      console.error('Room not found:', roomId);
+      isDirty.current = false;
+      return;
+    }
+
+    roomNameForLog = room.name;
+    const existingItem = room.items.find(i =>
+      i.name.toLowerCase() === itemName.toLowerCase() &&
+      (brand ? i.brand.toLowerCase() === brand.toLowerCase() : true)
+    );
+
+    if (!existingItem) {
+      console.error('Item not found:', itemName);
+      isDirty.current = false;
+      return;
+    }
+
+    if (existingItem.quantity < qty) {
+      console.error('Insufficient quantity. Available:', existingItem.quantity, 'Requested:', qty);
+      isDirty.current = false;
+      return;
+    }
+
+    // 2. Deduct quantity
+    // If targetExpiry is provided, prioritize that batch
+    if (targetExpiry) {
+      const normalized = ensureBatches(existingItem);
+      let batches = normalized.batches ? normalized.batches.map(b => ({ ...b })) : [];
+
+      // Try to find the specific batch
+      const targetBatchIndex = batches.findIndex(b => b.expiryDate === targetExpiry);
+
+      if (targetBatchIndex !== -1) {
+        let remainingToRemove = qty;
+
+        // Remove from target batch first
+        const takeFromTarget = Math.min(batches[targetBatchIndex].qty, remainingToRemove);
+        batches[targetBatchIndex].qty -= takeFromTarget;
+        remainingToRemove -= takeFromTarget;
+
+        // If still need to remove more, fall back to FIFO (others)
+        if (remainingToRemove > 0) {
+          // Iterate others (excluding the one we just processed if it's now 0, though filter handles 0 later)
+          // Logic similar to adjustBatchesWithDelta but handling the generic pool
+          // Simple approach: Apply remaining delta to the list (FIFO logic)
+          for (let i = batches.length - 1; i >= 0 && remainingToRemove > 0; i--) {
+            if (i === targetBatchIndex) continue; // Skip the one we already drained
+            const take = Math.min(batches[i].qty, remainingToRemove);
+            batches[i].qty -= take;
+            remainingToRemove -= take;
+          }
+        }
+
+        batches = batches.filter(b => b.qty > 0);
+        const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(batches);
+        affectedItemToSync = { ...normalized, batches, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
+      } else {
+        // Target batch not found by date, fallback to standard FIFO
+        affectedItemToSync = adjustBatchesWithDelta(existingItem, -qty);
+      }
+    } else {
+      // Standard FIFO
+      affectedItemToSync = adjustBatchesWithDelta(existingItem, -qty);
+    }
+
+    // 3. Optimistic Update
+    setRooms(prev => prev.map(r => {
+      if (r.id !== roomId) return r;
+      const updatedItems = r.items.map(i =>
+        i.id === existingItem.id ? affectedItemToSync! : i
+      ).filter(i => i.quantity > 0); // Remove items with 0 quantity
+      return { ...r, items: updatedItems };
+    }));
+
+    // Add activity log
+    addActivity(
+      roomId,
+      roomNameForLog,
+      'remove',
+      `Removed ${qty} ${existingItem.uom} of "${itemName}" [${existingItem.code || 'N/A'}]`,
+      { beforeValue: String(existingItem.quantity), afterValue: String(affectedItemToSync.quantity) }
+    );
+
+    // 4. Direct Persistence
+    if (affectedItemToSync && currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      syncInFlight.current = true;
+      try {
+        const itm = affectedItemToSync as Item;
+
+        // If quantity is 0, delete the item and its batches
+        if (itm.quantity === 0) {
+          // Delete batches first
+          await supabase.from('inventory_item_batches').delete().eq('item_id', itm.id);
+          // Delete item
+          const { error: itemErr } = await supabase.from('inventory_items').delete().eq('id', itm.id);
+          if (itemErr) throw itemErr;
+        } else {
+          // Update item
+          const { error: itemErr } = await supabase.from('inventory_items').update({
+            quantity: itm.quantity,
+            price: itm.price,
+            expiry_date: itm.expiryDate
+          }).eq('id', itm.id);
+          if (itemErr) throw itemErr;
+
+          // Delete all existing batches and re-insert
+          await supabase.from('inventory_item_batches').delete().eq('item_id', itm.id);
+          if (itm.batches && itm.batches.length > 0) {
+            for (const b of itm.batches) {
+              await supabase.from('inventory_item_batches').insert({
+                id: b.id,
+                item_id: itm.id,
+                qty: b.qty,
+                unit_price: b.unitPrice,
+                expiry_date: b.expiryDate
+              });
+            }
+          }
+        }
+
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('Failed to persist removed stock:', err);
         setSyncStatus('error');
       } finally {
         isDirty.current = false;

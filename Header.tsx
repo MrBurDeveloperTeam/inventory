@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from './types';
-import { LogOut, Building2, ChevronRight, Camera, ChevronDown } from 'lucide-react';
+import { LogOut, Building2, ChevronRight, Camera, ChevronDown, Download } from 'lucide-react';
 
 interface HeaderProps {
   onProfileClick?: () => void;
@@ -32,7 +32,47 @@ const Header: React.FC<HeaderProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inventoryRef = useRef<HTMLDivElement>(null);
 
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
+
   useEffect(() => {
+    // Check if app is already installed/running in standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+    const handleBeforeInstallPrompt = (e: any) => {
+      console.log('beforeinstallprompt event caught in Header');
+      e.preventDefault();
+      if (!isStandalone) {
+        setDeferredPrompt(e);
+        setShowInstallBtn(true);
+      }
+    };
+
+    const handleCustomPromptEvent = () => {
+      console.log('Custom PWA prompt event received');
+      if ((window as any).deferredInstallPrompt && !isStandalone) {
+        setDeferredPrompt((window as any).deferredInstallPrompt);
+        setShowInstallBtn(true);
+      }
+    };
+
+    // Check if it already fired before mount
+    if ((window as any).deferredInstallPrompt && !isStandalone) {
+      handleCustomPromptEvent();
+    }
+
+    const handleAppInstalled = () => {
+      console.log('App was installed');
+      setShowInstallBtn(false);
+      setDeferredPrompt(null);
+      (window as any).deferredInstallPrompt = null;
+    };
+
+    console.log('Registering PWA listeners. Standalone:', isStandalone);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    window.addEventListener('pwa-prompt-available', handleCustomPromptEvent);
+
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
@@ -43,8 +83,28 @@ const Header: React.FC<HeaderProps> = ({
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      window.removeEventListener('pwa-prompt-available', handleCustomPromptEvent);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+
+    // Show the install prompt
+    deferredPrompt.prompt();
+
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to the install prompt: ${outcome}`);
+
+    // We've used the prompt, and can't use it again, throw it away
+    setDeferredPrompt(null);
+    setShowInstallBtn(false);
+  };
 
   const handleProfileClick = () => {
     setIsOpen(false);
@@ -164,7 +224,7 @@ const Header: React.FC<HeaderProps> = ({
                 </div>
               )}
               <div className="mt-4 pt-4 border-t border-slate-100">
-                <h3 className="text-xs font-bold text-slate-700 tracking-wide mb-3">Collaborator</h3>
+                <h3 className="text-xs font-bold text-slate-700 tracking-normal mb-3">Collaborator</h3>
                 <button
                   onClick={handleAddCollaborator}
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-xl transition-all font-semibold text-sm text-slate-700 shadow-sm"
@@ -173,6 +233,19 @@ const Header: React.FC<HeaderProps> = ({
                   <span>Add Collaborator</span>
                 </button>
               </div>
+
+              {showInstallBtn && (
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <h3 className="text-xs font-bold text-slate-700 tracking-normal mb-3">Add to Home Screen</h3>
+                  <button
+                    onClick={handleInstallClick}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#4d9678] hover:bg-[#3d8b6c] text-white rounded-xl transition-all font-bold text-sm shadow-sm"
+                  >
+                    <Download size={16} />
+                    <span>Install App</span>
+                  </button>
+                </div>
+              )}
 
               <div className="mt-4 pt-4 border-t border-slate-100">
                 <button

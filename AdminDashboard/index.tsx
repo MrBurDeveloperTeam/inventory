@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { 
-  Building2, 
+import {
+  Building2,
   ChevronDown,
   Calendar,
   ArrowUpRight,
@@ -54,11 +54,11 @@ interface AdminDashboardProps {
   onRefreshAdminData?: () => void;
 }
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
-  user, 
-  rooms, 
-  history, 
-  onLogout, 
+const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  user,
+  rooms,
+  history,
+  onLogout,
   onSwitchToClinic,
   managedProfiles = [],
   managedInventories = [],
@@ -69,7 +69,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [sidebarItem, setSidebarItem] = useState('dashboard');
   const [adminInventoryTab, setAdminInventoryTab] = useState<'all' | 'history' | 'expiring'>('all');
   const [analysisMode, setAnalysisMode] = useState<'single' | 'compare'>('single');
-  
+
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   // Derive the admin user list from Supabase profiles (fallbacks include current admin)
@@ -84,7 +84,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       jobPosition: p.position || 'Member',
       clinicName: p.company_name || 'Clinic',
       role: p.account_type === 'admin' ? 'Admin' : 'Dentist',
-      lastActive: p.updated_at ? new Date(p.updated_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      lastActive: p.updated_at ? new Date(p.updated_at).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB'),
       avatarUrl: p.avatar_url || null,
     }));
 
@@ -99,7 +99,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         jobPosition: user.position,
         clinicName: user.companyName || 'My Dental Clinic',
         role: 'Admin',
-        lastActive: new Date().toISOString().split('T')[0],
+        lastActive: new Date().toLocaleDateString('en-GB'),
         avatarUrl: (user as any).avatarUrl || null,
       });
     }
@@ -109,7 +109,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // States for interactive charts
   const [categoryMetric, setCategoryMetric] = useState<'value' | 'quantity'>('value');
   const [vendorCategoryFilter, setVendorCategoryFilter] = useState('All');
-  
+
   // Category chart tooltip state
   const [hoveredCategoryIdx, setHoveredCategoryIdx] = useState<number | null>(null);
   const [catMousePos, setCatMousePos] = useState({ x: 0, y: 0 });
@@ -119,7 +119,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [hoveredVendorIdx, setHoveredVendorIdx] = useState<number | null>(null);
   const [vendorMousePos, setVendorMousePos] = useState({ x: 0, y: 0 });
   const vendorChartRef = useRef<SVGSVGElement>(null);
-  
+
   const [spPeriodA, setSpPeriodA] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -154,7 +154,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Map Real App Data to Admin Data formats
   const rawGlobalInventory = useMemo<GlobalInventoryItem[]>(() => {
-    return inventorySource.flatMap((inv) => 
+    return inventorySource.flatMap((inv) =>
       (inv.rooms || []).flatMap(room => (
         room.items.map(item => ({
           id: item.id,
@@ -184,7 +184,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         vendor: h.vendor,
         amount: h.totalPrice,
         status: 'delivered',
-        date: new Date(h.timestamp).toLocaleDateString(),
+        date: new Date(h.timestamp).toLocaleDateString('en-GB'),
         timestamp: h.timestamp,
         category: h.category,
         productName: h.productName,
@@ -362,12 +362,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const paddingBottom = 40;
     const chartWidth = width - paddingLeft - paddingRight;
     const chartHeight = height - paddingTop - paddingBottom;
-    
+
     const isValue = categoryMetric === 'value';
     const maxAxisValue = Math.max(...categoryBreakdownData.map(cat => isValue ? cat.value : cat.quantity), 0);
     const displayYSteps = computeNiceSteps(maxAxisValue || (isValue ? 100 : 10));
     const yTop = displayYSteps[displayYSteps.length - 1] || 1;
-    
+
     const barWidth = 70;
     const gap = (chartWidth - (categoryBreakdownData.length * barWidth)) / (categoryBreakdownData.length + 1);
 
@@ -383,11 +383,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     return (
       <div className="relative group/cat">
-        <svg 
+        <svg
           ref={catChartRef}
-          width="100%" 
-          height={height} 
-          viewBox={`0 0 ${width} ${height}`} 
+          width="100%"
+          height={height}
+          viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="xMidYMid meet"
           className="overflow-visible"
         >
@@ -408,16 +408,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             const yPos = height - paddingBottom - barHeight;
 
             return (
-              <g 
-                key={i} 
+              <g
+                key={i}
                 onMouseLeave={() => setHoveredCategoryIdx(null)}
                 className="transition-all"
               >
-                <rect 
-                  x={xPos - gap/2} 
-                  y={paddingTop} 
-                  width={barWidth + gap} 
-                  height={chartHeight} 
+                <rect
+                  x={xPos - gap / 2}
+                  y={paddingTop}
+                  width={barWidth + gap}
+                  height={chartHeight}
                   fill="transparent"
                   className="cursor-pointer"
                   onMouseEnter={(e) => handleMouseMove(e, i)}
@@ -425,30 +425,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
 
                 {hoveredCategoryIdx === i && (
-                  <rect 
-                    x={xPos - gap/2} 
-                    y={paddingTop} 
-                    width={barWidth + gap} 
-                    height={chartHeight} 
-                    fill="#f8fafc" 
-                    className="animate-in fade-in duration-200 pointer-events-none" 
+                  <rect
+                    x={xPos - gap / 2}
+                    y={paddingTop}
+                    width={barWidth + gap}
+                    height={chartHeight}
+                    fill="#f8fafc"
+                    className="animate-in fade-in duration-200 pointer-events-none"
                   />
                 )}
 
-                <rect 
-                  x={xPos} 
-                  y={yPos} 
-                  width={barWidth} 
-                  height={barHeight} 
-                  fill="#4285f4" 
-                  rx="4" 
-                  className={`transition-all duration-300 pointer-events-none ${hoveredCategoryIdx === i ? 'brightness-110' : 'opacity-90'}`} 
+                <rect
+                  x={xPos}
+                  y={yPos}
+                  width={barWidth}
+                  height={barHeight}
+                  fill="#4285f4"
+                  rx="4"
+                  className={`transition-all duration-300 pointer-events-none ${hoveredCategoryIdx === i ? 'brightness-110' : 'opacity-90'}`}
                 />
 
-                <text 
-                  x={xPos + barWidth / 2} 
-                  y={height - paddingBottom + 25} 
-                  textAnchor="middle" 
+                <text
+                  x={xPos + barWidth / 2}
+                  y={height - paddingBottom + 25}
+                  textAnchor="middle"
                   className={`text-[16px] font-medium tracking-tight transition-colors pointer-events-none ${hoveredCategoryIdx === i ? 'fill-slate-800' : 'fill-slate-400'}`}
                 >
                   {cat.label}
@@ -459,11 +459,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </svg>
 
         {hoveredCategoryIdx !== null && (
-          <div 
+          <div
             className="absolute pointer-events-none z-[100] animate-in fade-in zoom-in-95 duration-200"
-            style={{ 
-              left: `${catMousePos.x}px`, 
-              top: `${catMousePos.y}px`, 
+            style={{
+              left: `${catMousePos.x}px`,
+              top: `${catMousePos.y}px`,
               transform: 'translate(-50%, -100%) translateY(-20px)',
             }}
           >
@@ -489,11 +489,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const paddingBottom = 40;
     const chartWidth = width - paddingLeft - paddingRight;
     const chartHeight = height - paddingTop - paddingBottom;
-    
+
     const maxValRaw = Math.max(...vendorSpendData.map(v => v.spend), 1);
     const maxVal = Math.ceil(maxValRaw / 1500) * 1500;
     const ySteps = [0, maxVal * 0.25, maxVal * 0.5, maxVal * 0.75, maxVal];
-    
+
     const barWidth = 70;
     const gap = (chartWidth - (vendorSpendData.length * barWidth)) / (vendorSpendData.length + 1);
 
@@ -509,11 +509,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     return (
       <div className="relative group/vendor">
-        <svg 
+        <svg
           ref={vendorChartRef}
-          width="100%" 
-          height={height} 
-          viewBox={`0 0 ${width} ${height}`} 
+          width="100%"
+          height={height}
+          viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="xMidYMid meet"
           className="overflow-visible"
         >
@@ -533,16 +533,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             const yPos = height - paddingBottom - barHeight;
 
             return (
-              <g 
-                key={i} 
+              <g
+                key={i}
                 onMouseLeave={() => setHoveredVendorIdx(null)}
                 className="transition-all"
               >
-                <rect 
-                  x={xPos - gap/2} 
-                  y={paddingTop} 
-                  width={barWidth + gap} 
-                  height={chartHeight} 
+                <rect
+                  x={xPos - gap / 2}
+                  y={paddingTop}
+                  width={barWidth + gap}
+                  height={chartHeight}
                   fill="transparent"
                   className="cursor-pointer"
                   onMouseEnter={(e) => handleMouseMove(e, i)}
@@ -550,30 +550,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
 
                 {hoveredVendorIdx === i && (
-                  <rect 
-                    x={xPos - gap/2} 
-                    y={paddingTop} 
-                    width={barWidth + gap} 
-                    height={chartHeight} 
-                    fill="#f8fafc" 
-                    className="animate-in fade-in duration-200 pointer-events-none" 
+                  <rect
+                    x={xPos - gap / 2}
+                    y={paddingTop}
+                    width={barWidth + gap}
+                    height={chartHeight}
+                    fill="#f8fafc"
+                    className="animate-in fade-in duration-200 pointer-events-none"
                   />
                 )}
 
-                <rect 
-                  x={xPos} 
-                  y={yPos} 
-                  width={barWidth} 
-                  height={barHeight} 
-                  fill="#6366f1" 
-                  rx="4" 
-                  className={`transition-all duration-300 pointer-events-none ${hoveredVendorIdx === i ? 'brightness-110' : 'opacity-90'}`} 
+                <rect
+                  x={xPos}
+                  y={yPos}
+                  width={barWidth}
+                  height={barHeight}
+                  fill="#6366f1"
+                  rx="4"
+                  className={`transition-all duration-300 pointer-events-none ${hoveredVendorIdx === i ? 'brightness-110' : 'opacity-90'}`}
                 />
 
-                <text 
-                  x={xPos + barWidth / 2} 
-                  y={height - paddingBottom + 25} 
-                  textAnchor="middle" 
+                <text
+                  x={xPos + barWidth / 2}
+                  y={height - paddingBottom + 25}
+                  textAnchor="middle"
                   className={`text-[16px] font-medium tracking-tight transition-colors pointer-events-none ${hoveredVendorIdx === i ? 'fill-slate-800' : 'fill-slate-400'}`}
                 >
                   {v.name.length > 12 ? v.name.slice(0, 10) + '...' : v.name}
@@ -584,11 +584,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </svg>
 
         {hoveredVendorIdx !== null && (
-          <div 
+          <div
             className="absolute pointer-events-none z-[100] animate-in fade-in zoom-in-95 duration-200"
-            style={{ 
-              left: `${vendorMousePos.x}px`, 
-              top: `${vendorMousePos.y}px`, 
+            style={{
+              left: `${vendorMousePos.x}px`,
+              top: `${vendorMousePos.y}px`,
               transform: 'translate(-50%, -100%) translateY(-20px)',
             }}
           >
@@ -620,15 +620,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="flex h-screen bg-[#f8fafc] overflow-hidden w-full">
-      <Sidebar 
-        activeItem={sidebarItem} 
-        onItemSelect={setSidebarItem} 
-        onLogout={onLogout} 
+      <Sidebar
+        activeItem={sidebarItem}
+        onItemSelect={setSidebarItem}
+        onLogout={onLogout}
       />
 
       <main className="flex-1 overflow-y-auto flex flex-col relative w-full">
-        <Header 
-          title={sidebarItem === 'dashboard' ? 'Admin Overview' : (sidebarItem === 'users' ? 'User Directory' : sidebarItem)} 
+        <Header
+          title={sidebarItem === 'dashboard' ? 'Admin Overview' : (sidebarItem === 'users' ? 'User Directory' : sidebarItem)}
           users={users}
           selectedUserId={selectedUserId}
           onUserSelect={handleSelectUser}
@@ -646,20 +646,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div>
                       <h3 className="text-lg font-black text-slate-900">Breakdown by Category</h3>
                       <div className="text-xs text-slate-400 flex items-center gap-1 font-bold">
-                        <Info size={14} className="opacity-60" /> 
+                        <Info size={14} className="opacity-60" />
                         {categoryMetric === 'value' ? 'Total value aggregated per category' : 'Total quantity aggregated per category'}
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-4">
                       <div className="flex bg-slate-100 p-1.5 rounded-xl">
-                        <button 
+                        <button
                           onClick={() => setCategoryMetric('value')}
                           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black transition-all ${categoryMetric === 'value' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                           <DollarSign size={14} /> Value
                         </button>
-                        <button 
+                        <button
                           onClick={() => setCategoryMetric('quantity')}
                           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black transition-all ${categoryMetric === 'quantity' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
@@ -682,7 +682,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="relative">
-                        <select 
+                        <select
                           value={vendorCategoryFilter}
                           onChange={(e) => setVendorCategoryFilter(e.target.value)}
                           className="bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-10 py-1.5 text-[11px] font-bold text-slate-600 outline-none cursor-pointer appearance-none transition-all hover:bg-slate-100"
@@ -783,28 +783,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {analysisMode === 'compare' && (
                   <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-12">
-                        <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase mb-1">{formatPeriodName(spPeriodA)}</p>
-                          <p className="text-2xl font-black text-slate-800">${Math.round(spendingAnalysisData.periodAStats.total).toLocaleString()}</p>
-                        </div>
-                        <TrendingUp className="w-5 h-5 text-slate-300" />
-                        <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase mb-1">{formatPeriodName(spPeriodB)}</p>
-                          <p className="text-2xl font-black text-slate-400">${Math.round(spendingAnalysisData.periodBStats.total).toLocaleString()}</p>
-                        </div>
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1">{formatPeriodName(spPeriodA)}</p>
+                        <p className="text-2xl font-black text-slate-800">${Math.round(spendingAnalysisData.periodAStats.total).toLocaleString()}</p>
+                      </div>
+                      <TrendingUp className="w-5 h-5 text-slate-300" />
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1">{formatPeriodName(spPeriodB)}</p>
+                        <p className="text-2xl font-black text-slate-400">${Math.round(spendingAnalysisData.periodBStats.total).toLocaleString()}</p>
+                      </div>
                     </div>
                     <div className="text-right">
-                        <div className="inline-flex items-center gap-1 px-3 py-1 bg-rose-50 text-rose-600 rounded-full border border-rose-100 text-xs font-black mb-1">
-                          <ArrowUpRight className="w-3 h-3" /> {spendingAnalysisData.growth.toFixed(1)}%
-                        </div>
-                        <p className="text-[10px] font-medium text-slate-400">Spending ratio: {spendingAnalysisData.multiplier}x</p>
+                      <div className="inline-flex items-center gap-1 px-3 py-1 bg-rose-50 text-rose-600 rounded-full border border-rose-100 text-xs font-black mb-1">
+                        <ArrowUpRight className="w-3 h-3" /> {spendingAnalysisData.growth.toFixed(1)}%
+                      </div>
+                      <p className="text-[10px] font-medium text-slate-400">Spending ratio: {spendingAnalysisData.multiplier}x</p>
                     </div>
                   </div>
                 )}
 
-                <SpendingChart 
-                  data={spendingAnalysisData} 
-                  analysisMode={analysisMode} 
+                <SpendingChart
+                  data={spendingAnalysisData}
+                  analysisMode={analysisMode}
                   hoveredDay={chartHoveredDay}
                   onHoverDay={handleHoverDay}
                   mousePos={mousePos}
@@ -814,21 +814,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              <InventorySection 
-                tab={adminInventoryTab} 
-                onTabChange={setAdminInventoryTab} 
-                inventory={globalInventory} 
-                history={globalHistory} 
-                expiring={expiringGlobalItems} 
-                itemsByCategory={itemsByCategory} 
+              <InventorySection
+                tab={adminInventoryTab}
+                onTabChange={setAdminInventoryTab}
+                inventory={globalInventory}
+                history={globalHistory}
+                expiring={expiringGlobalItems}
+                itemsByCategory={itemsByCategory}
               />
             </>
           )}
 
           {sidebarItem === 'users' && (
-            <UserManagement 
-              users={users} 
-              userInventoryStats={userInventoryStats} 
+            <UserManagement
+              users={users}
+              userInventoryStats={userInventoryStats}
               onSelectUser={handleSelectUser}
             />
           )}
