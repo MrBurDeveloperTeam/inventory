@@ -497,8 +497,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
               )}
 
               {ocrStep === 'camera' && (
-                <div className="flex flex-col md:flex-row items-center justify-center p-2 gap-6 animate-in fade-in duration-300">
-                  <div className="relative w-full max-w-2xl aspect-[3/4] sm:aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border-4 border-white/20">
+                <div className="fixed inset-0 z-[10100] bg-black flex flex-col items-center justify-center animate-in fade-in duration-300">
+                  <div className="relative w-full h-full md:max-w-6xl md:max-h-[80vh] md:rounded-3xl overflow-hidden shadow-2xl">
                     <video
                       ref={videoRef}
                       autoPlay
@@ -506,28 +506,35 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                       muted
                       className="w-full h-full object-cover"
                     />
-                  </div>
 
-                  <div className="flex flex-row md:flex-col items-center gap-4 bg-white/60 backdrop-blur-md p-4 rounded-3xl border border-slate-200 shadow-xl">
-                    <button
-                      onClick={capturePhoto}
-                      className="flex items-center justify-center"
-                    >
-                      <div className="w-12 h-12 rounded-full bg-emerald-600 hover:bg-emerald-700 flex items-center justify-center shadow-lg transform active:scale-95 transition-all duration-200">
-                        <div className="w-9 h-9 rounded-full border-2 border-white/10 flex items-center justify-center">
-                          <Camera className="w-5 h-5 text-white" />
-                        </div>
+                    {/* Floating Controls Overlay */}
+                    <div className="absolute inset-x-0 bottom-12 flex items-center justify-center z-[10101]">
+                      <div className="flex items-center">
+                        {/* Hidden Spacer to keep Camera perfectly centered */}
+                        <div className="w-12 invisible" aria-hidden="true" />
+                        <div className="w-6 invisible" aria-hidden="true" /> {/* Gap balance */}
+
+                        <button
+                          onClick={capturePhoto}
+                          className="group relative flex items-center justify-center"
+                        >
+                          <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.3)] transform active:scale-90 transition-transform">
+                            <div className="w-12 h-12 rounded-full border-2 border-slate-100 flex items-center justify-center">
+                              <Camera className="w-8 h-8 text-slate-800" />
+                            </div>
+                          </div>
+                        </button>
+
+                        <div className="w-6" aria-hidden="true" /> {/* Gap */}
+
+                        <button
+                          onClick={stopCamera}
+                          className="group w-14 h-14 rounded-full bg-black/30 backdrop-blur-md flex items-center justify-center text-white hover:bg-rose-500 hover:text-white transition-all border border-white/10 shadow-lg"
+                        >
+                          <X className="w-6 h-6 transform group-hover:rotate-90 transition-transform" />
+                        </button>
                       </div>
-                    </button>
-
-                    <div className="h-px w-8 bg-slate-200 hidden md:block" />
-
-                    <button
-                      onClick={stopCamera}
-                      className="group w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-400 hover:bg-rose-500 hover:text-white transition-all border border-slate-200 shadow-sm"
-                    >
-                      <X className="w-6 h-6 transform group-hover:rotate-90 transition-transform" />
-                    </button>
+                    </div>
                   </div>
 
                   <canvas ref={canvasRef} className="hidden" />
@@ -540,18 +547,18 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                     <img src={ocrImage} className="w-full h-full object-contain" alt="Captured preview" />
                   </div>
 
-                  <div className="flex flex-col sm:flex-row items-center gap-4 w-full max-w-sm">
-                    <button
-                      onClick={startCamera}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-white border-2 border-slate-200 hover:border-emerald-500 hover:text-emerald-600 rounded-xl transition-all font-bold text-xs text-slate-600 shadow-sm"
-                    >
-                      <Camera className="w-4 h-4" /> Retake
-                    </button>
+                  <div className="flex flex-col sm:flex-row-reverse items-center gap-4 w-full max-w-sm">
                     <button
                       onClick={() => processCapturedImage(ocrImage)}
                       className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all font-bold text-xs shadow-md animate-pulse hover:animate-none"
                     >
                       <Scan className="w-4 h-4" /> Analyze
+                    </button>
+                    <button
+                      onClick={startCamera}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-white border-2 border-slate-200 hover:border-emerald-500 hover:text-emerald-600 rounded-xl transition-all font-bold text-xs text-slate-600 shadow-sm"
+                    >
+                      <Camera className="w-4 h-4" /> Retake
                     </button>
                   </div>
                 </div>
