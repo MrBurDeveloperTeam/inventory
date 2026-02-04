@@ -22,7 +22,8 @@ import {
   Activity,
   ArrowDownLeft,
   ArrowRight,
-  Clock
+  Clock,
+  SlidersHorizontal
 } from 'lucide-react';
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
@@ -158,6 +159,13 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const toggleBatchRow = (key: string) => {
     setOpenBatchRows(prev => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const [openDetailRows, setOpenDetailRows] = useState<Record<string, boolean>>({});
+  const toggleDetailRow = (key: string) => {
+    setOpenDetailRows(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const [showFilters, setShowFilters] = useState(false);
 
   // Group by category for the table - and preserve category encounter order
   // Since allItems is sorted old -> new, the groups array will be sorted by the oldest item in each category
@@ -353,37 +361,37 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* Navigation Tabs Bar */}
-      <div className="flex items-center justify-between bg-white rounded-2xl shadow-sm border border-slate-100 p-2 shrink-0">
+      <div className="flex items-center justify-between bg-white rounded-none md:rounded-2xl shadow-sm border-x-0 md:border border-slate-100 p-1 md:p-2 shrink-0">
         <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar-hide">
           <button
             onClick={() => setActiveTab('all')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-[#4d9678] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-[#4d9678] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <ClipboardList className="w-4 h-4" /> All Inventory
           </button>
           {!readOnly && (
             <button
               onClick={() => setActiveTab('receive')}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'receive' ? 'bg-[#3498db] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+              className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'receive' ? 'bg-[#3498db] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
             >
               <Package className="w-4 h-4" /> Receive Stock
             </button>
           )}
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'history' ? 'bg-[#9b59b6] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'history' ? 'bg-[#9b59b6] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <History className="w-4 h-4" /> Purchase History
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'analytics' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'analytics' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <BarChart3 className="w-4 h-4" /> Usage Stats
           </button>
           <button
             onClick={() => setActiveTab('expiring')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'expiring' ? 'bg-[#f39c12] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'expiring' ? 'bg-[#f39c12] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <AlertTriangle className="w-4 h-4" /> Expiring Items
             {expiringItems.length > 0 && <span className={`ml-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${activeTab === 'expiring' ? 'bg-white text-[#f39c12]' : 'bg-[#f39c12] text-white'}`}>{expiringItems.length}</span>}
@@ -395,46 +403,58 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
           </button>
         </div>
       </div>
-      <div className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100 p-6 md:p-8 min-h-[500px]">
+      <div className="bg-white rounded-none md:rounded-[2rem] shadow-xl overflow-hidden border-x-0 md:border border-slate-100 px-4 py-6 md:p-8 min-h-[500px]">
 
         {/* VIEW: ALL INVENTORY */}
         {
           activeTab === 'all' && (
             <div className="flex flex-col gap-6 animate-in fade-in duration-300">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm">
-                <select
-                  value={inventoryCategory}
-                  onChange={e => setInventoryCategory(e.target.value)}
-                  className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none"
-                >
-                  <option value="all">All Categories</option>
-                  {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </select>
-                <select
-                  value={inventoryVendor}
-                  onChange={e => setInventoryVendor(e.target.value)}
-                  className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none"
-                >
-                  <option value="all">All Vendors</option>
-                  {uniqueInventoryVendors.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-                <select
-                  value={inventoryLocation}
-                  onChange={e => setInventoryLocation(e.target.value)}
-                  className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none"
-                >
-                  <option value="all">All Locations</option>
-                  {inventoryLocations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
-                </select>
-                <div className="relative md:col-span-2">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    placeholder="Search records..."
-                    className="h-10 w-full pl-10 pr-6 py-4 bg-white border border-slate-200 rounded-2xl text-xs font-semibold text-slate-600 outline-none transition-all"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+              {/* FILTER AREA */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                    <input
+                      type="text"
+                      placeholder="Search records..."
+                      className="h-11 w-full pl-10 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-semibold text-slate-600 outline-none focus:ring-2 focus:ring-[#4d9678]/20 focus:border-[#4d9678] transition-all"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`md:hidden h-11 w-11 flex items-center justify-center rounded-2xl border transition-all ${showFilters ? 'bg-[#4d9678] border-[#4d9678] text-white' : 'bg-white border-slate-200 text-slate-400'}`}
+                  >
+                    <SlidersHorizontal className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className={`${showFilters ? 'flex' : 'hidden md:flex'} flex-col md:flex-row items-center gap-3 animate-in slide-in-from-top-2`}>
+                  <select
+                    value={inventoryCategory}
+                    onChange={e => setInventoryCategory(e.target.value)}
+                    className="w-full md:w-auto h-10 bg-slate-50 border border-slate-100 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer"
+                  >
+                    <option value="all">All Categories</option>
+                    {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                  <select
+                    value={inventoryVendor}
+                    onChange={e => setInventoryVendor(e.target.value)}
+                    className="w-full md:w-auto h-10 bg-slate-50 border border-slate-100 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer"
+                  >
+                    <option value="all">All Vendors</option>
+                    {uniqueInventoryVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select
+                    value={inventoryLocation}
+                    onChange={e => setInventoryLocation(e.target.value)}
+                    className="w-full md:w-auto h-10 bg-slate-50 border border-slate-100 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer"
+                  >
+                    <option value="all">All Locations</option>
+                    {inventoryLocations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                  </select>
                 </div>
               </div>
 
@@ -694,112 +714,122 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                         const isExpiringSoon = expiryDateObj ? !isExpired && expiryDateObj <= soonThreshold : false;
                         const batches = item.batches && item.batches.length ? item.batches : [{ qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }];
                         const batchKey = `${item.roomId}-${item.id}`;
+                        const isDetailOpen = !!openDetailRows[batchKey];
                         const isOpen = !!openBatchRows[batchKey];
 
                         return (
-                          <div key={batchKey} className={`bg-white rounded-2xl border ${isOpen ? 'border-blue-200 ring-4 ring-blue-50' : 'border-slate-100 shadow-sm'} overflow-hidden transition-all duration-300`}>
-                            {/* Card Header */}
-                            <div className="p-4 border-b border-slate-50 flex items-start justify-between gap-4">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[120px]">
-                                    {item.brand || 'No Brand'}
-                                  </span>
-                                  {item.code && (
-                                    <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono font-bold">
-                                      {item.code}
-                                    </span>
-                                  )}
+                          <div key={batchKey} className={`bg-white rounded-2xl border transition-all duration-300 ${isDetailOpen ? 'border-emerald-200 ring-4 ring-emerald-50' : isOpen ? 'border-blue-200 ring-4 ring-blue-50' : 'border-slate-100 shadow-sm'} overflow-hidden`}>
+                            {/* Compact Main View */}
+                            <div className="p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-bold text-slate-800 text-sm leading-tight truncate" title={item.name}>{item.name}</h4>
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    <div className="flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                      <MapIcon className="w-2.5 h-2.5" />
+                                      {item.roomName}
+                                    </div>
+                                    <div className="text-[10px] font-bold text-slate-400">
+                                      ${item.price.toFixed(2)}/ea
+                                    </div>
+                                    <div className="text-[10px] font-black text-[#4d9678]">
+                                      Total: ${(item.quantity * item.price).toFixed(2)}
+                                    </div>
+                                  </div>
                                 </div>
-                                <h4 className="font-bold text-slate-800 leading-tight truncate" title={item.name}>{item.name}</h4>
-                                {item.description && (
-                                  <p className="text-[11px] text-slate-500 italic mt-1 leading-relaxed">
-                                    {item.description}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
 
-                            {/* Main Info Area */}
-                            <div className="px-4 py-5 bg-gradient-to-br from-white to-slate-50/50 flex items-center justify-between">
-                              <div className="flex items-center gap-4">
-                                {readOnly || batches.length > 1 || !onUpdateQty ? (
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Quantity</span>
+                                <div className="flex items-center gap-2">
+                                  <div className={`px-2 py-1 rounded-lg font-black text-xs ${item.quantity <= 5 ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-700'}`}>
+                                    {item.quantity}
+                                  </div>
+                                  <button
+                                    onClick={() => toggleDetailRow(batchKey)}
+                                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${isDetailOpen ? 'bg-emerald-500 text-white rotate-180' : 'bg-slate-50 text-slate-400'}`}
+                                  >
+                                    <ChevronDown className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Quick Qty Access if Detail is open or explicitly requested */}
+                              {isDetailOpen && !readOnly && batches.length === 1 && onUpdateQty && (
+                                <div className="mt-3 py-2 flex items-center justify-center gap-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                  <button
+                                    onClick={() => item.quantity > 1 && onUpdateQty(item.roomId, item.id, -1)}
+                                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-400 shadow-sm"
+                                  >
+                                    <Minus className="w-4 h-4" />
+                                  </button>
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-[9px] font-black text-slate-400 uppercase">Edit Qty</span>
                                     <span className="text-xl font-black text-slate-800">{item.quantity}</span>
                                   </div>
-                                ) : (
-                                  <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm">
-                                    <button
-                                      onClick={() => item.quantity > 1 && onUpdateQty(item.roomId, item.id, -1)}
-                                      disabled={item.quantity <= 1}
-                                      className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all active:scale-90"
-                                    >
-                                      <Minus className="w-4 h-4" />
-                                    </button>
-                                    <span className="w-10 text-center font-black text-lg text-slate-800">
-                                      {item.quantity}
-                                    </span>
-                                    <button
-                                      onClick={() => onUpdateQty(item.roomId, item.id, 1)}
-                                      className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-emerald-50 hover:text-emerald-500 transition-all active:scale-90"
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                )}
-                                <div className="flex flex-col">
-                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Unit</span>
-                                  <span className="text-sm font-bold text-slate-600 capitalize">{item.uom}</span>
-                                </div>
-                              </div>
-
-                              <div className="text-right">
-                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Value</div>
-                                <div className="text-xl font-black text-[#4d9678] tracking-tight">
-                                  ${(item.quantity * item.price).toFixed(2)}
-                                </div>
-                                <div className="text-[10px] font-bold text-slate-400 mt-1">
-                                  ${item.price.toFixed(2)} / ea
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Secondary Details Area */}
-                            <div className="p-4 bg-white border-t border-slate-50 space-y-4">
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Location</span>
-                                  <div className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-black inline-flex items-center gap-1.5 border border-emerald-100">
-                                    <MapIcon className="w-3 h-3" />
-                                    {item.roomName}
-                                  </div>
-                                </div>
-                                <div className="space-y-1 text-right">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Expiration</span>
-                                  <div className={`flex items-center justify-end gap-1.5 text-[11px] font-bold ${isExpired ? "text-rose-600" : isExpiringSoon ? "text-amber-600" : "text-slate-600"}`}>
-                                    <Calendar className="w-3.5 h-3.5" />
-                                    {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-GB') : 'No Date'}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center justify-between gap-3 pt-2">
-                                <div className="flex flex-col">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Vendor</span>
-                                  <span className="text-[11px] font-bold text-slate-600">{item.vendor || 'Unknown'}</span>
-                                </div>
-
-                                {batches.length > 1 && (
                                   <button
-                                    onClick={() => toggleBatchRow(batchKey)}
-                                    className={`px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${isOpen ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                                    onClick={() => onUpdateQty(item.roomId, item.id, 1)}
+                                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-400 shadow-sm"
                                   >
-                                    {isOpen ? `Hide ${batches.length} Batches` : `View ${batches.length} Batches`}
+                                    <Plus className="w-4 h-4" />
                                   </button>
-                                )}
-                              </div>
+                                </div>
+                              )}
                             </div>
+
+                            {/* Expandable Secondary Details Area */}
+                            {isDetailOpen && (
+                              <div className="p-4 bg-emerald-50/30 border-t border-emerald-100/50 space-y-4 animate-in slide-in-from-top-2 duration-300">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Brand / Code</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[11px] font-bold text-slate-600">{item.brand || 'No Brand'}</span>
+                                      {item.code && (
+                                        <span className="text-[9px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-mono font-bold">
+                                          {item.code}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1 text-right">
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Expiration</span>
+                                    <div className={`flex items-center justify-end gap-1.5 text-[11px] font-bold ${isExpired ? "text-rose-600" : isExpiringSoon ? "text-amber-600" : "text-slate-600"}`}>
+                                      <Calendar className="w-3.5 h-3.5" />
+                                      {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-GB') : 'No Date'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {item.description && (
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Description</span>
+                                    <p className="text-[11px] text-slate-500 italic leading-relaxed">
+                                      {item.description}
+                                    </p>
+                                  </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Vendor</span>
+                                    <span className="text-[11px] font-bold text-slate-600">{item.vendor || 'Unknown'}</span>
+                                  </div>
+                                  <div className="space-y-1 text-right">
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">UOM</span>
+                                    <span className="text-[11px] font-bold text-slate-600 capitalize">{item.uom}</span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-end pt-2 border-t border-emerald-100/30">
+                                  {batches.length > 1 && (
+                                    <button
+                                      onClick={() => toggleBatchRow(batchKey)}
+                                      className={`px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${isOpen ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-white border border-blue-100 text-blue-600 hover:bg-blue-50'}`}
+                                    >
+                                      {isOpen ? `Hide ${batches.length} Batches` : `View ${batches.length} Batches`}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
 
                             {/* Mobile Batches Expansion */}
                             {isOpen && (
@@ -1241,7 +1271,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       </div>
 
       {/* Global Activity Feed (Footer) */}
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-10 mt-6 mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
+      <div className="bg-white rounded-none md:rounded-[2.5rem] shadow-sm border-x-0 md:border border-slate-100 p-4 md:p-10 mt-6 mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <div className="bg-slate-800 p-3 rounded-2xl">

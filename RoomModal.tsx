@@ -110,6 +110,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrStatusText, setOcrStatusText] = useState('');
   const [ocrResult, setOcrResult] = useState<(Partial<Item> & { purchaseDate?: string })[] | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -184,7 +185,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
         vendor: i.vendor || '',
         expiryDate: i.expiryDate || undefined,
         purchaseDate: i.purchaseDate || new Date().toISOString().split('T')[0],
-        description: `Imported: ${i.product}`
+        description: i.description || ''
       }));
 
       setOcrResult(parsed);
@@ -466,15 +467,38 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
               </div>
 
               {ocrStep === 'upload' && (
-                <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-emerald-200 rounded-xl bg-white/50 gap-4">
-                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      const imgs = await filesToImages([e.dataTransfer.files[0]]);
+                      processCapturedImage(imgs[0]);
+                    }
+                  }}
+                  className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl transition-all duration-300 gap-4 ${isDragging
+                    ? 'border-emerald-500 bg-emerald-100/50 scale-[1.02] shadow-xl shadow-emerald-100'
+                    : 'border-emerald-200 bg-white/50'
+                    }`}
+                >
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${isDragging ? 'bg-emerald-500 text-white scale-110' : 'bg-emerald-100 text-emerald-600'
+                    }`}>
                     <Camera className="w-8 h-8" />
                   </div>
                   <div className="text-center">
-                    <h5 className="font-bold text-slate-700 mb-1">Upload Receipt or Label</h5>
-                    <p className="text-xs text-slate-400">Take a photo or upload an image to automatically extract details</p>
+                    <h5 className={`font-bold transition-colors duration-300 ${isDragging ? 'text-emerald-700' : 'text-slate-700'} mb-1`}>
+                      {isDragging ? 'Drop Image Here' : 'Upload Receipt or Label'}
+                    </h5>
+                    <p className="text-xs text-slate-400">
+                      {isDragging ? 'Let go to start extraction' : 'Take a photo, upload or drag and drop an image'}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className={`flex items-center gap-3 transition-opacity duration-300 ${isDragging ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
                     <button
                       onClick={startCamera}
                       className="bg-white text-emerald-600 border border-emerald-200 px-6 py-2 rounded-lg font-bold text-xs hover:bg-emerald-50 transition-all shadow-sm flex items-center gap-2"
@@ -519,7 +543,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                           className="group relative flex items-center justify-center"
                         >
                           <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.3)] transform active:scale-90 transition-transform">
-                            <div className="w-12 h-12 rounded-full border-2 border-slate-100 flex items-center justify-center">
+                            <div className="w-14 h-14 rounded-full border-2 border-slate-100 flex items-center justify-center">
                               <Camera className="w-8 h-8 text-slate-800" />
                             </div>
                           </div>
@@ -584,26 +608,182 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                 <div className="flex flex-col gap-6">
                   <div className="flex flex-col gap-2">
                     <div className="font-bold text-slate-500 text-[10px] uppercase tracking-widest mb-2">Original Image</div>
-                    <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm relative h-48 w-full bg-slate-900">
-                      <img src={ocrImage || ''} className="w-full h-full object-contain" />
+                    <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm relative mx-auto bg-slate-50 w-fit">
+                      <img src={ocrImage || ''} className="max-h-[320px] w-auto h-auto block" />
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 overflow-hidden">
                     <div className="font-bold text-slate-500 text-[10px] uppercase tracking-widest mb-2">Extracted Data ({ocrResult.length} items)</div>
-                    <div className="overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-sm max-h-[400px]">
+
+                    {/* MOBILE CARD VIEW */}
+                    <div className="md:hidden flex flex-col gap-4 max-h-[500px] overflow-y-auto px-1 py-1">
+                      {ocrResult.length === 0 && (
+                        <div className="p-8 text-center text-slate-400 text-xs italic bg-white rounded-2xl border border-dashed border-slate-200">
+                          No items detected
+                        </div>
+                      )}
+                      {ocrResult.map((item, idx) => (
+                        <div key={idx} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 relative flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: `${idx * 50}ms` }}>
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex flex-col gap-1 flex-1">
+                              <input
+                                className="w-full bg-slate-50 border-none focus:ring-2 focus:ring-emerald-500 rounded-lg px-3 py-2 font-bold text-slate-800 text-xs"
+                                value={item.name || ''}
+                                onChange={e => {
+                                  const newRes = [...ocrResult];
+                                  newRes[idx] = { ...item, name: e.target.value };
+                                  setOcrResult(newRes);
+                                }}
+                                placeholder="Item Name"
+                              />
+                              <input
+                                className="w-full bg-slate-50 border-none focus:ring-2 focus:ring-emerald-500 rounded-lg px-3 py-1.5 text-slate-500 text-[10px]"
+                                value={item.description || ''}
+                                onChange={e => {
+                                  const newRes = [...ocrResult];
+                                  newRes[idx] = { ...item, description: e.target.value };
+                                  setOcrResult(newRes);
+                                }}
+                                placeholder="Add product description..."
+                              />
+                            </div>
+                            <button
+                              onClick={() => {
+                                const newRes = ocrResult.filter((_, i) => i !== idx);
+                                setOcrResult(newRes);
+                              }}
+                              className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Qty & Price</label>
+                              <div className="flex items-center gap-1 bg-slate-50 rounded-lg px-2 overflow-hidden">
+                                <input
+                                  type="number"
+                                  className="w-10 bg-transparent border-none focus:ring-0 text-slate-700 font-bold text-xs p-1"
+                                  value={item.quantity || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, quantity: parseInt(e.target.value) || 0 };
+                                    setOcrResult(newRes);
+                                  }}
+                                  placeholder="0"
+                                />
+                                <span className="text-slate-300 text-[10px]">×</span>
+                                <input
+                                  type="number" step="0.01"
+                                  className="flex-1 min-w-0 bg-transparent border-none focus:ring-0 text-slate-700 font-bold text-xs p-1"
+                                  value={item.price || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, price: parseFloat(e.target.value) || 0 };
+                                    setOcrResult(newRes);
+                                  }}
+                                  placeholder="0.00"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">UOM</label>
+                              <select
+                                className="w-full bg-slate-50 border-none focus:ring-2 focus:ring-emerald-500 rounded-lg px-3 py-2 text-slate-700 font-bold text-xs appearance-none"
+                                value={item.uom || 'box'}
+                                onChange={e => {
+                                  const newRes = [...ocrResult];
+                                  newRes[idx] = { ...item, uom: e.target.value as UOM };
+                                  setOcrResult(newRes);
+                                }}
+                              >
+                                {UOMS.map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Brand</label>
+                              <input
+                                className="w-full bg-slate-50 border-none focus:ring-2 focus:ring-emerald-500 rounded-lg px-3 py-2 text-slate-600 text-xs"
+                                value={item.brand || ''}
+                                onChange={e => {
+                                  const newRes = [...ocrResult];
+                                  newRes[idx] = { ...item, brand: e.target.value };
+                                  setOcrResult(newRes);
+                                }}
+                                placeholder="Brand"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Code</label>
+                              <input
+                                className="w-full bg-slate-50 border-none focus:ring-2 focus:ring-emerald-500 rounded-lg px-3 py-2 text-slate-600 text-xs font-mono"
+                                value={item.code || ''}
+                                onChange={e => {
+                                  const newRes = [...ocrResult];
+                                  newRes[idx] = { ...item, code: e.target.value };
+                                  setOcrResult(newRes);
+                                }}
+                                placeholder="Code"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Purchased / Expires</label>
+                            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2">
+                              <input
+                                type="date"
+                                className="flex-1 bg-transparent border-none focus:ring-0 text-slate-600 text-[10px] p-1.5"
+                                value={item.purchaseDate || ''}
+                                onChange={e => {
+                                  const newRes = [...ocrResult];
+                                  newRes[idx] = { ...item, purchaseDate: e.target.value };
+                                  setOcrResult(newRes);
+                                }}
+                              />
+                              <span className="text-slate-300">→</span>
+                              <input
+                                type="date"
+                                className="flex-1 bg-transparent border-none focus:ring-0 text-slate-600 text-[10px] p-1.5"
+                                value={item.expiryDate || ''}
+                                onChange={e => {
+                                  const newRes = [...ocrResult];
+                                  newRes[idx] = { ...item, expiryDate: e.target.value };
+                                  setOcrResult(newRes);
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => setOcrResult([...ocrResult, { name: '', quantity: 1, price: 0, purchaseDate: new Date().toISOString().split('T')[0] }])}
+                        className="w-full py-4 bg-emerald-50 text-emerald-600 border-2 border-dashed border-emerald-200 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-100 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" /> Add Another Item
+                      </button>
+                    </div>
+
+                    {/* DESKTOP TABLE VIEW */}
+                    <div className="hidden md:block overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-sm max-h-[400px]">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-100">
                           <tr>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[180px]">Name</th>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[50px]">Qty</th>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[60px]">Price</th>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px]">Brand</th>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[80px]">Code</th>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[60px]">UOM</th>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Vendor</th>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Category</th>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Purchased</th>
-                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[90px]">Expires</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[200px]">Name</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[180px]">Description</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[60px]">Qty</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[80px]">Price</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[110px]">Brand</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[100px]">Code</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[75px]">UOM</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[120px]">Vendor</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[120px]">Category</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[120px]">Purchased</th>
+                            <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-[120px]">Expires</th>
                             <th className="p-2 text-[10px] font-black text-slate-500 uppercase tracking-widest w-8"></th>
                           </tr>
                         </thead>
@@ -624,8 +804,20 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                               </td>
                               <td className="px-3 py-2">
                                 <input
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded px-1 text-slate-500 text-[10px]"
+                                  value={item.description || ''}
+                                  onChange={e => {
+                                    const newRes = [...ocrResult];
+                                    newRes[idx] = { ...item, description: e.target.value };
+                                    setOcrResult(newRes);
+                                  }}
+                                  placeholder="Description"
+                                />
+                              </td>
+                              <td className="px-2 py-2">
+                                <input
                                   type="number"
-                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded px-1 text-slate-600 font-semibold text-[11px]"
+                                  className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded px-1 text-slate-600 font-semibold text-[11px] text-center"
                                   value={item.quantity || ''}
                                   onChange={e => {
                                     const newRes = [...ocrResult];
@@ -635,7 +827,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                   placeholder="0"
                                 />
                               </td>
-                              <td className="px-3 py-2">
+                              <td className="px-2 py-2">
                                 <input
                                   type="number" step="0.01"
                                   className="w-full bg-transparent border-none focus:ring-1 focus:ring-emerald-500 rounded px-1 text-slate-600 font-semibold text-[11px]"
@@ -748,7 +940,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                             </tr>
                           ))}
                           {ocrResult.length === 0 && (
-                            <tr><td colSpan={4} className="p-4 text-center text-slate-300 text-xs italic">No items detected</td></tr>
+                            <tr><td colSpan={11} className="p-4 text-center text-slate-300 text-xs italic">No items detected</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -762,7 +954,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                   </div>
 
 
-                  <div className="flex gap-3 pt-2">
+                  <div className="flex flex-col sm:flex-row-reverse items-center justify-center gap-3 pt-2">
                     <button
                       onClick={() => {
                         // Bulk Add
@@ -777,7 +969,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                 uom: item.uom || 'box',
                                 code: item.code || '',
                                 vendor: item.vendor || '',
-                                description: item.description || 'Imported via OCR',
+                                description: item.description || '',
                                 expiryDate: item.expiryDate || undefined
                               },
                               item.quantity || 1,
@@ -791,13 +983,13 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                         setIsOCRActive(false);
                       }}
                       disabled={ocrResult.length === 0}
-                      className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all disabled:opacity-50 disabled:shadow-none"
+                      className="w-full sm:w-44 bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[12px] tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2"
                     >
-                      Add All Items ({ocrResult.length})
+                      <Plus className="w-3 h-3" /> Add All ({ocrResult.length})
                     </button>
                     <button
                       onClick={() => setOcrStep('upload')}
-                      className="px-6 bg-slate-100 text-slate-500 py-3 rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all"
+                      className="w-full sm:w-44 bg-slate-100 text-slate-500 py-3 rounded-xl font-bold uppercase text-[12px] tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
                     >
                       Retry
                     </button>

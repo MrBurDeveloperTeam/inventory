@@ -27,9 +27,11 @@ export const extractDataFromImage = async (base64Image: string, mimeType: string
       - EXPIRES: Expiry date if visible (YYYY-MM-DD), otherwise empty.
       - UOM: Unit of measure. Use one of these EXACT values: pcs, box, unit, kit. Default to 'pcs' if unsure.
       - PURCHASE_DATE: The date of the invoice or purchase (YYYY-MM-DD). If present at the top of the document, apply it to all items.
-
+      - DESCRIPTION: A detailed description of the product if available. If no distinct description is found on the document (other than the product name itself), leave this field as an EMPTY STRING.
+ 
       If a field is not explicitly present, try to infer it from context or leave it as an empty string (or 0 for numbers).
       For VENDOR and PURCHASE_DATE, if they appear at the top of the document, apply them to all items.
+      Do NOT invent descriptions or duplicate the product name into the description field.
     `;
 
     const response = await ai.models.generateContent({
@@ -65,6 +67,7 @@ export const extractDataFromImage = async (base64Image: string, mimeType: string
               category: { type: Type.STRING },
               expiryDate: { type: Type.STRING },
               purchaseDate: { type: Type.STRING },
+              description: { type: Type.STRING },
             },
             required: ["product"],
           },

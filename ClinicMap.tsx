@@ -222,7 +222,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   };
 
   return (
-    <section className="w-full bg-white rounded-[2rem] shadow-xl overflow-hidden relative border border-slate-100 h-[650px] flex flex-col">
+    <section className="w-full bg-white rounded-none md:rounded-[2rem] shadow-xl overflow-hidden relative border-x-0 md:border border-slate-100 h-[650px] flex flex-col">
       <style>{`
         @keyframes shadow-breathe {
           0%, 50%, 100% { transform: scale(1); opacity: 0.15; }
@@ -240,7 +240,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
         }
       `}</style>
 
-      <div className="p-4 md:p-5 bg-slate-50 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between shrink-0 gap-4">
+      <div className="px-3 py-4 md:p-5 bg-slate-50 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between shrink-0 gap-4">
         <div className="flex flex-wrap items-center gap-3 justify-between md:justify-start w-full md:w-auto">
           <div className="flex items-center gap-2">
             <MapIcon className="w-5 h-5 text-emerald-600 shrink-0" />
