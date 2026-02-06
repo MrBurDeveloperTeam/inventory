@@ -1,0 +1,184 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.pet-interface {
+  font-family: 'Fredoka', sans-serif;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+/* Custom animations */
+@keyframes breathe {
+
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+  }
+
+  50% {
+    transform: scale(1.02) translateY(-2px);
+  }
+}
+
+@keyframes bounce {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-15px);
+  }
+}
+
+@keyframes eat {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05) rotate(3deg);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes chew {
+
+  0%,
+  100% {
+    transform: scaleY(1) scaleX(1);
+  }
+
+  50% {
+    transform: scaleY(0.5) scaleX(1.15);
+  }
+}
+
+@keyframes stink {
+  0% {
+    transform: translateY(0) scale(0.5);
+    opacity: 0;
+  }
+
+  40% {
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: translateY(-40px) scale(1.2);
+    opacity: 0;
+  }
+}
+
+@keyframes rain {
+  0% {
+    transform: translateY(-10px) scaleY(0.5);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 1;
+    transform: translateY(0px) scaleY(1);
+  }
+
+  100% {
+    transform: translateY(120px) scaleY(1.2);
+    opacity: 0;
+  }
+}
+
+@keyframes tail-sway {
+
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  50% {
+    transform: rotate(15deg);
+  }
+}
+
+.animate-breathe {
+  animation: breathe 3s infinite ease-in-out;
+}
+
+.animate-bounce-custom {
+  animation: bounce 0.6s ease-in-out;
+}
+
+.animate-eat {
+  animation: eat 0.3s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-chew {
+  animation: chew 0.25s infinite ease-in-out;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-stink-1 {
+  animation: stink 3s infinite ease-out;
+}
+
+.animate-stink-2 {
+  animation: stink 3s infinite ease-out 1s;
+}
+
+.animate-stink-3 {
+  animation: stink 3s infinite ease-out 2s;
+}
+
+.animate-rain {
+  animation: rain 0.6s linear infinite;
+}
+
+.animate-tail {
+  animation: tail-sway 3s infinite ease-in-out;
+  transform-origin: 150px 150px;
+}
+
+/* Hide scrollbar for clean UI */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

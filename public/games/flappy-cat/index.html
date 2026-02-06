@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Cat</title>
+    <link rel="icon" type="image/png" href="./faviconcat.png">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="flappybird.css">
+    <script src="flappybird.js"></script>
+</head>
+
+<body>
+    <div id="overlay">
+        <div id="title">
+            <span>F</span><span>L</span><span>A</span><span>P</span><span>P</span><span>Y</span>
+            <span class="space"> </span>
+            <span>C</span><span>A</span><span>T</span>
+        </div>
+
+        <button id="start-btn">START</button>
+    </div>
+    <div id="gameover-modal" class="hidden">
+        <div class="modal-card">
+            <div class="modal-title">GAME OVER</div>
+            <div class="score-row"><span>Score</span><span id="score-value">0</span></div>
+            <div class="score-row"><span>High Score</span><span id="highscore-value">0</span></div>
+            <button id="play-again">Play</button>
+        </div>
+    </div>
+    <canvas id="board"></canvas>
+</body>
+
+</html>

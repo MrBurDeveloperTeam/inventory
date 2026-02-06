@@ -11,10 +11,10 @@ import ProfilePage from './ProfilePage';
 import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
 import { MolarChat } from './MolarChat';
+import { VirtualPetContainer } from './VirtualPet/VirtualPetContainer';
 import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { MessageCircle } from 'lucide-react';
-import { roomsApi, itemsApi, batchesApi, metaApi, logsApi } from './apiClient';
 
 type ManagedInventory = {
   userId: string;
@@ -192,6 +192,9 @@ const App: React.FC = () => {
   const lastLoadRequestId = useRef(0);
   const metaSyncTimer = useRef<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+
+  // Virtual Pet State
+  const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
 
   // Global Chat State
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -1198,22 +1201,22 @@ const App: React.FC = () => {
     setIsAddMode(false);
     isDirty.current = true;
 
-    // 2. Direct Persistence via API
+    // 2. Direct Persistence
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
-      try {
-        await roomsApi.create({
-          id: newRoomId,
-          user_id: currentInventoryOwnerId,
-          name: newRoom.name,
-          pos_x: x,
-          pos_y: y
-        });
-        setSyncStatus('synced');
-      } catch (error) {
+      const { error } = await supabase.from('inventory_rooms').insert({
+        id: newRoomId,
+        user_id: currentInventoryOwnerId,
+        name: newRoom.name,
+        pos_x: x,
+        pos_y: y
+      });
+      if (error) {
         console.error('Failed to persist new room:', error);
         setSyncStatus('error');
+      } else {
+        setSyncStatus('synced');
       }
       isDirty.current = false;
       syncInFlight.current = false;
@@ -1232,15 +1235,44 @@ const App: React.FC = () => {
     }
     isDirty.current = true;
 
-    // 2. Direct Persistence via API
+    // 2. Direct Persistence
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
-        await roomsApi.delete(id);
+        // Since we might not have server-side CASCADE, we perform a manual cascade delete logic.
+        // Identify all items in this room
+        const { data: itemsToDelete } = await supabase
+          .from('inventory_items')
+          .select('id')
+          .eq('room_id', id);
+
+        if (itemsToDelete && itemsToDelete.length > 0) {
+          const itemIds = itemsToDelete.map(i => i.id);
+
+          // Delete batches for those items first
+          await supabase
+            .from('inventory_item_batches')
+            .delete()
+            .in('item_id', itemIds);
+
+          // Delete the items
+          await supabase
+            .from('inventory_items')
+            .delete()
+            .in('id', itemIds);
+        }
+
+        // Finally, delete the room
+        const { error } = await supabase
+          .from('inventory_rooms')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
         setSyncStatus('synced');
       } catch (err) {
-        console.error('Failed to delete room:', err);
+        console.error('Failed to delete room with manual cascade:', err);
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
@@ -1264,16 +1296,16 @@ const App: React.FC = () => {
       addActivity(id, name, 'edit', `Renamed room "${oldName}" to "${name}"`, { beforeValue: oldName, afterValue: name });
     }
 
-    // 2. Direct Persistence via API
+    // 2. Direct Persistence
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
-      try {
-        await roomsApi.update(id, { name });
-        setSyncStatus('synced');
-      } catch (error) {
+      const { error } = await supabase.from('inventory_rooms').update({ name, user_id: currentInventoryOwnerId }).eq('id', id);
+      if (error) {
         console.error('Failed to update room name in DB:', error);
         setSyncStatus('error');
+      } else {
+        setSyncStatus('synced');
       }
       syncInFlight.current = false;
     }
@@ -1304,25 +1336,22 @@ const App: React.FC = () => {
     // Optimistic Update
     setLogs(prev => [newLog, ...prev].slice(0, 100));
 
-    // Direct Persistence via API
+    // Direct Persistence
     if (currentInventoryOwnerId) {
       syncInFlight.current = true;
-      try {
-        await logsApi.create({
-          id: newLogId,
-          user_id: currentInventoryOwnerId,
-          room_id: roomId,
-          room_name: roomName,
-          action,
-          details,
-          created_at: timestamp,
-          actor_id: supabaseUserId || null,
-          before_value: options?.beforeValue || null,
-          after_value: options?.afterValue || null
-        });
-      } catch (error) {
-        console.error('Failed to persist activity log:', error);
-      }
+      const { error } = await supabase.from('inventory_activity_logs').insert({
+        id: newLogId,
+        user_id: currentInventoryOwnerId,
+        room_id: roomId,
+        room_name: roomName,
+        action,
+        details,
+        created_at: timestamp,
+        actor_id: supabaseUserId || null,
+        before_value: options?.beforeValue || null,
+        after_value: options?.afterValue || null
+      });
+      if (error) console.error('Failed to persist activity log:', error);
       syncInFlight.current = false;
     }
   };
@@ -1334,7 +1363,11 @@ const App: React.FC = () => {
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       try {
-        await roomsApi.update(id, { pos_x: x, pos_y: y });
+        const { error } = await supabase
+          .from('inventory_rooms')
+          .update({ pos_x: x, pos_y: y })
+          .eq('id', id);
+        if (error) throw error;
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to update room position in DB:', err);
@@ -1442,54 +1475,62 @@ const App: React.FC = () => {
     };
     setHistory(h => [historyEntry, ...h]);
 
-    // 2. Direct Persistence via API
+    // 3. Direct Persistence
     if (affectedItemToSync && currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
         const itm = affectedItemToSync as Item;
-        await itemsApi.receive({
-          item: {
-            id: itm.id,
-            room_id: roomId,
-            user_id: currentInventoryOwnerId,
-            name: itm.name,
-            brand: itm.brand,
-            code: itm.code,
-            quantity: itm.quantity,
-            price: itm.price,
-            uom: itm.uom,
-            vendor: itm.vendor,
-            category: itm.category,
-            description: itm.description,
-            expiry_date: itm.expiryDate || null
-          },
-          batches: (itm.batches || []).map(b => ({
-            id: b.id,
-            item_id: itm.id,
-            qty: b.qty,
-            unit_price: b.unitPrice,
-            expiry_date: b.expiryDate || null
-          })),
-          history: {
-            id: historyEntry.id,
-            user_id: currentInventoryOwnerId,
-            room_id: historyEntry.roomId,
-            occurred_at: historyEntry.timestamp,
-            product_name: historyEntry.productName,
-            brand: historyEntry.brand,
-            code: historyEntry.code,
-            vendor: historyEntry.vendor,
-            qty: historyEntry.qty,
-            unit_price: historyEntry.unitPrice,
-            total_price: historyEntry.totalPrice,
-            location: historyEntry.location,
-            category: historyEntry.category,
-            uom: historyEntry.uom,
-            expiry_date: historyEntry.expiryDate || null,
-            description: historyEntry.description
-          }
+        const { error: itemErr } = await supabase.from('inventory_items').upsert({
+          id: itm.id,
+          room_id: roomId,
+          user_id: currentInventoryOwnerId,
+          name: itm.name,
+          brand: itm.brand,
+          code: itm.code,
+          quantity: itm.quantity,
+          price: itm.price,
+          uom: itm.uom,
+          vendor: itm.vendor,
+          category: itm.category,
+          description: itm.description,
+          expiry_date: itm.expiryDate
         });
+        if (itemErr) throw itemErr;
+
+        if (itm.batches) {
+          for (const b of itm.batches) {
+            await supabase.from('inventory_item_batches').upsert({
+              id: b.id,
+              item_id: itm.id,
+              qty: b.qty,
+              unit_price: b.unitPrice,
+              expiry_date: b.expiryDate
+            });
+          }
+        }
+
+        // 3. Persist History Entry
+        const { error: historyErr } = await supabase.from('inventory_purchase_history').insert({
+          id: historyEntry.id,
+          user_id: currentInventoryOwnerId,
+          room_id: historyEntry.roomId,
+          occurred_at: historyEntry.timestamp,
+          product_name: historyEntry.productName,
+          brand: historyEntry.brand,
+          code: historyEntry.code,
+          vendor: historyEntry.vendor,
+          qty: historyEntry.qty,
+          unit_price: historyEntry.unitPrice,
+          total_price: historyEntry.totalPrice,
+          location: historyEntry.location,
+          category: historyEntry.category,
+          uom: historyEntry.uom,
+          expiry_date: historyEntry.expiryDate,
+          description: historyEntry.description
+        });
+        if (historyErr) throw historyErr;
+
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to persist received stock:', err);
@@ -1593,42 +1634,42 @@ const App: React.FC = () => {
       { beforeValue: String(existingItem.quantity), afterValue: String(affectedItemToSync.quantity) }
     );
 
-    // 4. Direct Persistence via API
+    // 4. Direct Persistence
     if (affectedItemToSync && currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
         const itm = affectedItemToSync as Item;
 
+        // If quantity is 0, delete the item and its batches
         if (itm.quantity === 0) {
-          // Delete the item entirely via API
-          await itemsApi.delete(itm.id);
+          // Delete batches first
+          await supabase.from('inventory_item_batches').delete().eq('item_id', itm.id);
+          // Delete item
+          const { error: itemErr } = await supabase.from('inventory_items').delete().eq('id', itm.id);
+          if (itemErr) throw itemErr;
         } else {
-          // Update item and sync batches via receive endpoint
-          await itemsApi.receive({
-            item: {
-              id: itm.id,
-              room_id: roomId,
-              user_id: currentInventoryOwnerId,
-              name: itm.name,
-              brand: itm.brand,
-              code: itm.code,
-              quantity: itm.quantity,
-              price: itm.price,
-              uom: itm.uom,
-              vendor: itm.vendor,
-              category: itm.category,
-              description: itm.description,
-              expiry_date: itm.expiryDate || null
-            },
-            batches: (itm.batches || []).map(b => ({
-              id: b.id,
-              item_id: itm.id,
-              qty: b.qty,
-              unit_price: b.unitPrice,
-              expiry_date: b.expiryDate || null
-            }))
-          });
+          // Update item
+          const { error: itemErr } = await supabase.from('inventory_items').update({
+            quantity: itm.quantity,
+            price: itm.price,
+            expiry_date: itm.expiryDate
+          }).eq('id', itm.id);
+          if (itemErr) throw itemErr;
+
+          // Delete all existing batches and re-insert
+          await supabase.from('inventory_item_batches').delete().eq('item_id', itm.id);
+          if (itm.batches && itm.batches.length > 0) {
+            for (const b of itm.batches) {
+              await supabase.from('inventory_item_batches').insert({
+                id: b.id,
+                item_id: itm.id,
+                qty: b.qty,
+                unit_price: b.unitPrice,
+                expiry_date: b.expiryDate
+              });
+            }
+          }
         }
 
         setSyncStatus('synced');
@@ -1678,30 +1719,43 @@ const App: React.FC = () => {
       syncInFlight.current = true;
       try {
         const itm = updatedItem as Item;
-        await itemsApi.receive({
-          item: {
-            id: itm.id,
-            room_id: roomId,
-            user_id: currentInventoryOwnerId,
-            name: itm.name,
-            brand: itm.brand,
-            code: itm.code,
-            quantity: itm.quantity,
-            price: itm.price,
-            uom: itm.uom,
-            vendor: itm.vendor,
-            category: itm.category,
-            description: itm.description,
-            expiry_date: itm.expiryDate || null
-          },
-          batches: (itm.batches || []).map(b => ({
-            id: b.id,
-            item_id: itm.id,
-            qty: b.qty,
-            unit_price: b.unitPrice,
-            expiry_date: b.expiryDate || null
-          }))
-        });
+        // 1. Update parent item
+        const { error } = await supabase.from('inventory_items').update({
+          quantity: itm.quantity,
+          price: itm.price,
+          expiry_date: itm.expiryDate,
+          user_id: currentInventoryOwnerId
+        }).eq('id', itm.id);
+
+        if (error) throw error;
+
+        // 2. Sync batches (Upsert remaining, Delete missing)
+        if (itm.batches) {
+          // Get current batch IDs for this item to identify which ones to delete
+          const { data: dbBatches } = await supabase
+            .from('inventory_item_batches')
+            .select('id')
+            .eq('item_id', itm.id);
+
+          const currentBatchIds = new Set(itm.batches.map(b => b.id));
+          const idsToDelete = dbBatches
+            ? dbBatches.filter(dbB => !currentBatchIds.has(dbB.id)).map(dbB => dbB.id)
+            : [];
+
+          if (idsToDelete.length > 0) {
+            await supabase.from('inventory_item_batches').delete().in('id', idsToDelete);
+          }
+
+          for (const b of itm.batches) {
+            await supabase.from('inventory_item_batches').upsert({
+              id: b.id,
+              item_id: itm.id,
+              qty: b.qty,
+              unit_price: b.unitPrice,
+              expiry_date: b.expiryDate
+            });
+          }
+        }
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to update item quantity:', err);
@@ -1771,23 +1825,34 @@ const App: React.FC = () => {
       syncInFlight.current = true;
       try {
         const itm = updatedItem as Item;
+        // 1. Update parent item
+        const { error: itemUpdateError } = await supabase.from('inventory_items').update({
+          quantity: itm.quantity,
+          price: itm.price,
+          expiry_date: itm.expiryDate,
+          user_id: currentInventoryOwnerId
+        }).eq('id', itm.id);
+
+        if (itemUpdateError) throw itemUpdateError;
+
+        // 2. Update specific batch (If newly zero, delete from DB. If > 0, upsert.)
         const targetBatchInStore = itm.batches?.find(b => b.id === targetBatchId);
 
-        await batchesApi.update(targetBatchId, {
-          batch: {
-            id: targetBatchId,
+        if (!targetBatchInStore || targetBatchInStore.qty <= 0) {
+          // It was filtered out or set to 0, so delete it from DB
+          const { error: batchDeleteError } = await supabase.from('inventory_item_batches').delete().eq('id', targetBatchId);
+          if (batchDeleteError) throw batchDeleteError;
+        } else {
+          // Upsert the updated batch
+          const { error: batchUpsertError } = await supabase.from('inventory_item_batches').upsert({
+            id: targetBatchInStore.id,
             item_id: itm.id,
-            qty: targetBatchInStore?.qty || 0,
-            unit_price: targetBatchInStore?.unitPrice || 0,
-            expiry_date: targetBatchInStore?.expiryDate || null
-          },
-          itemUpdate: {
-            id: itm.id,
-            quantity: itm.quantity,
-            price: itm.price,
-            expiry_date: itm.expiryDate || null
-          }
-        });
+            qty: targetBatchInStore.qty,
+            unit_price: targetBatchInStore.unitPrice,
+            expiry_date: targetBatchInStore.expiryDate
+          });
+          if (batchUpsertError) throw batchUpsertError;
+        }
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to update batch qty:', err);
@@ -1851,30 +1916,34 @@ const App: React.FC = () => {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
-        await itemsApi.receive({
-          item: {
-            id: itemId,
-            room_id: roomId,
-            user_id: currentInventoryOwnerId,
-            name: updatedItem.name,
-            brand: updatedItem.brand,
-            code: updatedItem.code,
-            quantity: updatedItem.quantity,
-            price: updatedItem.price,
-            uom: updatedItem.uom,
-            vendor: updatedItem.vendor,
-            category: updatedItem.category,
-            description: updatedItem.description,
-            expiry_date: updatedItem.expiryDate || null
-          },
-          batches: (updatedItem.batches || []).map(b => ({
+        // 1. Update main item
+        const { error } = await supabase.from('inventory_items').update({
+          name: updatedItem.name,
+          brand: updatedItem.brand,
+          code: updatedItem.code,
+          uom: updatedItem.uom,
+          vendor: updatedItem.vendor,
+          category: updatedItem.category,
+          description: updatedItem.description,
+          expiry_date: updatedItem.expiryDate,
+          quantity: updatedItem.quantity,
+          price: updatedItem.price,
+          user_id: currentInventoryOwnerId
+        }).eq('id', itemId);
+        if (error) throw error;
+
+        // 2. Update the batch (primary)
+        if (updatedItem.batches && updatedItem.batches[0]) {
+          const b = updatedItem.batches[0];
+          await supabase.from('inventory_item_batches').upsert({
             id: b.id,
             item_id: itemId,
             qty: b.qty,
             unit_price: b.unitPrice,
-            expiry_date: b.expiryDate || null
-          }))
-        });
+            expiry_date: b.expiryDate
+          });
+        }
+
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to update item metadata:', err);
@@ -1933,22 +2002,23 @@ const App: React.FC = () => {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
-        const targetBatch = batches.find(b => b.id === batchId);
-        await batchesApi.update(batchId, {
-          batch: {
-            id: batchId,
-            item_id: itemId,
-            qty: targetBatch?.qty || batchData.qty || 0,
-            unit_price: targetBatch?.unitPrice || batchData.unitPrice || 0,
-            expiry_date: targetBatch?.expiryDate || batchData.expiryDate || null
-          },
-          itemUpdate: {
-            id: itemId,
-            quantity: updatedItem.quantity,
-            price: updatedItem.price,
-            expiry_date: updatedItem.expiryDate || null
-          }
-        });
+        // 1. Update batch
+        const { error: batchErr } = await supabase.from('inventory_item_batches').update({
+          qty: batchData.qty,
+          unit_price: batchData.unitPrice,
+          expiry_date: batchData.expiryDate,
+        }).eq('id', batchId);
+        if (batchErr) throw batchErr;
+
+        // 2. Update parent item summary
+        const { error: itemErr } = await supabase.from('inventory_items').update({
+          quantity: updatedItem.quantity,
+          price: updatedItem.price,
+          expiry_date: updatedItem.expiryDate,
+          user_id: currentInventoryOwnerId
+        }).eq('id', itemId);
+        if (itemErr) throw itemErr;
+
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to update batch metadata:', err);
@@ -1988,7 +2058,8 @@ const App: React.FC = () => {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
-        await itemsApi.delete(itemId);
+        const { error } = await supabase.from('inventory_items').delete().eq('id', itemId);
+        if (error) throw error;
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to delete item:', err);
@@ -2119,57 +2190,57 @@ const App: React.FC = () => {
     addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Moved ${quantity} of "${item.name}" to ${toRoom.name}`);
     addActivity(toRoomId, toRoom.name, 'transfer_in', `Received ${quantity} of "${item.name}" from ${fromRoom.name}`);
 
-    // 3. Direct Persistence via API
+    // 3. Direct Persistence
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
-        await itemsApi.transfer({
-          sourceItem: updatedFromItem.quantity > 0 ? {
-            id: updatedFromItem.id,
-            room_id: fromRoomId,
-            user_id: currentInventoryOwnerId,
-            name: updatedFromItem.name,
-            brand: updatedFromItem.brand,
-            code: updatedFromItem.code,
+        // A. PERSIST SOURCE (Update or Delete)
+        if (updatedFromItem.quantity > 0) {
+          await supabase.from('inventory_items').update({
             quantity: updatedFromItem.quantity,
             price: updatedFromItem.price,
-            uom: updatedFromItem.uom,
-            vendor: updatedFromItem.vendor,
-            category: updatedFromItem.category,
-            description: updatedFromItem.description,
-            expiry_date: updatedFromItem.expiryDate || null,
-            batches: (updatedFromItem.batches || []).map(b => ({
-              id: b.id,
-              qty: b.qty,
-              unit_price: b.unitPrice,
-              expiry_date: b.expiryDate || null
-            }))
-          } : undefined,
-          destinationItem: {
-            id: finalMovedItem.id,
-            room_id: toRoomId,
-            user_id: currentInventoryOwnerId,
-            name: finalMovedItem.name,
-            brand: finalMovedItem.brand,
-            code: finalMovedItem.code,
-            quantity: finalMovedItem.quantity,
-            price: finalMovedItem.price,
-            uom: finalMovedItem.uom,
-            vendor: finalMovedItem.vendor,
-            category: finalMovedItem.category,
-            description: finalMovedItem.description,
-            expiry_date: finalMovedItem.expiryDate || null,
-            batches: (finalMovedItem.batches || []).map(b => ({
-              id: b.id,
-              qty: b.qty,
-              unit_price: b.unitPrice,
-              expiry_date: b.expiryDate || null
-            }))
-          },
-          // If source was fully moved, pass the original item ID for deletion
-          deletedBatchIds: updatedFromItem.quantity <= 0 ? [] : undefined
+            expiry_date: updatedFromItem.expiryDate,
+            user_id: currentInventoryOwnerId
+          }).eq('id', updatedFromItem.id);
+
+          // Update batches for source
+          const { data: dbBatches } = await supabase.from('inventory_item_batches').select('id').eq('item_id', updatedFromItem.id);
+          const currentBatchIds = new Set(updatedFromItem.batches!.map(b => b.id));
+          const idsToDelete = dbBatches ? dbBatches.filter(dbB => !currentBatchIds.has(dbB.id)).map(dbB => dbB.id) : [];
+          if (idsToDelete.length > 0) await supabase.from('inventory_item_batches').delete().in('id', idsToDelete);
+          for (const b of updatedFromItem.batches!) {
+            await supabase.from('inventory_item_batches').upsert({ id: b.id, item_id: updatedFromItem.id, qty: b.qty, unit_price: b.unitPrice, expiry_date: b.expiryDate });
+          }
+        } else {
+          // Full move - delete source
+          await supabase.from('inventory_item_batches').delete().eq('item_id', item.id);
+          await supabase.from('inventory_items').delete().eq('id', item.id);
+        }
+
+        // B. PERSIST DESTINATION
+        await supabase.from('inventory_items').upsert({
+          id: finalMovedItem.id,
+          room_id: toRoomId,
+          name: finalMovedItem.name,
+          brand: finalMovedItem.brand,
+          category: finalMovedItem.category,
+          uom: finalMovedItem.uom,
+          quantity: finalMovedItem.quantity,
+          price: finalMovedItem.price,
+          expiry_date: finalMovedItem.expiryDate,
+          code: finalMovedItem.code,
+          vendor: finalMovedItem.vendor,
+          description: finalMovedItem.description,
+          user_id: currentInventoryOwnerId
         });
+
+        if (finalMovedItem.batches) {
+          for (const b of finalMovedItem.batches) {
+            await supabase.from('inventory_item_batches').upsert({ id: b.id, item_id: finalMovedItem.id, qty: b.qty, unit_price: b.unitPrice, expiry_date: b.expiryDate });
+          }
+        }
+
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to persist item move:', err);
@@ -2285,18 +2356,14 @@ const App: React.FC = () => {
                     if (metaSyncTimer.current) window.clearTimeout(metaSyncTimer.current);
                     metaSyncTimer.current = window.setTimeout(async () => {
                       setSyncStatus('syncing');
-                      try {
-                        await metaApi.update({
-                          user_id: currentInventoryOwnerId,
-                          blueprint: url,
-                          cat_position_x: catPosition.x,
-                          cat_position_y: catPosition.y
-                        });
-                        setSyncStatus('synced');
-                      } catch (error) {
-                        console.error('Failed to sync blueprint:', error);
-                        setSyncStatus('error');
-                      }
+                      await supabase.from('inventory_meta').upsert({
+                        user_id: currentInventoryOwnerId,
+                        blueprint: url,
+                        // Include latest cat position from state or just rely on current local state
+                        cat_position_x: catPosition.x,
+                        cat_position_y: catPosition.y
+                      }, { onConflict: 'user_id' });
+                      setSyncStatus('synced');
                     }, 1000);
                   }
                 } : undefined}
@@ -2311,23 +2378,19 @@ const App: React.FC = () => {
                     metaSyncTimer.current = window.setTimeout(async () => {
                       setSyncStatus('syncing');
                       console.log('Debounced Meta Sync: Saving cat position', pos);
-                      try {
-                        await metaApi.update({
-                          user_id: currentInventoryOwnerId,
-                          cat_position_x: pos.x,
-                          cat_position_y: pos.y,
-                          blueprint: blueprint || PRESET_BLUEPRINTS[0].url
-                        });
-                        setSyncStatus('synced');
-                      } catch (error) {
-                        console.error('Failed to sync cat position:', error);
-                        setSyncStatus('error');
-                      }
+                      await supabase.from('inventory_meta').upsert({
+                        user_id: currentInventoryOwnerId,
+                        cat_position_x: pos.x,
+                        cat_position_y: pos.y,
+                        blueprint: blueprint || PRESET_BLUEPRINTS[0].url
+                      }, { onConflict: 'user_id' });
+                      setSyncStatus('synced');
                     }, 1000);
                   }
                 } : undefined}
                 onReceive={receiveStock}
                 onOpenChat={() => setIsChatOpen(true)}
+                onOpenVirtualPet={() => setIsVirtualPetOpen(true)}
                 readOnly={!canManageStructure || isLoadingMain}
                 syncStatus={syncStatus}
               />
@@ -2384,7 +2447,7 @@ const App: React.FC = () => {
       />
 
       {/* Global Molar AI Chat */}
-      {!isChatOpen && (
+      {!isChatOpen && !isVirtualPetOpen && (
         <button
           onClick={() => setIsChatOpen(true)}
           className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-[9999]"
@@ -2403,16 +2466,20 @@ const App: React.FC = () => {
         </button>
       )}
 
-      <MolarChat
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        chatHistory={chatHistory}
-        isChatLoading={isChatLoading}
-        chatInput={chatInput}
-        setChatInput={setChatInput}
-        onSendMessage={handleSendChat}
-        chatEndRef={chatEndRef}
-      />
+      {!isVirtualPetOpen && (
+        <MolarChat
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          chatHistory={chatHistory}
+          isChatLoading={isChatLoading}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          onSendMessage={handleSendChat}
+          chatEndRef={chatEndRef}
+        />
+      )}
+
+      <VirtualPetContainer isOpen={isVirtualPetOpen} onClose={() => setIsVirtualPetOpen(false)} />
     </div>
   );
 };

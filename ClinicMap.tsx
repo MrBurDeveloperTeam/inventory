@@ -32,6 +32,7 @@ interface ClinicMapProps {
   onCatPositionChange?: (pos: CatPosition) => void;
   onReceive?: (roomId: string, itemData: any, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
   onOpenChat?: () => void;
+  onOpenVirtualPet?: () => void;
   readOnly?: boolean;
   syncStatus?: 'synced' | 'syncing' | 'error';
 }
@@ -60,7 +61,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   onAddRoom, onDeleteRoom, onSelectRoom, onUpdateRooms,
   onDragEnd,
   onSelectTemplate,
-  catPosition, onCatPositionChange, onOpenChat, readOnly = false,
+  catPosition, onCatPositionChange, onOpenChat, onOpenVirtualPet, readOnly = false,
   syncStatus = 'synced'
 }) => {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
@@ -172,7 +173,12 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   const handleCatClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     playMeow();
-    onOpenChat?.();
+    // Prefer virtual pet if handler provided, otherwise fallback to existing behavior or nothing
+    if (onOpenVirtualPet) {
+      onOpenVirtualPet();
+    } else {
+      onOpenChat?.();
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent, id: string) => {
@@ -266,7 +272,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
             <button
               onClick={() => onSetLocked?.(!isLocked)}
               title={isLocked ? 'Locked' : 'Unlocked'}
-              className={`shrink-0 w-11 md:w-auto flex items-center justify-center gap-2 px-2 py-2.5 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isLocked ? 'bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/20' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+              className={`shrink-0 w-11 md:w-auto flex items-center justify-center gap-2 px-2 py-2 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isLocked ? 'bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/20' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
             >
               {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5 text-emerald-500" />}
               <span className="hidden md:inline">{isLocked ? 'Locked' : 'Unlocked'}</span>
@@ -365,7 +371,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
             style={{ transform: `translateX(-50%) scaleX(${facingLeft ? -1 : 1})` }}
           >
             <div className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold whitespace-nowrap shadow-lg">
-              💬 Click to chat with AI
+              Click to play with me
               <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45" />
             </div>
           </div>

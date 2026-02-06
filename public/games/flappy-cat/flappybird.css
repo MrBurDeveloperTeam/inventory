@@ -1,0 +1,210 @@
+body {
+    margin: 0;
+    font-family: 'Courier New', Courier, monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh; /* Fixed height to prevent scroll growth */
+    background-image: url("./flappybirdfullbg.png");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    overflow: hidden; /* Locks the screen so spacebar doesn't scroll */
+    touch-action: none; /* Prevents zooming/scrolling on touch devices */
+    position: relative;
+}
+
+#board {
+    display: block;
+    background: transparent; /* Allows the body bg image to show through */
+}
+
+#overlay {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 200px;
+    background: rgba(0,0,0,0.15);
+    backdrop-filter: blur(2px);
+}
+
+#gameover-modal {
+    position: absolute;
+    z-index: 3;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(2px);
+}
+
+.modal-card {
+    background: #f5e9c6;
+    border: 6px solid #3b2d1f;
+    border-radius: 16px;
+    padding: 28px 32px;
+    min-width: 280px;
+    box-shadow: 0 12px 0 #c9b37f, 0 16px 24px rgba(0,0,0,0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+}
+
+.modal-title {
+    font-family: 'Press Start 2P', 'Courier New', monospace;
+    font-size: clamp(22px, 4vw, 32px);
+    color: #2a2416;
+    text-shadow: 2px 2px 0 #e3d7b0;
+}
+
+.score-row {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    font-family: 'Press Start 2P', 'Courier New', monospace;
+    font-size: clamp(14px, 3vw, 18px);
+    color: #2a2416;
+}
+
+#play-again {
+    font-family: 'Press Start 2P', 'Courier New', monospace;
+    font-size: clamp(14px, 3vw, 20px);
+    color: #f8f8f8;
+    background: #00b8de;
+    border: 4px solid #006b80;
+    border-radius: 12px;
+    padding: 12px 24px;
+    box-shadow: 0 6px 0 #006b80, 0 10px 12px rgba(0,0,0,0.25);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+#play-again:active {
+    transform: translateY(3px);
+    box-shadow: 0 3px 0 #006b80, 0 6px 10px rgba(0,0,0,0.25);
+}
+
+#title {
+    /* Layout */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    /* Font Settings */
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(32px, 6vw, 72px); /* Responsive size */
+    letter-spacing: -2px; /* Pull letters closer like the logo */
+}
+
+/* Base style for every letter */
+#title span {
+    display: block;
+    position: relative;
+    
+    /* 1. The Thick Outline */
+    -webkit-text-stroke: 4px #2e2e2e;
+    paint-order: stroke fill; /* Ensures outline is behind the color */
+    
+    /* 2. The Glossy Gradient Effect */
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent; /* Hide original text color to show gradient */
+    
+    /* Default fallback color (Orange/Yellow) */
+    background-image: linear-gradient(to bottom, #ffd65e 50%, #dca827 50%);
+}
+
+/* The space between words */
+#title span.space {
+    width: 20px;
+    background: none;
+}
+
+/* --- INDIVIDUAL LETTER COLORS --- */
+
+/* F - Yellow */
+#title span:nth-child(1) { 
+    background-image: linear-gradient(to bottom, #ffd65e 50%, #dca827 50%); 
+}
+/* L - Pink */
+#title span:nth-child(2) { 
+    background-image: linear-gradient(to bottom, #ff7bc4 50%, #da4797 50%); 
+}
+/* A - Light Blue */
+#title span:nth-child(3) { 
+    background-image: linear-gradient(to bottom, #95e1f0 50%, #5ab6cf 50%); 
+}
+/* P - Purple/Blue */
+#title span:nth-child(4) { 
+    background-image: linear-gradient(to bottom, #8d83fc 50%, #5951bd 50%); 
+}
+/* P - Green */
+#title span:nth-child(5) { 
+    background-image: linear-gradient(to bottom, #98e169 50%, #5ab032 50%); 
+}
+/* Y - Purple */
+#title span:nth-child(6) { 
+    background-image: linear-gradient(to bottom, #b682fa 50%, #864ec7 50%); 
+}
+
+/* C - Pink (Child 8 because 7 is the space) */
+#title span:nth-child(8) { 
+    background-image: linear-gradient(to bottom, #ff7bc4 50%, #da4797 50%); 
+}
+/* A - Yellow */
+#title span:nth-child(9) { 
+    background-image: linear-gradient(to bottom, #ffd65e 50%, #dca827 50%); 
+}
+/* T - Green */
+#title span:nth-child(10) { 
+    background-image: linear-gradient(to bottom, #98e169 50%, #5ab032 50%); 
+}
+
+#start-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(14px, 3vw, 24px);
+    
+    /* Text settings */
+    color: #ffffff;
+    text-shadow: 2px 2px 0 #2e2e2e; /* Adds definition to the text */
+    
+    /* FLAT COLOR (No Gradient) */
+    background-color: #e58e26; 
+    
+    /* The "Logo Style" Thick Border */
+    border: 4px solid #2e2e2e; 
+    border-radius: 8px;
+    
+    /* Layout */
+    padding: 16px 32px;
+    cursor: pointer;
+    
+    /* The 3D "Block" shadow */
+    box-shadow: 0 6px 0 #2e2e2e, 0 10px 10px rgba(0,0,0,0.2);
+    
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+
+#start-btn:active {
+    /* Presses down to cover the shadow */
+    transform: translateY(6px);
+    box-shadow: 0 0 0 #2e2e2e, 0 0 0 rgba(0,0,0,0);
+}
+
+.hidden {
+    display: none !important;
+}
