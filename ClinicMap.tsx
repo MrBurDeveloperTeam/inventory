@@ -262,50 +262,48 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
         </div>
 
         {!readOnly && (
-          <div className="flex flex-nowrap items-center gap-2 md:gap-4 justify-start md:justify-end w-full md:w-auto select-none">
-            <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
-              <button
-                onClick={() => onSetLocked?.(!isLocked)}
-                title={isLocked ? 'Locked' : 'Unlocked'}
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isLocked ? 'bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/20' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-              >
-                {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5 text-emerald-500" />}
-                <span className="hidden md:inline">{isLocked ? 'Locked' : 'Unlocked'}</span>
-              </button>
+          <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto select-none">
+            <button
+              onClick={() => onSetLocked?.(!isLocked)}
+              title={isLocked ? 'Locked' : 'Unlocked'}
+              className={`shrink-0 w-11 md:w-auto flex items-center justify-center gap-2 px-2 py-2.5 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isLocked ? 'bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/20' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+            >
+              {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5 text-emerald-500" />}
+              <span className="hidden md:inline">{isLocked ? 'Locked' : 'Unlocked'}</span>
+            </button>
 
-              <div className="h-5 w-px bg-slate-200 shrink-0" />
+            <div className="hidden md:block h-5 w-px bg-slate-200 shrink-0" />
 
-              <button
-                disabled={isLocked}
-                onClick={() => { onSetAddMode?.(!isAddMode); onSetDeleteMode?.(false); }}
-                title="Add Room"
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isAddMode ? 'bg-emerald-500 text-white border-transparent shadow-emerald-200/50' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-100/50 disabled:opacity-40 disabled:grayscale'}`}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add</span>
-              </button>
+            <button
+              disabled={isLocked}
+              onClick={() => { onSetAddMode?.(!isAddMode); onSetDeleteMode?.(false); }}
+              title="Add Room"
+              className={`flex-initial flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isAddMode ? 'bg-emerald-500 text-white border-transparent shadow-emerald-200/50' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-100/50 disabled:opacity-40 disabled:grayscale'}`}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add</span>
+            </button>
 
-              <button
-                disabled={isLocked}
-                onClick={() => { onSetDeleteMode?.(!isDeleteMode); onSetAddMode?.(false); }}
-                title="Delete Mode"
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isDeleteMode ? 'bg-rose-500 text-white border-transparent shadow-rose-200/50' : 'bg-rose-50 text-rose-600 hover:bg-rose-100 border-rose-100/50 disabled:opacity-40 disabled:grayscale'}`}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete</span>
-              </button>
-            </div>
+            <button
+              disabled={isLocked}
+              onClick={() => { onSetDeleteMode?.(!isDeleteMode); onSetAddMode?.(false); }}
+              title="Delete Mode"
+              className={`flex-initial flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isDeleteMode ? 'bg-rose-500 text-white border-transparent shadow-rose-200/50' : 'bg-rose-50 text-rose-600 hover:bg-rose-100 border-rose-100/50 disabled:opacity-40 disabled:grayscale'}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete</span>
+            </button>
 
-            <div className="h-6 w-px bg-slate-200 shrink-0" />
+            <div className="hidden md:block h-6 w-px bg-slate-200 shrink-0" />
 
-            <div className="flex items-center relative shrink-0" ref={templateMenuRef}>
+            <div className="flex-1 md:flex-initial flex items-center relative shrink-0 min-w-0" ref={templateMenuRef}>
               <button
                 onClick={() => setShowTemplateMenu(!showTemplateMenu)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[12px] font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm tracking-wide active:scale-95"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-[12px] font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm tracking-wide active:scale-95 min-w-0"
               >
-                <Layout className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="max-w-[100px] truncate">{activeTemplate ? activeTemplate.name : 'Template'}</span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showTemplateMenu ? 'rotate-180' : ''}`} />
+                <Layout className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">{activeTemplate ? activeTemplate.name : 'Template'}</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 shrink-0 ${showTemplateMenu ? 'rotate-180' : ''}`} />
               </button>
 
               {showTemplateMenu && (

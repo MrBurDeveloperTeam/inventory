@@ -20,7 +20,12 @@ import {
   ArrowDownLeft,
   ArrowRight,
   History,
-  Clock
+  Clock,
+  Tag,
+  Truck,
+  FileText,
+  Layers,
+  Map as MapIcon
 } from 'lucide-react';
 import { Room, Item, ActivityLog, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
@@ -58,6 +63,26 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [roomSearch, setRoomSearch] = useState('');
   const [openBatchRows, setOpenBatchRows] = useState<Record<string, boolean>>({});
+  const toggleBatchRow = (id: string) => {
+    setOpenBatchRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const [openDetailRows, setOpenDetailRows] = useState<Record<string, boolean>>({});
+  const toggleDetailRow = (key: string) => {
+    setOpenDetailRows(prev => {
+      const newState = !prev[key];
+      // If we are closing the detail row, also close the batch row
+      if (!newState) {
+        setOpenBatchRows(prevBatch => {
+          if (!prevBatch[key]) return prevBatch;
+          const newBatch = { ...prevBatch };
+          delete newBatch[key];
+          return newBatch;
+        });
+      }
+      return { ...prev, [key]: newState };
+    });
+  };
   const [transferContext, setTransferContext] = useState<{ item: Item; toRoomId: string; batchIndex?: number; availableQty: number } | null>(null);
   const [transferQty, setTransferQty] = useState(0);
   const targetRoomName = transferContext ? (allRooms.find(r => r.id === transferContext.toRoomId)?.name || 'Selected room') : '';
@@ -66,6 +91,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
   const [localRoomName, setLocalRoomName] = useState(room.name);
   const [errorModal, setErrorModal] = useState<{ title: string; message: string } | null>(null);
+  const [activeRelocateKey, setActiveRelocateKey] = useState<string | null>(null);
+
 
   // Sync local name with prop if it changes externally
   React.useEffect(() => {
@@ -238,9 +265,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     return groups;
   }, [filteredItems]);
 
-  const toggleBatchRow = (id: string) => {
-    setOpenBatchRows(prev => ({ ...prev, [id]: !prev[id] }));
-  };
+
 
   const handleProductSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -338,12 +363,18 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     openTransferModal(item, targetId);
   };
 
-  const handleBatchRelocateSelect = (item: Item, batchIndex: number, batch: ItemBatch, value: string) => {
-    if (value === '') return;
-    const targetId = value;
-    if (targetId === room.id) return;
-    openTransferModal(item, targetId, batchIndex, batch.qty);
+  const handleBatchRelocateSelect = (item: Item, batchIndex: number, targetRoomId: string) => {
+    if (targetRoomId === '' || targetRoomId === room.id) return;
+    const batch = item.batches?.[batchIndex];
+    if (batch) {
+      openTransferModal(item, targetRoomId, batchIndex, batch.qty);
+    } else {
+      // Fallback for single/virtual batch
+      openTransferModal(item, targetRoomId);
+    }
   };
+
+
 
   const confirmTransfer = () => {
     if (!transferContext) return;
@@ -1380,7 +1411,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                         <select
                                           className="bg-white text-[10px] font-semibold text-slate-600 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer w-full text-ellipsis shadow-sm"
                                           value={room.id}
-                                          onChange={(e) => handleBatchRelocateSelect(item, idx, b, e.target.value)}
+                                          onChange={(e) => handleBatchRelocateSelect(item, idx, e.target.value)}
                                           title="Transfer batch"
                                         >
                                           <option value={room.id}>{room.name}</option>
@@ -1455,195 +1486,314 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                       const isExpired = expiryDateObj ? expiryDateObj < now : false;
                       const isExpiringSoon = expiryDateObj ? !isExpired && expiryDateObj <= soonThreshold : false;
                       const batches = item.batches && item.batches.length ? item.batches : [{ qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }];
+                      const isDetailOpen = !!openDetailRows[item.id];
                       const isOpen = !!openBatchRows[item.id];
 
                       return (
-                        <div key={item.id} className={`bg-white rounded-2xl border ${isOpen ? 'border-blue-200 ring-4 ring-blue-50' : 'border-slate-100 shadow-sm'} overflow-hidden transition-all duration-300`}>
-                          {/* Card Header */}
-                          <div className="p-4 border-b border-slate-50 flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[120px]">
-                                  {item.brand || 'No Brand'}
-                                </span>
-                                {item.code && (
-                                  <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono font-bold">
-                                    {item.code}
-                                  </span>
+                        <div
+                          key={item.id}
+                          onClick={() => toggleDetailRow(item.id)}
+                          className={`bg-white rounded-2xl border transition-all duration-300 cursor-pointer active:scale-[0.99] select-none ${isDetailOpen ? 'border-emerald-200 ring-4 ring-emerald-50 shadow-md' : isOpen ? 'border-blue-200 ring-4 ring-blue-50 shadow-md' : 'border-slate-100 shadow-sm'} overflow-visible mb-4 relative ${activeRelocateKey?.startsWith(item.id) ? 'z-[50]' : 'z-0'}`}
+                        >
+                          {/* Compact Main View */}
+                          <div className="p-4 flex flex-col gap-3">
+                            {/* Title & Brand Row */}
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="font-bold text-slate-800 text-base leading-tight truncate" title={item.name}>
+                                  {item.name}
+                                </h4>
+
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                {!readOnly && (
+                                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      onClick={() => handleEditItem(item)}
+                                      className="p-1.5 text-slate-400 hover:text-indigo-600 active:text-indigo-700 transition-colors bg-slate-50 rounded-lg hover:bg-slate-100"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => requestDeleteItem(item)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 active:text-rose-700 transition-colors bg-slate-50 rounded-lg hover:bg-rose-50"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
                                 )}
-                              </div>
-                              <h4 className="font-bold text-slate-800 leading-tight truncate" title={item.name}>{item.name}</h4>
-                              {item.description && (
-                                <p className="text-[11px] text-slate-500 italic mt-1 leading-relaxed">
-                                  {item.description}
-                                </p>
-                              )}
-                            </div>
-
-                            {!readOnly && (
-                              <div className="flex items-center gap-1 shrink-0 bg-slate-50 p-1 rounded-xl">
-                                <button onClick={() => handleEditItem(item)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
-                                  <Edit3 className="w-4 h-4" />
-                                </button>
-                                <button onClick={() => requestDeleteItem(item)} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Main Controls Overlay */}
-                          <div className="px-4 py-5 bg-gradient-to-br from-white to-slate-50/50 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              {readOnly || batches.length > 1 ? (
-                                <div className="flex flex-col">
-                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Quantity</span>
-                                  <span className="text-xl font-black text-slate-800">{item.quantity}</span>
+                                <div className={`transition-transform duration-300 ${isDetailOpen ? 'rotate-180 text-emerald-500' : 'text-slate-300'}`}>
+                                  <ChevronDown className="w-5 h-5" />
                                 </div>
-                              ) : (
-                                <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm">
-                                  <button
-                                    onClick={() => item.quantity > 1 && onUpdateQty(room.id, item.id, -1)}
-                                    disabled={item.quantity <= 1}
-                                    className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all active:scale-90"
-                                  >
-                                    <Minus className="w-4 h-4" />
-                                  </button>
-                                  <span className="w-10 text-center font-black text-lg text-slate-800">
-                                    {item.quantity}
-                                  </span>
-                                  <button
-                                    onClick={() => onUpdateQty(room.id, item.id, 1)}
-                                    className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-emerald-50 hover:text-emerald-500 transition-all active:scale-90"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              )}
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Unit</span>
-                                <span className="text-sm font-bold text-slate-600 capitalize">{item.uom}</span>
                               </div>
                             </div>
 
-                            <div className="text-right">
-                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Value</div>
-                              <div className="text-xl font-black text-[#4d9678] tracking-tight">
-                                ${(item.quantity * item.price).toFixed(2)}
-                              </div>
-                              <div className="text-[10px] font-bold text-slate-400 mt-1">
-                                ${item.price.toFixed(2)} / ea
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Secondary Info & Relocate */}
-                          <div className="p-4 bg-white border-t border-slate-50 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Expiration</span>
-                                <div className={`flex items-center gap-1.5 text-[11px] font-bold ${isExpired ? "text-rose-600" : isExpiringSoon ? "text-amber-600" : "text-slate-600"}`}>
-                                  <Calendar className="w-3.5 h-3.5" />
-                                  {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-GB') : 'No Date'}
-                                  {isExpired && <span className="text-[8px] bg-rose-100 px-1 rounded tracking-tighter">(EXP)</span>}
-                                  {isExpiringSoon && <span className="text-[8px] bg-amber-100 px-1 rounded tracking-tighter">(SOON)</span>}
-                                </div>
-                              </div>
-                              <div className="space-y-1 text-right">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Vendor</span>
-                                <span className="text-[11px] font-bold text-slate-600 truncate block">
-                                  {item.vendor || 'Unknown'}
+                            {/* Info & Price Row */}
+                            <div className="flex items-end justify-between gap-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded-lg border border-slate-100">
+                                  ${item.price.toFixed(2)}/ea
                                 </span>
-                              </div>
-                            </div>
 
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1">
-                                {readOnly ? (
-                                  <div className="bg-slate-50 px-3 py-2 rounded-xl text-[11px] font-bold text-slate-500 flex items-center gap-2">
-                                    <Package className="w-3.5 h-3.5" /> {room.name}
+                                {!readOnly && batches.length === 1 ? (
+                                  <div
+                                    className="flex items-center bg-white border border-slate-100 rounded-lg shadow-sm p-0.5"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        item.quantity > 1 && onUpdateQty(room.id, item.id, -1);
+                                      }}
+                                      className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-90 transition-all hover:text-rose-500"
+                                    >
+                                      <Minus className="w-2.5 h-2.5" />
+                                    </button>
+                                    <div className={`px-1.5 min-w-[30px] text-center font-black text-[10px] ${item.quantity <= 5 ? 'text-rose-600' : 'text-slate-700'}`}>
+                                      {item.quantity}
+                                    </div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onUpdateQty(room.id, item.id, 1);
+                                      }}
+                                      className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-90 transition-all hover:text-emerald-500"
+                                    >
+                                      <Plus className="w-2.5 h-2.5" />
+                                    </button>
+                                    <span className="pr-1 text-[8px] font-bold text-slate-500 uppercase tracking-tighter">{item.uom}</span>
                                   </div>
                                 ) : (
-                                  <div className="relative">
-                                    <select
-                                      className="w-full bg-slate-50 text-[11px] font-bold text-slate-700 border border-slate-100 rounded-xl px-3 py-2.5 appearance-none focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                                      value={room.id}
-                                      onChange={(e) => handleRelocateSelect(item, e.target.value)}
-                                    >
-                                      <option value={room.id}>Current: {room.name}</option>
-                                      {allRooms.filter(r => r.id !== room.id).map(r => (
-                                        <option key={r.id} value={r.id}>Move to: {r.name}</option>
-                                      ))}
-                                    </select>
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                      <ChevronDown className="w-4 h-4" />
-                                    </div>
+                                  <div className={`px-2 py-0.5 rounded-lg font-black text-[10px] shadow-sm border ${item.quantity <= 5 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-white text-slate-700 border-slate-100'}`}>
+                                    {item.quantity} {item.uom}
                                   </div>
                                 )}
                               </div>
 
-                              {batches.length > 1 && (
-                                <button
-                                  onClick={() => toggleBatchRow(item.id)}
-                                  className={`px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${isOpen ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
-                                >
-                                  {isOpen ? `Hide ${batches.length} Batches` : `View ${batches.length} Batches`}
-                                </button>
-                              )}
+                              <div className="text-xl font-black text-[#4d9678] leading-none shrink-0">
+                                ${(item.quantity * item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
                             </div>
                           </div>
 
-                          {/* Mobile Batches */}
+                          {/* Expandable Secondary Details Area */}
+                          {isDetailOpen && (
+                            <div className="px-5 py-4 bg-gradient-to-b from-slate-50/80 to-white border-t border-slate-100 space-y-4 animate-in slide-in-from-top-4 duration-300 rounded-b-2xl">
+                              <div className="grid grid-cols-2 gap-4 pb-2 border-b border-slate-50">
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    <Tag className="w-3 h-3" />
+                                    Brand / Code
+                                  </div>
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-[11px] font-bold text-slate-700">{item.brand || 'No Brand'}</span>
+                                    {item.code && (
+                                      <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded font-mono font-bold shadow-sm">
+                                        {item.code}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5 text-right">
+                                  <div className="flex items-center justify-end gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    <Calendar className="w-3 h-3" />
+                                    Expiration
+                                  </div>
+                                  <div className={`text-[12px] font-black ${isExpired ? "text-rose-600" : isExpiringSoon ? "text-amber-600" : "text-slate-700"}`}>
+                                    {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-GB') : 'No Date Set'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    <Truck className="w-3 h-3" />
+                                    Vendor
+                                  </div>
+                                  <span className="text-[11px] font-bold text-slate-700">{item.vendor || 'Not Specified'}</span>
+                                </div>
+
+                                <div className="space-y-1.5 text-right">
+                                  <div className="flex items-center justify-end gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    <MapIcon className="w-3 h-3" />
+                                    Relocate
+                                  </div>
+                                  <div className="relative" onClick={(e) => e.stopPropagation()}>
+                                    {readOnly ? (
+                                      <span className="text-[11px] font-bold text-slate-700">{room.name}</span>
+                                    ) : (
+                                      <button
+                                        onClick={() => setActiveRelocateKey(activeRelocateKey === item.id ? null : item.id)}
+                                        className={`w-full bg-white text-[11px] font-bold text-slate-700 border rounded-lg px-2 py-2 text-right shadow-sm flex items-center justify-end gap-2 transition-all active:scale-[0.98] ${activeRelocateKey === item.id ? 'border-emerald-500 ring-1 ring-emerald-500/20' : 'border-slate-200 hover:border-slate-300'}`}
+                                      >
+                                        <span className="truncate">{room.name}</span>
+                                        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${activeRelocateKey === item.id ? 'rotate-180 text-emerald-500' : ''}`} />
+                                      </button>
+                                    )}
+                                    {activeRelocateKey === item.id && (
+                                      <>
+                                        <div className="fixed inset-0 z-[90]" onClick={() => setActiveRelocateKey(null)} />
+                                        <div className="absolute right-0 top-full mt-1.5 z-[100] w-full min-w-[200px] bg-white border border-slate-200 rounded-xl shadow-2xl py-1 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200">
+                                          <div className="px-3 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 bg-slate-50/50 flex items-center gap-2">
+                                            <MapIcon className="w-3 h-3" />
+                                            Target Room
+                                          </div>
+                                          <div className="max-h-[220px] overflow-y-auto custom-scrollbar">
+                                            {allRooms.filter(r => r.id !== room.id).map(r => (
+                                              <button
+                                                key={r.id}
+                                                onClick={() => {
+                                                  handleRelocateSelect(item, r.id);
+                                                  setActiveRelocateKey(null);
+                                                }}
+                                                className="w-full px-3 py-2.5 text-right text-[11px] font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex items-center justify-between group active:bg-emerald-100 border-b border-slate-200 last:border-0"
+                                              >
+                                                <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all text-emerald-500 shrink-0" />
+                                                <span className="truncate">{r.name}</span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {item.description && (
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    <FileText className="w-3 h-3" />
+                                    Description
+                                  </div>
+                                  <p className="text-[11px] text-slate-600 italic leading-relaxed bg-white/50 rounded-lg border border-slate-50">
+                                    {item.description}
+                                  </p>
+                                </div>
+                              )}
+
+
+
+                              {batches.length > 1 && (
+                                <div className="flex items-center justify-center pt-2 border-t border-slate-100">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleBatchRow(item.id);
+                                    }}
+                                    className={`w-full py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all ${isOpen ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'bg-white border-2 border-blue-50 text-blue-600 hover:bg-blue-50/50'}`}
+                                  >
+                                    {isOpen ? `Hide ${batches.length} Batches` : `View ${batches.length} Batches`}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Mobile Batches Expansion */}
                           {isOpen && (
-                            <div className="bg-blue-50/50 border-t border-blue-100 p-3 space-y-2">
-                              {batches.map((b, bIdx) => {
+                            <div
+                              className="bg-blue-50/50 border-t border-blue-100 p-3 space-y-2 rounded-b-2xl"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {batches.map((b: any, bIdx: number) => {
                                 const bExpDate = b.expiryDate ? new Date(b.expiryDate) : null;
                                 const bExp = bExpDate ? bExpDate < now : false;
                                 const bSoon = bExpDate ? !bExp && bExpDate <= soonThreshold : false;
                                 return (
-                                  <div key={bIdx} className="bg-white rounded-xl p-3 border border-blue-100 shadow-sm flex items-center justify-between">
-                                    <div className="flex items-center gap-4">
-                                      {readOnly ? (
-                                        <div className="text-center">
-                                          <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Qty</div>
-                                          <div className="text-sm font-black text-slate-800">{b.qty}</div>
-                                        </div>
-                                      ) : (
+                                  <div key={bIdx} className={`bg-white rounded-xl p-3 border border-blue-100 shadow-sm flex items-center gap-3 relative min-h-[75px] ${activeRelocateKey === `${item.id}-${bIdx}` ? 'z-[60]' : 'z-0'}`}>
+                                    {/* Left: Quantity */}
+                                    <div className="shrink-0">
+                                      {!readOnly ? (
                                         <div className="flex items-center bg-slate-50 rounded-lg p-0.5 border border-slate-100">
                                           <button
                                             onClick={() => b.qty > 1 && onUpdateBatchQty(room.id, item.id, bIdx, -1)}
-                                            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-rose-500"
+                                            className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-95 transition-all hover:text-rose-500"
                                           >
                                             <Minus className="w-2.5 h-2.5" />
                                           </button>
-                                          <span className="w-6 text-center text-xs font-black text-slate-700">{b.qty}</span>
+                                          <span className="w-8 text-center text-xs font-black text-slate-700">{b.qty}</span>
                                           <button
                                             onClick={() => onUpdateBatchQty(room.id, item.id, bIdx, 1)}
-                                            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-emerald-500"
+                                            className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-95 transition-all hover:text-emerald-500"
                                           >
                                             <Plus className="w-2.5 h-2.5" />
                                           </button>
                                         </div>
+                                      ) : (
+                                        <div className="px-3 py-1 bg-slate-50 rounded-lg border border-slate-100 text-xs font-black text-slate-700">
+                                          {b.qty}
+                                        </div>
                                       )}
-                                      <div className="space-y-1">
-                                        <div className="text-[11px] font-black text-[#4d9678]">${(b.qty * b.unitPrice).toFixed(2)}</div>
-                                        <div className={`text-[9px] font-bold flex items-center gap-1 ${bExp ? 'text-rose-500' : bSoon ? 'text-amber-500' : 'text-slate-400'}`}>
-                                          <Calendar className="w-2.5 h-2.5" />
+                                    </div>
+
+                                    {/* Center: Prices */}
+                                    <div className="flex-1 flex flex-col items-center justify-center min-w-0">
+                                      <div className="text-[15px] font-black text-[#4d9678]">
+                                        ${(b.qty * b.unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </div>
+                                      <div className="text-[11px] font-bold text-slate-500 tracking-tight">
+                                        ${b.unitPrice.toFixed(2)}/ea
+                                      </div>
+                                    </div>
+
+                                    {/* Right: Actions Top, Date Bottom */}
+                                    <div className="flex flex-col items-end justify-between self-stretch shrink-0 min-w-[80px]">
+                                      {/* Batch Actions (Top Right) */}
+                                      {!readOnly && (
+                                        <div className="flex gap-0.5 -mt-1 -mr-1">
+                                          <div className="relative" onClick={(e) => e.stopPropagation()}>
+                                            <button
+                                              onClick={() => setActiveRelocateKey(activeRelocateKey === `${item.id}-${bIdx}` ? null : `${item.id}-${bIdx}`)}
+                                              className={`p-1.5 transition-all rounded-lg active:scale-90 ${activeRelocateKey === `${item.id}-${bIdx}` ? 'bg-blue-100 text-blue-600 shadow-inner' : 'text-slate-400 hover:text-blue-600 hover:bg-slate-50'}`}
+                                            >
+                                              <MapIcon className="w-3.5 h-3.5" />
+                                            </button>
+                                            {activeRelocateKey === `${item.id}-${bIdx}` && (
+                                              <>
+                                                <div className="fixed inset-0 z-[100]" onClick={() => setActiveRelocateKey(null)} />
+                                                <div className="absolute right-0 top-full mt-2 z-[110] w-[200px] bg-white border border-slate-200 rounded-2xl shadow-2xl py-2 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200">
+                                                  <div className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 bg-slate-50/30 flex items-center gap-2">
+                                                    <MapIcon className="w-3 h-3" />
+                                                    Move Batch
+                                                  </div>
+                                                  <div className="max-h-[240px] overflow-y-auto custom-scrollbar">
+                                                    {allRooms.filter(r => r.id !== room.id).map(r => (
+                                                      <button
+                                                        key={r.id}
+                                                        onClick={() => {
+                                                          handleBatchRelocateSelect(item, bIdx, r.id);
+                                                          setActiveRelocateKey(null);
+                                                        }}
+                                                        className="w-full px-4 py-2.5 text-left text-[12px] font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-all flex items-center justify-between group active:bg-blue-100 border-b border-slate-200 last:border-0"
+                                                      >
+                                                        <span className="truncate pr-2">{r.name}</span>
+                                                        <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all text-blue-500 shrink-0" />
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
+                                          <button onClick={() => handleEditBatch(item, b)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors">
+                                            <Edit3 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button onClick={() => requestDeleteBatch(item, bIdx)} className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors">
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      )}
+
+                                      {/* Expiration Date (Bottom Right) */}
+                                      <div className={`text-[12px] font-black px-1.5 py-0.5 rounded-lg shadow-sm border ${bExp ? 'bg-rose-50 text-rose-500 border-rose-100' : bSoon ? 'bg-amber-50 text-amber-500 border-amber-100' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                                        <div className="flex items-center gap-1">
+                                          <Calendar className="w-3 h-3" />
                                           {b.expiryDate ? new Date(b.expiryDate).toLocaleDateString('en-GB') : 'No Exp'}
                                         </div>
                                       </div>
                                     </div>
-
-                                    {!readOnly && (
-                                      <div className="flex gap-1">
-                                        <button onClick={() => handleEditBatch(item, b)} className="p-1.5 text-slate-400 hover:text-indigo-600">
-                                          <Edit3 className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button onClick={() => requestDeleteBatch(item, bIdx)} className="p-1.5 text-slate-400 hover:text-rose-600">
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    )}
                                   </div>
                                 );
                               })}
