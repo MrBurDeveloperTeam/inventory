@@ -3,9 +3,9 @@ import { ExtractedItem } from "../types";
 
 // Initialize Gemini Client
 // Using process.env.API_KEY as strictly required by guidelines.
-if (!import.meta.env.VITE_GEMINI_API_KEY) {
-  throw new Error("Missing Gemini API Key. Please checked VITE_GEMINI_API_KEY in the environment variables.");
-}
+// if (!import.meta.env.VITE_GEMINI_API_KEY) {
+//   throw new Error("Missing Gemini API Key. Please checked VITE_GEMINI_API_KEY in the environment variables.");
+// }
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 const modelId = "gemini-3-flash-preview";
