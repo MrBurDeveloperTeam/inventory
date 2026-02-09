@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DentaStock Pro - Advanced Inventory</title>
+    <link rel="icon" type="image/png" href="/images/InventoryIcon.png">
+    <link rel="apple-touch-icon" href="/images/InventoryIcon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script>
+        // Catch the install prompt globally in case it fires before React components mount
+        window.deferredInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            window.deferredInstallPrompt = e;
+            // Dispatch a custom event so the Header can pick it up if it's already mounted
+            window.dispatchEvent(new CustomEvent('pwa-prompt-available'));
+        });
+    </script>
+    <style>
+        .hexagon {
+            aspect-ratio: 1 / 1;
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%) !important;
+            -webkit-clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%) !important;
+            overflow: hidden;
+        }
+
+        /* Drop shadow that follows the hexagonal clip path instead of the box model */
+        .hexagon-glow {
+            filter: drop-shadow(0 4px 12px rgba(16, 185, 129, 0.4));
+        }
+
+        .hexagon-glow-rose {
+            filter: drop-shadow(0 4px 12px rgba(244, 63, 94, 0.4));
+        }
+
+        .hexagon-glow-active {
+            filter: drop-shadow(0 8px 20px rgba(5, 150, 105, 0.6));
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            /* Vertical scrollbar width */
+            height: 8px;
+            /* Reduced height for horizontal scrollbar */
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f8fafc;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4a9d7c;
+            border-radius: 10px;
+            border: 1px solid transparent;
+            background-clip: padding-box;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3d8b6c;
+        }
+
+        /* Utility classes for specific scrollbar needs */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .custom-scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Custom landing page styles */
+        .auth-primary {
+            background-color: #004aad;
+        }
+
+        .auth-primary-text {
+            color: #004aad;
+        }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+  }
+}
+</script>
+    <link rel="stylesheet" href="/index.css">
+</head>
+
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+
+</html>

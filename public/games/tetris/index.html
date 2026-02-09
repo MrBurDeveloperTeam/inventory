@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+</head>
+
+<body tabindex="0">
+  <div class="wrap">
+    <div class="board">
+      <!-- Left Side Panel -->
+      <div class="side">
+        <div class="preview-box" style="margin-bottom: 24px;">
+          <div class="preview-inner">
+            <div class="preview-glare"></div>
+            <div class="preview-label">Hold</div>
+            <canvas id="hold" class="hold-canvas" width="168" height="112" data-testid="hold-canvas"></canvas>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title"><i class="fas fa-chart-line"></i> Statistics</div>
+
+          <div class="stat-card">
+            <div class="stat-label">Play Time</div>
+            <div id="time-played" class="stat-value" data-testid="time-played">0:00</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Total Pieces</div>
+            <div id="total-pieces" class="stat-value" data-testid="total-pieces">0</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Pieces / Min</div>
+            <div id="ppm" class="stat-value" data-testid="ppm">0</div>
+          </div>
+        </div>
+
+
+      </div>
+
+      <!-- Game Canvas -->
+      <div class="game">
+        <div class="game-title">
+          <div class="title-row">
+            <span style="color: #00f0f0">S</span><span style="color: #0050f0">i</span><span
+              style="color: #f0a000">m</span><span style="color: #f0f000">p</span><span
+              style="color: #00f0f0">l</span><span style="color: #a000f0">e</span>
+          </div>
+          <div class="title-row">
+            <span style="color: #f04040">T</span><span style="color: #00f0f0">e</span><span
+              style="color: #0050f0">t</span><span style="color: #f0a000">r</span><span
+              style="color: #f0f000">i</span><span style="color: #00f0f0">s</span>
+          </div>
+        </div>
+        <!-- Floating Pause Button -->
+        <button id="btn-pause" data-testid="btn-pause" class="floating-pause-btn" style="display:none"><i
+            class="fas fa-pause"></i></button>
+
+        <canvas id="tetris" width="280" height="560" data-testid="game-canvas"></canvas>
+
+        <!-- Overlay for messages -->
+        <div id="overlay" class="overlay" style="display:flex">
+          <h2 id="overlay-title" data-testid="overlay-title"></h2>
+          <div id="overlay-msg" data-testid="overlay-msg" style="display:none"></div>
+          <div id="overlay-settings-panel" style="display:none;">
+            <!-- Settings Sub-menu (Initial View) -->
+            <div id="settings-submenu" style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+              <button id="btn-goto-game-settings"
+                style="width: 100%; font-family: 'Press Start 2P', cursive; font-size: 10px; padding: 14px; color: #fff; background: linear-gradient(180deg, #6366f1, #4f46e5); border:none; border-radius: 8px; box-shadow: 0 4px 0 #3730a3, 0 8px 15px rgba(99, 102, 241, 0.3); cursor: pointer;">Game
+                Settings</button>
+              <button id="btn-goto-controls"
+                style="width: 100%; font-family: 'Press Start 2P', cursive; font-size: 10px; padding: 14px; color: #fff; background: linear-gradient(180deg, #6366f1, #4f46e5); border:none; border-radius: 8px; box-shadow: 0 4px 0 #3730a3, 0 8px 15px rgba(99, 102, 241, 0.3); cursor: pointer;">Controls</button>
+            </div>
+
+            <!-- Game Settings Section -->
+            <div id="section-game-settings" style="display: none; width: 100%; margin-top: 10px;">
+              <div
+                style="background: #000; color: #fff; font-size: 14px; font-weight: 800; padding: 6px 0; text-align: center; letter-spacing: 1px; border-bottom: 2px solid #fff; margin-bottom: 16px;">
+                GAME SETTINGS</div>
+              <div class="setting-item"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 14px; color: #9fc6ff;">Sound</span>
+                <div class="toggle active" id="toggle-sound"><span></span></div>
+              </div>
+              <div class="setting-item"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 14px; color: #9fc6ff;">Ghost Piece</span>
+                <div class="toggle active" id="toggle-ghost"><span></span></div>
+              </div>
+              <div class="setting-item"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 14px; color: #9fc6ff;">Grid Lines</span>
+                <div class="toggle active" id="toggle-grid"><span></span></div>
+              </div>
+            </div>
+
+            <!-- Controls Section -->
+            <div id="section-controls" style="display: none; width: 100%; margin-top: 10px;">
+              <div
+                style="background: #000; color: #fff; font-size: 14px; font-weight: 800; padding: 6px 0; text-align: center; letter-spacing: 1px; border-bottom: 2px solid #fff; margin-bottom: 16px;">
+                CONTROLS</div>
+              <div class="control-list">
+                <div class="control-row">
+                  <div class="action">Move</div>
+                  <div class="keys">
+                    <span class="key"><i class="fas fa-arrow-left"></i></span>
+                    <span class="key"><i class="fas fa-arrow-right"></i></span>
+                  </div>
+                </div>
+                <div class="control-row">
+                  <div class="action">Rotate</div>
+                  <div class="keys"><span class="key"><i class="fas fa-arrow-up"></i></span></div>
+                </div>
+                <div class="control-row">
+                  <div class="action">Soft Drop</div>
+                  <div class="keys"><span class="key"><i class="fas fa-arrow-down"></i></span></div>
+                </div>
+                <div class="control-row">
+                  <div class="action">Hard Drop</div>
+                  <div class="keys"><span class="key wide">Space</span></div>
+                </div>
+                <div class="control-row">
+                  <div class="action">Hold</div>
+                  <div class="keys"><span class="key">C</span></div>
+                </div>
+                <div class="control-row">
+                  <div class="action">Pause</div>
+                  <div class="keys"><span class="key">P</span></div>
+                </div>
+              </div>
+            </div>
+
+            <button id="btn-settings-back"
+              style="width: 100%; font-family: 'Press Start 2P', cursive; font-size: 10px; padding: 12px; color: #fff; background: #1e293b; border:none; border-radius: 8px; box-shadow: 0 4px 0 #0f172a; cursor: pointer; margin-top: 20px;">Back</button>
+          </div>
+
+          <div id="leaderboard" class="leaderboard-container">
+            <div class="leaderboard-header">HIGH SCORES</div>
+            <div id="leaderboard-list">
+              <!-- Rows added via JS -->
+            </div>
+          </div>
+
+          <div id="overlay-buttons" style="display:flex;flex-direction:column;gap:12px;align-items:center">
+            <button id="overlay-start" data-testid="overlay-start">Start Game</button>
+            <button id="overlay-restart" data-testid="overlay-restart" style="display:none">Restart</button>
+            <button id="overlay-close" data-testid="overlay-close" style="display:none">Resume</button>
+            <button id="overlay-settings" style="display:none">Settings</button>
+            <button id="overlay-quit">Quit</button>
+            <button id="overlay-home" style="display:none">Home</button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="side">
+        <div class="preview-box" style="margin-top: 28px; margin-bottom: 24px;">
+          <div class="preview-inner">
+            <div class="preview-glare"></div>
+            <div class="preview-label">Next</div>
+            <canvas id="next" class="next-canvas" width="168" height="112" data-testid="next-canvas"></canvas>
+          </div>
+        </div>
+
+        <div class="panel" style="display: flex; flex-direction: column; gap: 8px;">
+          <div class="stat-card" style="margin-bottom: 0;">
+            <div class="stat-label"><i class="fas fa-trophy" style="color: #fcd34d; margin-right: 5px;"></i> Your High Score
+            </div>
+            <div id="highscore" class="stat-value highscore-value" style="font-size: 28px;" data-testid="highscore">0
+            </div>
+          </div>
+
+          <div class="stat-card" style="margin-bottom: 0;">
+            <div class="stat-label">Current Score</div>
+            <div id="score" class="stat-value" data-testid="score">0</div>
+          </div>
+
+          <div class="stat-card" style="margin-bottom: 0;">
+            <div class="stat-label">Level</div>
+            <div id="level" class="stat-value" data-testid="level">1</div>
+          </div>
+
+          <div class="stat-card" style="margin-bottom: 0;">
+            <div class="stat-label">Lines Cleared</div>
+            <div id="lines" class="stat-value" data-testid="lines">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+
+</html>
