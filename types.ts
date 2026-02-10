@@ -65,7 +65,7 @@ export interface PurchaseHistory {
 }
 
 export interface UserProfile {
-  id: string;
+  id?: string;
   name: string;
   email: string;
   accountType: 'individual' | 'company' | 'admin';
@@ -74,6 +74,7 @@ export interface UserProfile {
   clinicName?: string;
   avatarUrl?: string;
   backgroundUrl?: string;
+  companyName?: string;
 }
 
 export interface CatPosition {
