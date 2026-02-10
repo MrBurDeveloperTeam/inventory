@@ -15,6 +15,7 @@ import { VirtualPetContainer } from './VirtualPet/VirtualPetContainer';
 import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { MessageCircle } from 'lucide-react';
+import { api } from './services/api';
 
 type ManagedInventory = {
   userId: string;
@@ -212,10 +213,17 @@ const App: React.FC = () => {
       chatAudioRef.current.addEventListener('error', (e) => {
         console.warn("Failed to load cat audio (this is often a browser cache issue):", e);
       });
+      getBootstrap()
+      
     } catch (err) {
       console.error("Audio initialization error:", err);
     }
   }, []);
+
+  const getBootstrap = async () => {
+    const res = await api.get('/bootstrap');
+    console.log("response bootstrap", res);
+  }
 
   const playMeowChat = () => {
     if (chatAudioRef.current) {
