@@ -15,6 +15,9 @@ interface SpendingChartProps {
   periodAName: string;
   periodBName: string;
   chartRef: React.RefObject<SVGSVGElement | null>;
+  selectedCategory?: string;
+  selectedVendor?: string;
+  windowWidth?: number;
 }
 
 const SpendingChart: React.FC<SpendingChartProps> = ({
@@ -25,10 +28,13 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
   mousePos,
   periodAName,
   periodBName,
-  chartRef
+  chartRef,
+  selectedCategory = 'all',
+  selectedVendor = 'all',
+  windowWidth = 1000
 }) => {
   const width = 1000;
-  const height = 300;
+  const height = 360;
   const padding = 40;
   const chartWidth = width - padding * 2;
   const chartHeight = height - padding * 2;
@@ -66,7 +72,7 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
       d += ` C ${cp1x} ${points[i].y}, ${cp1x} ${points[i + 1].y}, ${points[i + 1].x} ${points[i + 1].y}`;
     }
 
-    const fillPath = `${d} L ${points[points.length-1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`;
+    const fillPath = `${d} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`;
 
     return (
       <g>
@@ -84,13 +90,29 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
 
   return (
     <div className="relative w-full overflow-visible" ref={wrapperRef}>
-      <svg 
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-6">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
+          {selectedCategory === 'all' && selectedVendor === 'all'
+            ? 'All Inventory Spending'
+            : 'Filtered Financial Trend'}
+        </p>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#2563eb]" />
+            <span className="text-[10px] font-bold text-slate-500">{periodAName}</span>
+          </div>
+          {analysisMode === 'compare' && (
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#f97316]" />
+              <span className="text-[10px] font-bold text-slate-500">{periodBName}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <svg
         ref={chartRef}
-        width="100%" 
-        height={height} 
-        viewBox={`0 0 ${width} ${height}`} 
-        preserveAspectRatio="xMidYMid meet"
-        className="overflow-visible cursor-default touch-none"
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full h-auto overflow-visible cursor-default touch-none"
         onMouseMove={(e) => {
           const svg = chartRef.current;
           if (!svg) return;
@@ -99,10 +121,10 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
           const pt = svg.createSVGPoint();
           pt.x = e.clientX;
           pt.y = e.clientY;
-          
+
           const screenCTM = svg.getScreenCTM();
           if (!screenCTM) return;
-          
+
           const svgP = pt.matrixTransform(screenCTM.inverse());
 
           // Ignore moves outside the plot area to prevent stray tooltips
@@ -115,7 +137,6 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
             onHoverDay(null);
             return;
           }
-          
           // Calculate which day we are over based on SVG internal units
           const chartX = svgP.x - padding;
           const dayIdx = Math.round((chartX / chartWidth) * 30);
@@ -140,27 +161,43 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
           );
         })}
 
-        {[1, 5, 10, 15, 20, 25, 31].map(day => {
-          const x = padding + ((day - 1) / 30) * chartWidth;
-          return <text key={day} x={x} y={height - padding + 20} textAnchor="middle" className="text-[10px] fill-slate-400 font-bold">{day}</text>;
-        })}
+        {(() => {
+          const daysToDisplay = windowWidth < 640 ? [1, 5, 10, 15, 20, 25, 31] : Array.from({ length: 31 }, (_, i) => i + 1);
+          return daysToDisplay.map(day => {
+            const x = padding + ((day - 1) / 30) * chartWidth;
+            return (
+              <text
+                key={day}
+                x={x}
+                y={height - padding + 20}
+                textAnchor="middle"
+                className="text-[10px] fill-slate-500 font-bold"
+              >
+                {day}
+              </text>
+            );
+          });
+        })()}
+        <text x="50%" y={height - 0} textAnchor="middle" className="text-[10px] fill-slate-400 font-black uppercase tracking-widest">Day of Month</text>
 
-        {analysisMode === 'compare' && getPath(data.periodBStats.data, '#8b5cf6', 'fillSpB')}
-        {getPath(data.periodAStats.data, '#06b6d4', 'fillSpA')}
+        {analysisMode === 'compare' && getPath(data.periodBStats.data, '#f97316', 'fillSpB')}
+        {getPath(data.periodAStats.data, '#2563eb', 'fillSpA')}
 
         {hoveredDay !== null && hoveredX !== null && (
           <g className="pointer-events-none animate-in fade-in duration-150">
             <line x1={hoveredX} y1={padding} x2={hoveredX} y2={height - padding} stroke="#cbd5e1" strokeWidth="1" />
-            <circle cx={hoveredX} cy={height - padding - (data.periodAStats.data[hoveredDay] / data.maxVal) * chartHeight} r="6" fill="#06b6d4" stroke="white" strokeWidth="2.5" />
-            {analysisMode === 'compare' && (
-              <circle cx={hoveredX} cy={height - padding - (data.periodBStats.data[hoveredDay] / data.maxVal) * chartHeight} r="6" fill="#8b5cf6" stroke="white" strokeWidth="2.5" />
+            {hoveredDay < data.periodAStats.data.length && (
+              <circle cx={hoveredX} cy={height - padding - (data.periodAStats.data[hoveredDay] / data.maxVal) * chartHeight} r="6" fill="#2563eb" stroke="white" strokeWidth="2.5" />
+            )}
+            {analysisMode === 'compare' && hoveredDay < data.periodBStats.data.length && (
+              <circle cx={hoveredX} cy={height - padding - (data.periodBStats.data[hoveredDay] / data.maxVal) * chartHeight} r="6" fill="#f97316" stroke="white" strokeWidth="2.5" />
             )}
           </g>
         )}
       </svg>
 
       {hoveredDay !== null && (
-        <div 
+        <div
           ref={tooltipRef}
           className="absolute pointer-events-none z-[100] animate-in fade-in zoom-in-95 duration-200"
           style={tooltipStyle}
@@ -168,17 +205,19 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 min-w-[200px]">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Day {hoveredDay + 1}</p>
             <div className="space-y-3">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#06b6d4]" />
-                  <span className="text-xs font-bold text-slate-600">{periodAName}</span>
-                </div>
-                <span className="text-xs font-black text-slate-800">${Math.round(data.periodAStats.data[hoveredDay] || 0).toLocaleString()}</span>
-              </div>
-              {analysisMode === 'compare' && (
+              {hoveredDay < data.periodAStats.data.length && (
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#8b5cf6]" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#2563eb]" />
+                    <span className="text-xs font-bold text-slate-600">{periodAName}</span>
+                  </div>
+                  <span className="text-xs font-black text-slate-800">${Math.round(data.periodAStats.data[hoveredDay] || 0).toLocaleString()}</span>
+                </div>
+              )}
+              {analysisMode === 'compare' && hoveredDay < data.periodBStats.data.length && (
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#f97316]" />
                     <span className="text-xs font-bold text-slate-600">{periodBName}</span>
                   </div>
                   <span className="text-xs font-black text-slate-800">${Math.round(data.periodBStats.data[hoveredDay] || 0).toLocaleString()}</span>

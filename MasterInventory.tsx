@@ -213,10 +213,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       brand: string;
       code: string;
       expiryDate: string;
+      purchaseDate?: string;
+      description?: string;
       qty: number;
       price: number;
       uom?: string;
       batchIndex: number;
+      vendor?: string;
+      category?: string;
     }> = [];
     rooms.forEach(room => {
       room.items.forEach(item => {
@@ -227,6 +231,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
           if (!b.expiryDate) return;
           const expDate = new Date(b.expiryDate);
           if (expDate <= thirtyDaysFromNow) {
+            // Try to find purchase date from history
+            const matchedHistory = history.find(h =>
+              h.productName === item.name &&
+              h.brand === item.brand &&
+              h.code === item.code &&
+              h.expiryDate === b.expiryDate
+            );
+
             entries.push({
               key: `${room.id}-${item.id}-${idx}`,
               id: item.id,
@@ -236,10 +248,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
               brand: item.brand,
               code: item.code,
               expiryDate: b.expiryDate,
+              purchaseDate: matchedHistory ? matchedHistory.timestamp : (item as any).createdAt,
+              description: item.description,
               qty: b.qty,
               price: b.unitPrice,
               uom: item.uom,
-              batchIndex: idx
+              batchIndex: idx,
+              vendor: item.vendor,
+              category: item.category
             });
           }
         });
@@ -376,40 +392,57 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* Navigation Tabs Bar */}
-      <div className="flex items-center justify-between bg-white rounded-none md:rounded-2xl shadow-sm border-x-0 md:border border-slate-100 p-1 md:p-2 shrink-0">
-        <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar-hide">
+      <div className="flex items-center justify-between bg-white rounded-none md:rounded-2xl shadow-sm border-x-0 md:border border-slate-100 p-1 pb-0 md:p-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-1 w-full md:w-auto">
           <button
             onClick={() => setActiveTab('all')}
-            className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-[#4d9678] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'all' ? 'md:bg-[#4d9678] md:text-white md:shadow-md text-[#4d9678]' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            <ClipboardList className="w-4 h-4" /> All Inventory
+            <ClipboardList className="w-5 h-5 md:w-4 md:h-4" />
+            <span className="hidden md:inline">All Inventory</span>
+            <span className="md:hidden">Inventory</span>
+            <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'all' ? 'bg-[#4d9678] scale-x-100' : 'bg-transparent scale-x-0'}`} />
           </button>
           {!readOnly && (
             <button
               onClick={() => setActiveTab('receive')}
-              className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'receive' ? 'bg-[#3498db] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+              className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'receive' ? 'md:bg-[#3498db] md:text-white md:shadow-md text-[#3498db]' : 'text-slate-500 hover:bg-slate-50'}`}
             >
-              <Package className="w-4 h-4" /> Receive Stock
+              <Package className="w-5 h-5 md:w-4 md:h-4" />
+              <span className="hidden md:inline">Receive Stock</span>
+              <span className="md:hidden">Receive</span>
+              <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'receive' ? 'bg-[#3498db] scale-x-100' : 'bg-transparent scale-x-0'}`} />
             </button>
           )}
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'history' ? 'bg-[#9b59b6] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'history' ? 'md:bg-[#9b59b6] md:text-white md:shadow-md text-[#9b59b6]' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            <History className="w-4 h-4" /> Purchase History
+            <History className="w-5 h-5 md:w-4 md:h-4" />
+            <span className="hidden md:inline">Purchase History</span>
+            <span className="md:hidden">History</span>
+            <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'history' ? 'bg-[#9b59b6] scale-x-100' : 'bg-transparent scale-x-0'}`} />
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'analytics' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'analytics' ? 'md:bg-indigo-600 md:text-white md:shadow-md text-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            <BarChart3 className="w-4 h-4" /> Usage Stats
+            <BarChart3 className="w-5 h-5 md:w-4 md:h-4" />
+            <span className="hidden md:inline">Usage Stats</span>
+            <span className="md:hidden">Stats</span>
+            <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'analytics' ? 'bg-indigo-600 scale-x-100' : 'bg-transparent scale-x-0'}`} />
           </button>
           <button
             onClick={() => setActiveTab('expiring')}
-            className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'expiring' ? 'bg-[#f39c12] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'expiring' ? 'md:bg-[#f39c12] md:text-white md:shadow-md text-[#f39c12]' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            <AlertTriangle className="w-4 h-4" /> Expiring Items
-            {expiringItems.length > 0 && <span className={`ml-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${activeTab === 'expiring' ? 'bg-white text-[#f39c12]' : 'bg-[#f39c12] text-white'}`}>{expiringItems.length}</span>}
+            <AlertTriangle className="w-5 h-5 md:w-4 md:h-4" />
+            <div className="flex items-center gap-1">
+              <span className="hidden md:inline">Expiring Items</span>
+              <span className="md:hidden">Expiring</span>
+              {expiringItems.length > 0 && <span className={`flex h-4 w-4 md:h-5 md:w-5 items-center justify-center rounded-full text-[8px] md:text-[10px] font-black ${activeTab === 'expiring' ? 'md:bg-white md:text-[#f39c12] bg-[#f39c12] text-white' : 'bg-[#f39c12] text-white'}`}>{expiringItems.length}</span>}
+            </div>
+            <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'expiring' ? 'bg-[#f39c12] scale-x-100' : 'bg-transparent scale-x-0'}`} />
           </button>
         </div>
         <div className="hidden md:flex px-4 border-l border-slate-100">
@@ -424,52 +457,45 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         {
           activeTab === 'all' && (
             <div className="flex flex-col gap-6 animate-in fade-in duration-300">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-100 p-3 rounded-2xl text-[#4d9678]"><ClipboardList className="w-6 h-6" /></div>
+                <h4 className="text-[#4d9678] font-bold text-xl tracking-tight">All Inventory</h4>
+              </div>
               {/* FILTER AREA */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                    <input
-                      type="text"
-                      placeholder="Search records..."
-                      className="h-11 w-full pl-10 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-semibold text-slate-600 outline-none focus:ring-2 focus:ring-[#4d9678]/20 focus:border-[#4d9678] transition-all"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className={`md:hidden h-11 w-11 flex items-center justify-center rounded-2xl border transition-all ${showFilters ? 'bg-[#4d9678] border-[#4d9678] text-white' : 'bg-white border-slate-200 text-slate-400'}`}
-                  >
-                    <SlidersHorizontal className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className={`${showFilters ? 'flex' : 'hidden md:flex'} flex-col md:flex-row items-center gap-3 animate-in slide-in-from-top-2`}>
-                  <select
-                    value={inventoryCategory}
-                    onChange={e => setInventoryCategory(e.target.value)}
-                    className="w-full md:w-auto h-10 bg-slate-50 border border-slate-100 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer"
-                  >
-                    <option value="all">All Categories</option>
-                    {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                  </select>
-                  <select
-                    value={inventoryVendor}
-                    onChange={e => setInventoryVendor(e.target.value)}
-                    className="w-full md:w-auto h-10 bg-slate-50 border border-slate-100 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer"
-                  >
-                    <option value="all">All Vendors</option>
-                    {uniqueInventoryVendors.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                  <select
-                    value={inventoryLocation}
-                    onChange={e => setInventoryLocation(e.target.value)}
-                    className="w-full md:w-auto h-10 bg-slate-50 border border-slate-100 rounded-xl px-3 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer"
-                  >
-                    <option value="all">All Locations</option>
-                    {inventoryLocations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
-                  </select>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-sm animate-in slide-in-from-top-2 duration-500">
+                <select
+                  value={inventoryCategory}
+                  onChange={e => setInventoryCategory(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
+                >
+                  <option value="all">All Categories</option>
+                  {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+                <select
+                  value={inventoryVendor}
+                  onChange={e => setInventoryVendor(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
+                >
+                  <option value="all">All Vendors</option>
+                  {uniqueInventoryVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <select
+                  value={inventoryLocation}
+                  onChange={e => setInventoryLocation(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
+                >
+                  <option value="all">All Locations</option>
+                  {inventoryLocations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                </select>
+                <div className="md:col-span-2 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search records..."
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-slate-600 outline-none focus:ring-2 focus:ring-[#4d9678]/10 focus:border-[#4d9678] transition-all"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                 </div>
               </div>
 
@@ -579,7 +605,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                     ${item.price.toFixed(2)}
                                   </td>
 
-                                  <td className="px-3 py-4 font-black text-[#4d9678] tracking-tight whitespace-nowrap">
+                                  <td className="px-3 py-4 font-bold text-slate-800 tracking-tight whitespace-nowrap">
                                     ${(item.quantity * item.price).toFixed(2)}
                                   </td>
 
@@ -715,219 +741,153 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 {groupedItems.length > 0 ? (
                   groupedItems.map(({ category, items }) => (
                     <div key={category} className="space-y-3">
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
-                        <div className="h-px bg-slate-100 flex-1" />
+                      <div className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm px-4 py-2 border-y border-emerald-100 text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">
                         {category}
-                        <div className="h-px bg-slate-100 flex-1" />
-                      </h3>
-
+                      </div>
                       {(items as any[]).map((item) => {
-                        const expiryDateObj = item.expiryDate ? new Date(item.expiryDate) : null;
+                        const batchKey = `${item.roomId}-${item.id}`;
+                        const isDetailOpen = openDetailRows[batchKey];
+                        const batches = item.batches && item.batches.length ? item.batches : [{ qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }];
+                        const isOpen = !!openBatchRows[batchKey];
+
+                        // Calculate earliest expiry
+                        const expiryDates = batches.map((b: any) => b.expiryDate ? new Date(b.expiryDate) : null).filter(Boolean);
+                        const minExpiry = expiryDates.length > 0 ? new Date(Math.min(...expiryDates.map(d => d.getTime()))) : (item.expiryDate ? new Date(item.expiryDate) : null);
+
                         const now = new Date();
                         const soonThreshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-                        const isExpired = expiryDateObj ? expiryDateObj < now : false;
-                        const isExpiringSoon = expiryDateObj ? !isExpired && expiryDateObj <= soonThreshold : false;
-                        const batches = item.batches && item.batches.length ? item.batches : [{ qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }];
-                        const batchKey = `${item.roomId}-${item.id}`;
-                        const isDetailOpen = !!openDetailRows[batchKey];
-                        const isOpen = !!openBatchRows[batchKey];
+                        const isExpired = minExpiry ? minExpiry < now : false;
+                        const isExpiringSoon = minExpiry ? !isExpired && minExpiry <= soonThreshold : false;
+
+
+                        const hasDetails = batches.length > 1;
 
                         return (
                           <div
                             key={batchKey}
-                            onClick={() => toggleDetailRow(batchKey)}
-                            className={`bg-white rounded-2xl border transition-all duration-300 cursor-pointer active:scale-[0.99] select-none ${isDetailOpen ? 'border-emerald-200 ring-4 ring-emerald-50 shadow-md' : isOpen ? 'border-blue-200 ring-4 ring-blue-50 shadow-md' : 'border-slate-100 shadow-sm'} overflow-hidden mb-4`}
+                            onClick={() => hasDetails && toggleDetailRow(batchKey)}
+                            className={`bg-white rounded-2xl border transition-all duration-300 select-none ${hasDetails ? 'cursor-pointer' : 'cursor-default'} ${isDetailOpen ? 'border-emerald-200 ring-4 ring-emerald-50 shadow-md' : 'border-slate-100 shadow-sm'} overflow-hidden`}
                           >
-                            {/* Compact Main View */}
                             <div className="p-4 flex flex-col gap-3">
-                              {/* Title & Location Row */}
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <h4 className="font-bold text-slate-800 text-base leading-tight truncate" title={item.name}>
-                                    {item.name}
-                                  </h4>
-                                  <div className="flex items-center gap-1 text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-lg border border-emerald-100 tracking-normal shrink-0">
-                                    <MapIcon className="w-2 h-2" />
-                                    {item.roomName}
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1 pr-2">
+                                  <div className="font-bold text-slate-800 text-sm leading-tight mb-1">{item.name}</div>
+                                  <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
+                                    <span className="font-medium">#{item.brand || 'No Brand'}</span>
+                                    {item.code && (
+                                      <>
+                                        <span className="w-0.5 h-0.5 rounded-full bg-slate-300" />
+                                        <span className="font-mono text-slate-500">{item.code}</span>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
-                                <div className={`shrink-0 transition-transform duration-300 ${isDetailOpen ? 'rotate-180 text-emerald-500' : 'text-slate-300'}`}>
-                                  <ChevronDown className="w-5 h-5" />
-                                </div>
-                              </div>
-
-                              {/* Info & Price Row */}
-                              <div className="flex items-end justify-between gap-4">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[11px] font-bold text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded-lg border border-slate-100">
-                                    ${item.price.toFixed(2)}/ea
+                                <div className="flex flex-col items-end shrink-0">
+                                  <span className="text-emerald-600 font-black tracking-tight text-sm">
+                                    ${(item.quantity * item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </span>
-
-                                  {!readOnly && batches.length === 1 && onUpdateQty ? (
-                                    <div
-                                      className="flex items-center bg-white border border-slate-100 rounded-lg shadow-sm p-0.5"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          item.quantity > 1 && onUpdateQty(item.roomId, item.id, -1);
-                                        }}
-                                        className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-90 transition-all hover:text-rose-500"
-                                      >
-                                        <Minus className="w-2.5 h-2.5" />
-                                      </button>
-                                      <div className={`px-1.5 min-w-[30px] text-center font-black text-[10px] ${item.quantity <= 5 ? 'text-rose-600' : 'text-slate-700'}`}>
-                                        {item.quantity}
-                                      </div>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onUpdateQty(item.roomId, item.id, 1);
-                                        }}
-                                        className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-90 transition-all hover:text-emerald-500"
-                                      >
-                                        <Plus className="w-2.5 h-2.5" />
-                                      </button>
-                                      <span className="pr-1 text-[8px] font-bold text-slate-500 uppercase tracking-tighter">{item.uom}</span>
-                                    </div>
-                                  ) : (
-                                    <div className={`px-2 py-0.5 rounded-lg font-black text-[10px] shadow-sm border ${item.quantity <= 5 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-white text-slate-700 border-slate-100'}`}>
-                                      {item.quantity} {item.uom}
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="text-xl font-black text-[#4d9678] leading-none shrink-0">
-                                  ${(item.quantity * item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  <span className="text-[9px] text-slate-400 font-medium">${item.price.toFixed(2)}/{item.uom || 'ea'}</span>
                                 </div>
                               </div>
-                            </div>
 
-
-
-                            {/* Expandable Secondary Details Area */}
-                            {isDetailOpen && (
-                              <div className="px-5 py-4 bg-gradient-to-b from-slate-50/80 to-white border-t border-slate-100 space-y-4 animate-in slide-in-from-top-4 duration-300">
-                                <div className="grid grid-cols-2 gap-6">
-                                  <div className="space-y-1.5">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                      <Tag className="w-3 h-3" />
-                                      Brand / Code
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="text-[11px] font-bold text-slate-700">{item.brand || 'No Brand'}</span>
-                                      {item.code && (
-                                        <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded font-mono font-bold shadow-sm">
-                                          {item.code}
-                                        </span>
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100/50 space-y-3">
+                                <div className="grid grid-cols-2 gap-x-2 gap-y-3 text-[11px]">
+                                  <div>
+                                    <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Quantity</span>
+                                    {batches.length <= 1 && !readOnly && onUpdateBatchQty ? (
+                                      <div className="flex items-center bg-white rounded-lg p-0.5 border border-slate-200 w-fit shadow-sm">
+                                        <button onClick={(e) => { e.stopPropagation(); const b = batches[0]; b.qty > 0 && onUpdateBatchQty(item.roomId, item.id, 0, -1); }} className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-95 hover:text-rose-500"><Minus className="w-3 h-3" /></button>
+                                        <span className="w-8 text-center text-[10px] font-black text-slate-700">{item.quantity}</span>
+                                        <button onClick={(e) => { e.stopPropagation(); const b = batches[0]; onUpdateBatchQty(item.roomId, item.id, 0, 1); }} className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-95 hover:text-emerald-500"><Plus className="w-3 h-3" /></button>
+                                      </div>
+                                    ) : (
+                                      <span className="font-bold text-emerald-600">{item.quantity} {item.uom || 'units'}</span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Expires</span>
+                                    <div className="flex items-center gap-1.5 align-baseline">
+                                      <span className={`font-bold ${isExpired ? 'text-rose-600' : isExpiringSoon ? 'text-amber-600' : 'text-slate-600'}`}>
+                                        {minExpiry ? (
+                                          <>
+                                            {minExpiry.toLocaleDateString('en-GB')}
+                                            {isExpired && <span className="ml-1 text-[8px] uppercase tracking-tight font-black bg-rose-100 text-rose-600 px-1 py-px rounded">(EXP)</span>}
+                                            {isExpiringSoon && <span className="ml-1 text-[8px] uppercase tracking-tight font-black bg-amber-100 text-amber-600 px-1 py-px rounded">(SOON)</span>}
+                                          </>
+                                        ) : 'No Date'}
+                                      </span>
+                                      {batches.length > 1 && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); toggleDetailRow(batchKey); }}
+                                          className="text-[10px] text-blue-500 font-bold hover:underline"
+                                        >
+                                          {isDetailOpen ? 'Hide' : 'View'}
+                                        </button>
                                       )}
                                     </div>
                                   </div>
-                                  <div className="space-y-1.5 text-right">
-                                    <div className="flex items-center justify-end gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                      <Calendar className="w-3 h-3" />
-                                      Expiration
-                                    </div>
-                                    <div className={`text-[12px] font-black ${isExpired ? "text-rose-600" : isExpiringSoon ? "text-amber-600" : "text-slate-700"}`}>
-                                      {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'No Date Set'}
-                                    </div>
+                                  <div>
+                                    <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Vendor</span>
+                                    <span className="font-medium text-slate-600 truncate block">{item.vendor || '-'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Location</span>
+                                    <span className="font-medium text-emerald-600 truncate block">{item.roomName}</span>
                                   </div>
                                 </div>
 
-                                <div className="space-y-1.5">
-                                  <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                    <Truck className="w-3 h-3" />
-                                    Vendor
-                                  </div>
-                                  <span className="text-[11px] font-bold text-slate-700">{item.vendor || 'Not Specified'}</span>
-                                </div>
-
+                                {/* Description - Integrated */}
                                 {item.description && (
-                                  <div className="space-y-1.5">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                      <FileText className="w-3 h-3" />
-                                      Description
-                                    </div>
-                                    <p className="text-[11px] text-slate-600 italic leading-relaxed bg-white/50 rounded-lg border border-slate-50">
-                                      {item.description}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {batches.length > 1 && (
-                                  <div className="flex items-center justify-center pt-2 border-t border-slate-100">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleBatchRow(batchKey);
-                                      }}
-                                      className={`w-full py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all ${isOpen ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'bg-white border-2 border-blue-50 text-blue-600 hover:bg-blue-50/50'}`}
-                                    >
-                                      {isOpen ? `Hide ${batches.length} Batches` : `View ${batches.length} Batches`}
-                                    </button>
+                                  <div>
+                                    <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Description</div>
+                                    <p className="text-[11px] text-slate-600 italic leading-relaxed">{item.description}</p>
                                   </div>
                                 )}
                               </div>
-                            )}
 
-                            {/* Mobile Batches Expansion */}
-                            {isOpen && (
-                              <div
-                                className="bg-blue-50/50 border-t border-blue-100 p-3 space-y-2"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {batches.map((b: any, bIdx: number) => {
-                                  const bExpDate = b.expiryDate ? new Date(b.expiryDate) : null;
-                                  const bExp = bExpDate ? bExpDate < now : false;
-                                  const bSoon = bExpDate ? !bExp && bExpDate <= soonThreshold : false;
-                                  return (
-                                    <div key={bIdx} className="bg-white rounded-xl p-3 border border-blue-100 shadow-sm flex items-center justify-between gap-3">
-                                      {/* Left: Quantity */}
-                                      <div className="shrink-0">
-                                        {!readOnly && onUpdateBatchQty ? (
-                                          <div className="flex items-center bg-slate-50 rounded-lg p-0.5 border border-slate-100">
-                                            <button
-                                              onClick={() => b.qty > 1 && onUpdateBatchQty(item.roomId, item.id, bIdx, -1)}
-                                              className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-95"
-                                            >
-                                              <Minus className="w-2.5 h-2.5" />
-                                            </button>
-                                            <span className="w-8 text-center text-xs font-black text-slate-700">{b.qty}</span>
-                                            <button
-                                              onClick={() => onUpdateBatchQty(item.roomId, item.id, bIdx, 1)}
-                                              className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-95"
-                                            >
-                                              <Plus className="w-2.5 h-2.5" />
-                                            </button>
+
+                            </div>
+
+                            {/* Expanded Details Area (Reused Logic but Simplified Wrapper) */}
+                            {hasDetails && isDetailOpen && (
+                              <div className="px-4 pb-4 space-y-4 pt-4 bg-slate-50/50">
+                                {/* Batches Section */}
+                                {batches.length > 1 && (
+                                  <div className="space-y-2">
+                                    <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest pb-2">Batch Management</div>
+                                    <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                                      {batches.map((b: any, bIdx: number) => {
+                                        const bExpDate = b.expiryDate ? new Date(b.expiryDate) : null;
+                                        const bExp = bExpDate ? bExpDate < now : false;
+                                        const bSoon = bExpDate ? !bExp && bExpDate <= soonThreshold : false;
+                                        return (
+                                          <div key={bIdx} className="bg-white rounded-xl p-3 border border-slate-100 shadow-sm flex items-center justify-between gap-3">
+                                            <div className="shrink-0">
+                                              {!readOnly && onUpdateBatchQty ? (
+                                                <div className="flex items-center bg-slate-50 rounded-lg p-0.5 border border-slate-100">
+                                                  <button onClick={() => b.qty > 0 && onUpdateBatchQty(item.roomId, item.id, bIdx, -1)} className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-95"><Minus className="w-2.5 h-2.5" /></button>
+                                                  <span className="w-8 text-center text-xs font-black text-slate-700">{b.qty}</span>
+                                                  <button onClick={() => onUpdateBatchQty(item.roomId, item.id, bIdx, 1)} className="w-6 h-6 flex items-center justify-center text-slate-400 active:scale-95"><Plus className="w-2.5 h-2.5" /></button>
+                                                </div>
+                                              ) : <span className="font-bold text-slate-700">{b.qty}</span>}
+                                            </div>
+                                            <div className="flex flex-wrap justify-end items-baseline gap-x-5 gap-y-1 text-right">
+                                              <div className="text-xs text-slate-400 font-medium whitespace-nowrap">
+                                                ${(b.unitPrice || item.price || 0).toFixed(2)}/{item.uom || 'ea'}
+                                              </div>
+                                              <div className="text-sm font-bold text-slate-800 whitespace-nowrap">
+                                                ${((b.qty || 0) * (b.unitPrice || item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                              </div>
+                                              <div className={`text-sm font-bold whitespace-nowrap ${bExp ? 'text-rose-500' : bSoon ? 'text-amber-500' : 'text-slate-500'}`}>
+                                                {b.expiryDate ? new Date(b.expiryDate).toLocaleDateString('en-GB') : 'No Exp'}
+                                              </div>
+                                            </div>
                                           </div>
-                                        ) : (
-                                          <div className="px-3 py-1 bg-slate-50 rounded-lg border border-slate-100 text-xs font-black text-slate-700">
-                                            {b.qty}
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {/* Center: Prices */}
-                                      <div className="flex-1 flex flex-col items-center justify-center min-w-0">
-                                        <div className="text-[13px] font-black text-[#4d9678]">
-                                          ${(b.qty * b.unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </div>
-                                        <div className="text-[10px] font-bold text-slate-500 tracking-tight">
-                                          ${b.unitPrice.toFixed(2)}/ea
-                                        </div>
-                                      </div>
-
-                                      {/* Right: Date */}
-                                      <div className={`text-[12px] font-black shrink-0 ${bExp ? 'text-rose-500' : bSoon ? 'text-amber-500' : 'text-slate-600'}`}>
-                                        <div className="flex items-center gap-1">
-                                          <Calendar className="w-3 h-3" />
-                                          {b.expiryDate ? new Date(b.expiryDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }) : 'No Exp'}
-                                        </div>
-                                      </div>
+                                        )
+                                      })}
                                     </div>
-                                  );
-                                })}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1107,7 +1067,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         {/* VIEW: PURCHASE HISTORY */}
         {
           activeTab === 'history' && (
-            <div className="flex flex-col gap-8 animate-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col gap-6 animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center gap-3">
                 <div className="bg-purple-100 p-3 rounded-2xl text-[#9b59b6]"><ClipboardList className="w-6 h-6" /></div>
                 <h4 className="text-[#9b59b6] font-bold text-xl tracking-tight">Full Purchase Records</h4>
@@ -1147,29 +1107,29 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <input type="text" placeholder="Search records..." className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-slate-600 outline-none" value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
                 </div>
               </div>
-              <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 custom-scrollbar">
-                <table className="w-full text-[11px] text-left border-collapse">
-                  <thead>
-                    <tr className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200">
-                      <th className="px-6 py-5">Date</th>
-                      <th className="px-6 py-5">Brand</th>
-                      <th className="px-6 py-5">Product</th>
-                      <th className="px-6 py-5">Code</th>
-                      <th className="px-6 py-5 text-center">Qty</th>
-                      <th className="px-6 py-5">UOM</th>
-                      <th className="px-6 py-5">Price</th>
-                      <th className="px-6 py-5">Total</th>
-                      <th className="px-6 py-5">Vendor</th>
-                      <th className="px-6 py-5">Category</th>
-                      <th className="px-6 py-5">Expires</th>
-                      <th className="px-6 py-5">Location</th>
+              {/* DESKTOP TABLE VIEW */}
+              <div className="hidden md:block bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 custom-scrollbar">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-5 w-[90px]">Date</th>
+                      <th className="px-3 py-5 w-[100px]">Brand</th>
+                      <th className="px-3 py-5 min-w-[240px]">Product</th>
+                      <th className="px-3 py-5 w-[60px]">Code</th>
+                      <th className="px-3 py-5 w-[90px] text-right">Qty / UOM</th>
+                      <th className="px-3 py-5 w-[80px]">Price</th>
+                      <th className="px-3 py-5 w-[90px]">Total</th>
+                      <th className="px-3 py-5 w-[100px]">Vendor</th>
+                      <th className="px-3 py-5 w-[100px]">Category</th>
+                      <th className="px-3 py-5 w-[90px]">Expires</th>
+                      <th className="px-3 py-5 w-[110px]">Location</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {groupedHistory.length > 0 ? groupedHistory.map(([month, items]) => (
                       <React.Fragment key={month}>
-                        <tr className="bg-purple-50/50 border-y border-purple-100">
-                          <td colSpan={12} className="px-6 py-3 text-[10px] font-black text-[#9b59b6] uppercase tracking-[0.2em]">{month}</td>
+                        <tr className="bg-slate-100/70 border-y border-slate-200">
+                          <td colSpan={11} className="px-6 py-3 text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">{month}</td>
                         </tr>
                         {items.map(h => {
                           const currentRoom = rooms.find(r => r.id === h.roomId);
@@ -1180,25 +1140,27 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                           const isExpired = expiryDate ? expiryDate < now : false;
                           const isExpiringSoon = expiryDate ? !isExpired && expiryDate <= soonThreshold : false;
                           return (
-                            <tr key={h.id} className="hover:bg-purple-50/20 transition-colors">
-                              <td className="px-6 py-4 text-slate-500 whitespace-nowrap text-xs">{formatDate(h.timestamp)}</td>
-                              <td className="px-6 py-4 text-slate-500 text-xs">#{h.brand || '-'}</td>
-                              <td className="px-6 py-4 text-slate-800">
-                                <div className="font-bold">{h.productName}</div>
+                            <tr key={h.id} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="px-3 py-4 text-slate-500 whitespace-nowrap text-xs">{formatDate(h.timestamp)}</td>
+                              <td className="px-3 py-4 text-slate-500 text-xs">#{h.brand || '-'}</td>
+                              <td className="px-3 py-4 text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis">
+                                <div className="font-bold truncate max-w-[400px]" title={h.productName}>{h.productName}</div>
                                 {h.description && (
-                                  <div className="text-[10px] text-slate-500 italic mt-0.5">
+                                  <div className="text-[10px] text-slate-500 italic mt-0.5 truncate max-w-[400px]" title={h.description}>
                                     {h.description}
                                   </div>
                                 )}
                               </td>
-                              <td className="px-6 py-4 text-slate-500 text-[10px]">{h.code || '-'}</td>
-                              <td className="px-6 py-4 font-bold text-[#9b59b6] text-center">{h.qty}</td>
-                              <td className="px-6 py-4 text-slate-600 font-medium text-xs capitalize">{h.uom || 'pcs'}</td>
-                              <td className="px-6 py-4 text-slate-500 font-semibold">${h.unitPrice.toFixed(2)}</td>
-                              <td className="px-6 py-4 text-[#c0392b] font-black tracking-tight">${h.totalPrice.toFixed(2)}</td>
-                              <td className="px-6 py-4 text-slate-600 font-medium text-xs">{h.vendor || '-'}</td>
-                              <td className="px-6 py-4"><span className="text-[10px] font-medium text-slate-500 capitalize tracking-wide">{h.category}</span></td>
-                              <td className={`px-6 py-4 text-xs whitespace-nowrap ${isExpired ? 'text-rose-600 font-bold' : isExpiringSoon ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>
+                              <td className="px-3 py-4 text-slate-500 text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">{h.code || '-'}</td>
+                              <td className="px-3 py-4 text-right tabular-nums">
+                                <span className="font-bold text-slate-800 text-xs">{h.qty}</span>
+                                <span className="ml-1 text-[9px] font-medium text-slate-400 uppercase">{h.uom || 'pcs'}</span>
+                              </td>
+                              <td className="px-3 py-4 text-slate-500 font-semibold whitespace-nowrap text-xs">${h.unitPrice.toFixed(2)}</td>
+                              <td className="px-3 py-4 text-slate-800 font-bold tracking-tight whitespace-nowrap text-xs">${h.totalPrice.toFixed(2)}</td>
+                              <td className="px-3 py-4 text-slate-600 font-medium text-xs whitespace-nowrap overflow-hidden text-ellipsis">{h.vendor || '-'}</td>
+                              <td className="px-3 py-4"><span className="text-[10px] font-medium text-slate-500 capitalize tracking-wide">{h.category}</span></td>
+                              <td className={`px-3 py-4 text-xs whitespace-nowrap ${isExpired ? 'text-rose-600 font-bold' : isExpiringSoon ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>
                                 {expiryDate ? (
                                   <>
                                     {expiryDate.toLocaleDateString('en-GB')}
@@ -1207,7 +1169,11 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   </>
                                 ) : '-'}
                               </td>
-                              <td className="px-6 py-4 text-emerald-600 font-bold text-[10px] whitespace-nowrap">{displayLocation}</td>
+                              <td className="px-3 py-4">
+                                <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
+                                  {displayLocation}
+                                </span>
+                              </td>
                             </tr>
                           );
                         })}
@@ -1218,6 +1184,89 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   </tbody>
                 </table>
               </div>
+
+              {/* MOBILE CARD VIEW */}
+              <div className="md:hidden space-y-6">
+                {groupedHistory.length > 0 ? groupedHistory.map(([month, items]) => (
+                  <div key={month} className="space-y-3">
+                    <div className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm px-4 py-2 border-y border-purple-100 text-[10px] font-black text-[#9b59b6] uppercase tracking-[0.2em]">
+                      {month}
+                    </div>
+                    {items.map(h => {
+                      const currentRoom = rooms.find(r => r.id === h.roomId);
+                      const displayLocation = currentRoom ? currentRoom.name : h.location;
+                      const expiryDate = h.expiryDate ? new Date(h.expiryDate) : null;
+                      const now = new Date();
+                      const soonThreshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+                      const isExpired = expiryDate ? expiryDate < now : false;
+                      const isExpiringSoon = expiryDate ? !isExpired && expiryDate <= soonThreshold : false;
+
+                      return (
+                        <div key={h.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1 pr-2">
+                              <div className="font-bold text-slate-800 text-sm leading-tight mb-1">{h.productName}</div>
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
+                                <span className="font-medium">#{h.brand || 'No Brand'}</span>
+                                {h.code && (
+                                  <>
+                                    <span className="w-0.5 h-0.5 rounded-full bg-slate-300" />
+                                    <span className="font-mono text-slate-500">{h.code}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end shrink-0">
+                              <span className="text-[#c0392b] font-black tracking-tight text-sm">${h.totalPrice.toFixed(2)}</span>
+                              <span className="text-[9px] text-slate-400 font-medium">${h.unitPrice.toFixed(2)} / {h.uom || 'unit'}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-3 text-[11px] bg-slate-50 p-3 rounded-xl border border-slate-100/50">
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Quantity</span>
+                              <span className="font-bold text-[#9b59b6]">{h.qty} {h.uom || 'pcs'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Date</span>
+                              <span className="font-medium text-slate-600">{formatDate(h.timestamp)}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Category</span>
+                              <span className="font-medium text-slate-600 capitalize">{h.category || '-'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Expires</span>
+                              <span className={`font-bold ${isExpired ? 'text-rose-600' : isExpiringSoon ? 'text-amber-600' : 'text-slate-600'}`}>
+                                {expiryDate ? (
+                                  <>
+                                    {expiryDate.toLocaleDateString('en-GB')}
+                                    {isExpired && <span className="ml-1 text-[8px] uppercase tracking-tight font-black bg-rose-100 text-rose-600 px-1 py-px rounded">(EXP)</span>}
+                                    {isExpiringSoon && <span className="ml-1 text-[8px] uppercase tracking-tight font-black bg-amber-100 text-amber-600 px-1 py-px rounded">(SOON)</span>}
+                                  </>
+                                ) : '-'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Vendor</span>
+                              <span className="font-medium text-slate-600 truncate block">{h.vendor || '-'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Location</span>
+                              <span className="font-medium text-emerald-600 truncate block">{displayLocation}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )) : (
+                  <div className="flex flex-col items-center justify-center py-24 text-center">
+                    <History className="w-12 h-12 text-slate-200 mb-4" />
+                    <span className="text-slate-300 font-black uppercase tracking-[0.2em] text-sm opacity-50">No Records Found</span>
+                  </div>
+                )}
+              </div>
             </div>
           )
         }
@@ -1225,98 +1274,192 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         {/* VIEW: CLINIC ANALYTICS */}
         {
           activeTab === 'analytics' && (
-            <ClinicAnalytics history={history} />
+            <ClinicAnalytics history={history} inventory={rooms.flatMap(r => r.items)} />
           )
         }
 
-        {/* VIEW: EXPIRING ITEMS - NEW DESIGN */}
+        {/* VIEW: EXPIRING ITEMS - TABLE DESIGN */}
         {
           activeTab === 'expiring' && (
-            <div className="flex flex-col gap-8 animate-in slide-in-from-right-4 duration-500">
+            <div className="flex flex-col gap-6 animate-in slide-in-from-right-4 duration-500">
               <div className="flex items-center gap-3">
                 <div className="bg-amber-100 p-3 rounded-2xl text-[#f39c12]"><AlertTriangle className="w-6 h-6" /></div>
                 <div>
                   <h4 className="text-[#f39c12] font-bold text-xl tracking-tight">Expirations Watchlist</h4>
-                  <p className="text-xs text-slate-400 font-medium mt-1">Reviewing items past or nearing expiration date.</p>
                 </div>
               </div>
               {expiringItems.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {expiringItems.map((item) => {
-                    const isExpired = new Date(item.expiryDate!) < new Date();
-                    const daysDiff = getDaysDiff(item.expiryDate!);
+                <>
+                  {/* DESKTOP TABLE VIEW */}
+                  <div className="hidden md:block border border-slate-200 rounded-2xl overflow-hidden shadow-sm custom-scrollbar">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3 py-5 w-[100px]">Brand</th>
+                            <th className="px-3 py-5 min-w-[240px]">Product</th>
+                            <th className="px-3 py-5 w-[60px]">Code</th>
+                            <th className="px-3 py-5 w-[90px] text-right">Qty / UOM</th>
+                            <th className="px-3 py-5 w-[80px] text-right">Price</th>
+                            <th className="px-3 py-5 w-[90px] text-right">Total</th>
+                            <th className="px-3 py-5 w-[110px]">Location</th>
+                            <th className="px-3 py-5 w-[90px] text-right">Purchased</th>
+                            <th className="px-3 py-5 w-[100px] text-right">Expires</th>
+                            <th className="px-3 py-5 w-[80px]">Status</th>
+                            {!readOnly && <th className="w-12 px-3 py-5"></th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {expiringItems.map((item) => {
+                            const isExpired = new Date(item.expiryDate!) < new Date();
+                            const daysDiff = getDaysDiff(item.expiryDate!);
 
-                    return (
-                      <div key={item.key} className="bg-white rounded-[1.25rem] border border-slate-200 overflow-hidden shadow-sm flex flex-col group hover:shadow-md transition-shadow relative">
-                        {/* Header Status Bar */}
-                        <div className={`px-5 py-2.5 flex items-center justify-between ${isExpired ? 'bg-rose-50 border-t-4 border-t-rose-500' : 'bg-amber-50 border-t-4 border-t-amber-500'}`}>
-                          <div className="flex items-center gap-3">
-                            <div className={`flex items-center gap-2 font-bold text-[11px] uppercase tracking-wider ${isExpired ? 'text-rose-600' : 'text-amber-600'}`}>
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              {isExpired ? 'Expired Status' : 'Expiring Soon'}
+                            return (
+                              <tr key={item.key} className="hover:bg-slate-50/60 transition-colors">
+                                <td className="px-3 py-4 text-slate-500 whitespace-nowrap text-xs">
+                                  #{item.brand || '-'}
+                                </td>
+                                <td className="px-3 py-4 text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis">
+                                  <div className="font-bold truncate max-w-[200px]" title={item.name}>{item.name}</div>
+                                  {item.description && (
+                                    <div className="text-[10px] text-slate-500 italic mt-0.5 truncate max-w-[200px]" title={item.description}>
+                                      {item.description}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-4 text-slate-500 text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">
+                                  {item.code || '-'}
+                                </td>
+                                <td className="px-3 py-4 text-right tabular-nums">
+                                  <span className="font-bold text-slate-800 text-xs">{item.qty}</span>
+                                  <span className="ml-1 text-[9px] font-medium text-slate-400 uppercase">{item.uom || 'pcs'}</span>
+                                </td>
+                                <td className="px-3 py-4 text-right text-slate-500 font-semibold whitespace-nowrap text-xs">
+                                  ${item.price.toFixed(2)}
+                                </td>
+                                <td className="px-3 py-4 text-right font-bold text-slate-800 tracking-tight whitespace-nowrap text-xs">
+                                  ${(item.qty * item.price).toFixed(2)}
+                                </td>
+                                <td className="px-3 py-4">
+                                  <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
+                                    {item.roomName}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-4 text-right text-slate-500 text-xs whitespace-nowrap">
+                                  {item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('en-GB') : '-'}
+                                </td>
+                                <td className="px-3 py-4 text-right whitespace-nowrap tabular-nums">
+                                  <span className={`text-xs font-bold ${isExpired ? 'text-rose-600' : 'text-amber-600'}`}>
+                                    {new Date(item.expiryDate!).toLocaleDateString('en-GB')}
+                                    {isExpired ? (
+                                      <span className="ml-1 text-[9px] uppercase tracking-tight font-black">(EXP)</span>
+                                    ) : (
+                                      <span className="ml-1 text-[9px] uppercase tracking-tight font-black">(SOON)</span>
+                                    )}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-4 whitespace-nowrap">
+                                  <span className={`text-[10px] font-bold whitespace-nowrap border px-2 py-0.5 rounded-lg ${isExpired
+                                    ? 'text-rose-600 border-rose-100 bg-rose-50/30'
+                                    : 'text-amber-600 border-amber-100 bg-amber-50/30'
+                                    }`}>
+                                    {isExpired ? `${daysDiff}d ago` : `in ${Math.abs(daysDiff)}d`}
+                                  </span>
+                                </td>
+                                {!readOnly && (
+                                  <td className="px-3 py-4 text-right whitespace-nowrap">
+                                    <button
+                                      onClick={() => setDeleteTarget({ roomId: item.roomId, itemId: item.id, name: item.name, batchIndex: item.batchIndex, qty: item.qty, expiryDate: item.expiryDate })}
+                                      className="transition-all text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-50"
+                                      aria-label={`Delete ${item.name}`}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="md:hidden space-y-4">
+                    {expiringItems.map(item => {
+                      const isExpired = new Date(item.expiryDate!) < new Date();
+                      const daysDiff = getDaysDiff(item.expiryDate!);
+                      const totalPrice = item.qty * item.price;
+
+                      return (
+                        <div key={item.key} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1 pr-2">
+                              <div className="font-bold text-slate-800 text-sm leading-tight mb-1">{item.name}</div>
+                              {item.description && (
+                                <div className="text-[10px] text-slate-400 italic mb-1.5 truncate max-w-[200px]">
+                                  {item.description}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
+                                <span className="font-medium">#{item.brand || 'No Brand'}</span>
+                                {item.code && (
+                                  <>
+                                    <span className="w-0.5 h-0.5 rounded-full bg-slate-300" />
+                                    <span className="font-mono text-slate-500">{item.code}</span>
+                                  </>
+                                )}
+                              </div>
                             </div>
-                            <div className={`${isExpired ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'} px-3 py-1 rounded-full text-[10px] font-black tracking-tight`}>
-                              {isExpired ? `${daysDiff}d ago` : `in ${Math.abs(daysDiff)}d`}
+                            <div className="flex flex-col items-end shrink-0">
+                              <span className="text-[#8e44ad] font-black tracking-tight text-sm">${totalPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                              <span className="text-[9px] text-slate-400 font-medium">${item.price.toFixed(2)} / {item.uom || 'unit'}</span>
                             </div>
                           </div>
+
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-3 text-[11px] bg-slate-50 p-3 rounded-xl border border-slate-100/50">
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Quantity</span>
+                              <span className="font-bold text-[#8e44ad]">{item.qty} {item.uom || 'pcs'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Purchased</span>
+                              <span className="font-medium text-slate-600">
+                                {item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('en-GB') : '-'}
+                              </span>
+                            </div>
+
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Vendor</span>
+                              <span className="font-medium text-slate-600 truncate block">{item.vendor || '-'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Expires</span>
+                              <span className={`font-bold ${isExpired ? 'text-rose-600' : 'text-amber-600'}`}>
+                                {new Date(item.expiryDate!).toLocaleDateString('en-GB')}
+                                {isExpired && <span className="ml-1 text-[8px] uppercase tracking-tight font-black bg-rose-100 text-rose-600 px-1 py-px rounded">(EXP)</span>}
+                              </span>
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Location</span>
+                              <span className="font-medium text-emerald-600">{item.roomName}</span>
+                            </div>
+                          </div>
+
                           {!readOnly && (
                             <button
                               onClick={() => setDeleteTarget({ roomId: item.roomId, itemId: item.id, name: item.name, batchIndex: item.batchIndex, qty: item.qty, expiryDate: item.expiryDate })}
-                              className="text-slate-300 hover:text-rose-600 transition-colors"
-                              aria-label={`Delete ${item.name}`}
-                              title="Delete item"
+                              className="w-full flex items-center justify-center gap-2 py-2 mt-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors text-xs font-bold"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete Batch
                             </button>
                           )}
                         </div>
-
-                        {/* Body Content */}
-                        <div className="p-6 flex flex-col gap-6 flex-1">
-                          <div className="flex flex-col gap-1">
-                            <h5 className="font-bold text-slate-800 text-xl leading-tight">{item.name}</h5>
-                            {/* BRAND / SKU FORMAT */}
-                            <p className="text-sm font-medium text-slate-400">
-                              {item.brand || 'No Brand'} / <span className="font-mono text-[11px] opacity-75">{item.code || 'NO-SKU'}</span>
-                            </p>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-8">
-                            <div className="flex flex-col gap-2">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                                <Calendar className="w-3 h-3" /> Expiration
-                              </span>
-                              <div className="flex flex-col">
-                                <span className={`text-base font-black ${isExpired ? 'text-rose-600' : 'text-slate-700'}`}>
-                                  {new Date(item.expiryDate!).toLocaleDateString('en-GB')}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-2 text-right items-end">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                                <MapIcon className="w-3 h-3" /> Location
-                              </span>
-                              <span className="text-base font-black text-slate-700">{item.roomName}</span>
-                            </div>
-                          </div>
-
-                          <div className="h-px bg-slate-100 w-full" />
-
-                          <div className="flex justify-between items-center">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Qty on hand</span>
-                              <span className="text-base font-black text-slate-800">{item.qty} {item.uom || 'pcs'}</span>
-                            </div>
-                            <div className="flex flex-col gap-1 text-right">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Value</span>
-                              <span className="text-base font-black text-slate-800">${(item.qty * item.price).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                </>
               ) : (
                 <div className="flex flex-col items-center justify-center py-32 opacity-20"><ClipboardCheck className="w-24 h-24 mb-6" /><p className="text-2xl font-black uppercase tracking-[0.3em] text-slate-400">All Items Fresh</p></div>
               )}
@@ -1335,10 +1478,6 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <div>
               <h4 className="text-lg font-extrabold text-slate-800 tracking-wider uppercase">Recent Global Activity</h4>
             </div>
-          </div>
-          <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-full border border-slate-100">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live System</span>
           </div>
         </div>
 

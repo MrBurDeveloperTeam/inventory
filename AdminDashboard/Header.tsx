@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Search, User as UserIcon, Globe, Check } from 'lucide-react';
+import { ChevronDown, Search, User as UserIcon, Globe, Check, Menu } from 'lucide-react';
 import { User } from './types';
 
 interface HeaderProps {
@@ -7,16 +7,17 @@ interface HeaderProps {
   users: User[];
   selectedUserId: string | null;
   onUserSelect: (userId: string | null) => void;
+  onMenuClick?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ title, users, selectedUserId, onUserSelect }) => {
+const Header: React.FC<HeaderProps> = ({ title, users, selectedUserId, onUserSelect, onMenuClick }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedUser = users.find(u => u.id === selectedUserId);
-  const selectedName = selectedUser 
-    ? `${selectedUser.name} - ${selectedUser.clinicName}` 
+  const selectedName = selectedUser
+    ? `${selectedUser.name} - ${selectedUser.clinicName}`
     : "Global (All Users)";
 
   useEffect(() => {
@@ -29,31 +30,41 @@ const Header: React.FC<HeaderProps> = ({ title, users, selectedUserId, onUserSel
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredUsers = users.filter(u => 
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    u.clinicName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredUsers = users
+    .filter(u =>
+      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.clinicName.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <header className="h-24 bg-white/80 backdrop-blur-md sticky top-0 z-[60] border-b border-slate-100 px-8 flex items-center justify-between shrink-0">
-      <h1 className="text-2xl font-bold text-slate-800 capitalize">{title}</h1>
+    <header className="h-auto min-h-[5rem] bg-white/80 backdrop-blur-md sticky top-0 z-[60] border-b border-slate-100 px-4 py-4 sm:px-8 sm:py-0 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 shrink-0">
+      <div className="flex items-center gap-4 sm:mb-0">
+        <button
+          onClick={onMenuClick}
+          className="p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg md:hidden"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+        <h1 className="text-2xl font-bold text-slate-800 capitalize">{title}</h1>
+      </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 w-full sm:w-auto">
         {/* Selected User Selector */}
-        <div className="relative" ref={dropdownRef}>
+        <div className="relative w-full sm:w-auto" ref={dropdownRef}>
           {/* Floating badge label */}
-          <div className="absolute -top-2 left-4 px-1.5 bg-white z-10">
+          <div className="absolute -top-[14px] left-4 px-1 bg-white z-10">
             <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none">
               Selected User
             </span>
           </div>
-          
+
           {/* Main selection box */}
-          <button 
+          <button
             onClick={() => setIsOpen(!isOpen)}
-            className={`flex items-center gap-8 px-5 py-3 bg-white border rounded-xl transition-all shadow-sm group min-w-[340px] text-left ${isOpen ? 'border-blue-500 ring-4 ring-blue-500/10' : 'border-slate-200 hover:border-slate-300'}`}
+            className={`flex items-center gap-8 px-5 py-3 bg-white border rounded-xl transition-all shadow-sm group w-full sm:w-auto sm:min-w-[340px] text-left ${isOpen ? 'border-blue-500 ring-4 ring-blue-500/10' : 'border-slate-200 hover:border-slate-300'}`}
           >
-            <span className="text-sm font-bold text-slate-700 truncate max-w-[280px]">
+            <span className="text-sm font-bold text-slate-700 truncate max-w-[200px] sm:max-w-[280px]">
               {selectedName}
             </span>
             <ChevronDown className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 ml-auto ${isOpen ? 'rotate-180 text-blue-500' : ''}`} />
@@ -61,14 +72,14 @@ const Header: React.FC<HeaderProps> = ({ title, users, selectedUserId, onUserSel
 
           {/* Dropdown Menu */}
           {isOpen && (
-            <div className="absolute top-full right-0 mt-3 w-[400px] bg-white rounded-[1.5rem] shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-[70]">
+            <div className="absolute top-full right-0 mt-3 w-full sm:w-[400px] bg-white rounded-[1.5rem] shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-[70]">
               <div className="p-4 border-b border-slate-50">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input 
+                  <input
                     autoFocus
-                    type="text" 
-                    placeholder="Search users or clinics..." 
+                    type="text"
+                    placeholder="Search users or clinics..."
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -78,7 +89,7 @@ const Header: React.FC<HeaderProps> = ({ title, users, selectedUserId, onUserSel
 
               <div className="max-h-[400px] overflow-y-auto custom-scrollbar p-2">
                 {/* Global Option */}
-                <button 
+                <button
                   onClick={() => {
                     onUserSelect(null);
                     setIsOpen(false);
@@ -101,7 +112,7 @@ const Header: React.FC<HeaderProps> = ({ title, users, selectedUserId, onUserSel
                 <p className="px-3 pb-2 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Individual Users & Clinics</p>
 
                 {filteredUsers.length > 0 ? filteredUsers.map(u => (
-                  <button 
+                  <button
                     key={u.id}
                     onClick={() => {
                       onUserSelect(u.id);

@@ -94,7 +94,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
     if (userFilter === 'individual') return u.type === 'Individual';
     if (userFilter === 'company') return u.type === 'Company';
     return true;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   const handleToggleSuspend = (id: string) => {
     setUsers(prev => prev.map(u => {
@@ -250,8 +250,8 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     />
                   ) : (
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-black text-lg transition-colors ${isSuspended ? 'bg-slate-300' :
-                        u.role === 'Admin' ? 'bg-indigo-500' :
-                          u.role === 'Dentist' ? 'bg-emerald-500' : 'bg-slate-400'
+                      u.role === 'Admin' ? 'bg-indigo-500' :
+                        u.role === 'Dentist' ? 'bg-emerald-500' : 'bg-slate-400'
                       }`}>
                       {initials}
                     </div>

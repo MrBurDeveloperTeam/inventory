@@ -523,10 +523,10 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                   </div>
                   <div className="text-center">
                     <h5 className={`font-bold transition-colors duration-300 ${isDragging ? 'text-emerald-700' : 'text-slate-700'} mb-1`}>
-                      {isDragging ? 'Drop Image Here' : 'Upload Receipt or Label'}
+                      {isDragging ? 'Drop File Here' : 'Upload Receipt or Label'}
                     </h5>
                     <p className="text-xs text-slate-400">
-                      {isDragging ? 'Let go to start extraction' : 'Take a photo, upload or drag and drop an image'}
+                      {isDragging ? 'Let go to start extraction' : 'Take a photo, or drag and drop an image or PDF'}
                     </p>
                   </div>
                   <div className={`flex items-center gap-3 transition-opacity duration-300 ${isDragging ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
@@ -537,14 +537,14 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                       <Camera className="w-4 h-4" /> Take Photo
                     </button>
                     <label className="cursor-pointer">
-                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={async (e) => {
                         if (e.target.files && e.target.files[0]) {
                           const imgs = await filesToImages([e.target.files[0]]);
                           processCapturedImage(imgs[0]);
                         }
                       }} />
                       <span className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold text-xs hover:bg-emerald-700 transition-all shadow-md inline-flex items-center gap-2">
-                        <Upload className="w-4 h-4" /> Select Image
+                        <Upload className="w-4 h-4" /> Select File
                       </span>
                     </label>
                   </div>
@@ -599,7 +599,14 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
               {ocrStep === 'camera_preview' && ocrImage && (
                 <div className="flex flex-col items-center justify-center p-2 gap-6 animate-in zoom-in-95 duration-300">
                   <div className="relative w-full max-w-2xl aspect-[3/4] sm:aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border-4 border-white/20">
-                    <img src={ocrImage} className="w-full h-full object-contain" alt="Captured preview" />
+                    {ocrImage.startsWith('data:application/pdf') ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 text-white gap-4">
+                        <FileText className="w-20 h-20 text-emerald-400" />
+                        <span className="font-bold">PDF Document Selected</span>
+                      </div>
+                    ) : (
+                      <img src={ocrImage} className="w-full h-full object-contain" alt="Captured preview" />
+                    )}
                   </div>
 
                   <div className="flex flex-col sm:flex-row-reverse items-center gap-4 w-full max-w-sm">
@@ -638,9 +645,16 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
               {ocrStep === 'review' && ocrResult && (
                 <div className="flex flex-col gap-6">
                   <div className="flex flex-col gap-2">
-                    <div className="font-bold text-slate-500 text-[10px] uppercase tracking-widest mb-2">Original Image</div>
+                    <div className="font-bold text-slate-500 text-[10px] uppercase tracking-widest mb-2">Original Document</div>
                     <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm relative mx-auto bg-slate-50 w-fit">
-                      <img src={ocrImage || ''} className="max-h-[320px] w-auto h-auto block" />
+                      {ocrImage?.startsWith('data:application/pdf') ? (
+                        <div className="w-[320px] h-[320px] flex flex-col items-center justify-center bg-slate-100 text-slate-400 gap-2">
+                          <FileText className="w-12 h-12" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">PDF Document</span>
+                        </div>
+                      ) : (
+                        <img src={ocrImage || ''} className="max-h-[320px] w-auto h-auto block" />
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 overflow-hidden">

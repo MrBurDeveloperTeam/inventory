@@ -55,7 +55,7 @@ export interface MockNotification {
 }
 
 export interface GlobalInventoryItem {
-  id: number;
+  id: string;
   brand: string;
   name: string;
   code: string;

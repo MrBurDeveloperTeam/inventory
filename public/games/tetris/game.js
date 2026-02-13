@@ -9,7 +9,9 @@ const CONFIG = {
     ROWS: 20,
     CELL_SIZE: 28,
     STORAGE_KEY: 'tetris_v2_data',
-    SETTINGS_KEY: 'tetris_v2_settings'
+    SETTINGS_KEY: 'tetris_v2_settings',
+    DAS: 180, // Delayed Auto Shift (pre-repeat delay)
+    ARR: 60   // Auto Repeat Rate (repeat speed)
 };
 
 // ==================== GAME STATE ====================
@@ -25,6 +27,7 @@ const gameState = {
     lastTime: 0,
     paused: false,
     running: false,
+    isCountingDown: false,
     gameStartTime: 0,
     totalPieces: 0,
     holdUsed: false,
@@ -32,6 +35,14 @@ const gameState = {
         soundEnabled: true,
         ghostEnabled: true,
         gridEnabled: true
+    },
+    input: {
+        left: false,
+        right: false,
+        down: false,
+        leftTimer: 0,
+        rightTimer: 0,
+        downTimer: 0
     }
 };
 
@@ -580,7 +591,7 @@ function randomPiece() {
 /**
  * Show overlay message
  */
-function showOverlay(title, msg, showStart = false, showRestart = false, showSettings = false) {
+function showOverlay(title, msg, showStart = false, showRestart = false, showSettings = false, showResume = false) {
     if (title) {
         overlayTitle.innerText = title;
         overlayTitle.style.display = 'block';
@@ -628,7 +639,15 @@ function showOverlay(title, msg, showStart = false, showRestart = false, showSet
     overlayStart.style.display = showStart ? 'inline-block' : 'none';
     overlayRestart.style.display = showRestart ? 'inline-block' : 'none';
     overlaySettings.style.display = showSettings ? 'inline-block' : 'none';
-    overlayClose.style.display = (showStart || showRestart) ? 'none' : 'inline-block';
+
+    // In pause menu, we want both Resume and Restart.
+    // In Game Over, we want only Restart.
+    // In Welcome, we want only Start.
+    if (showResume || title === 'Paused') {
+        overlayClose.style.display = 'inline-block';
+    } else {
+        overlayClose.style.display = (showStart || showRestart) ? 'none' : 'inline-block';
+    }
 
     // Toggle Quit and Home
     overlayQuit.style.display = showStart ? 'inline-block' : 'none';
@@ -764,9 +783,89 @@ function update(time = 0) {
         gameState.dropCounter = 0;
     }
 
+    // Handle smooth horizontal movement (DAS/ARR)
+    if (gameState.input.left) {
+        if (gameState.input.leftTimer === 0) {
+            moveLeft();
+            gameState.input.leftTimer = CONFIG.DAS;
+        } else {
+            gameState.input.leftTimer -= delta;
+            if (gameState.input.leftTimer <= 0) {
+                moveLeft();
+                gameState.input.leftTimer = CONFIG.ARR;
+            }
+        }
+    } else {
+        gameState.input.leftTimer = 0;
+    }
+
+    if (gameState.input.right) {
+        if (gameState.input.rightTimer === 0) {
+            moveRight();
+            gameState.input.rightTimer = CONFIG.DAS;
+        } else {
+            gameState.input.rightTimer -= delta;
+            if (gameState.input.rightTimer <= 0) {
+                moveRight();
+                gameState.input.rightTimer = CONFIG.ARR;
+            }
+        }
+    } else {
+        gameState.input.rightTimer = 0;
+    }
+
+    // Optional: Smooth soft drop
+    if (gameState.input.down) {
+        if (gameState.input.downTimer === 0) {
+            moveDown();
+            gameState.input.downTimer = 50; // Constant speed for soft drop
+        } else {
+            gameState.input.downTimer -= delta;
+            if (gameState.input.downTimer <= 0) {
+                moveDown();
+                gameState.input.downTimer = 50;
+            }
+        }
+    } else {
+        gameState.input.downTimer = 0;
+    }
+
     draw();
     updateStats();
     requestAnimationFrame(update);
+}
+
+function moveLeft() {
+    player.pos.x--;
+    if (collide(gameState.arena, player)) {
+        player.pos.x++;
+        return false;
+    }
+    playMoveSound();
+    return true;
+}
+
+function moveRight() {
+    player.pos.x++;
+    if (collide(gameState.arena, player)) {
+        player.pos.x--;
+        return false;
+    }
+    playMoveSound();
+    return true;
+}
+
+function moveDown() {
+    player.pos.y++;
+    if (collide(gameState.arena, player)) {
+        player.pos.y--;
+        merge(gameState.arena, player);
+        sweepLines();
+        spawnNext();
+        return false;
+    }
+    gameState.dropCounter = 0; // Reset natural drop when manually moving down
+    return true;
 }
 
 /**
@@ -828,18 +927,52 @@ function stopGame(sendReward = true) {
  * Toggle pause
  */
 function togglePause() {
-    if (!gameState.running) return;
-    gameState.paused = !gameState.paused;
+    if (!gameState.running || gameState.isCountingDown) return;
 
-    if (btnPause) {
-        btnPause.innerHTML = gameState.paused ? '<i class="fas fa-play"></i>' : '<i class="fas fa-pause"></i>';
-    }
-
-    if (gameState.paused) {
-        showOverlay('Paused', '', false, false, true);
+    if (!gameState.paused) {
+        // Pausing is immediate
+        gameState.paused = true;
+        if (btnPause) {
+            btnPause.innerHTML = '<i class="fas fa-play"></i>';
+        }
+        showOverlay('Paused', '', false, true, true);
     } else {
-        hideOverlay();
+        // Resuming has a countdown
+        startResumeCountdown();
     }
+}
+
+/**
+ * Start countdown before resuming game
+ */
+function startResumeCountdown() {
+    if (gameState.isCountingDown) return;
+
+    gameState.isCountingDown = true;
+    overlayButtons.style.display = 'none';
+    overlayTitle.style.display = 'block';
+    overlayTitle.classList.add('huge-title');
+
+    let count = 3;
+    overlayTitle.innerText = count;
+
+    const timer = setInterval(() => {
+        count--;
+        if (count > 0) {
+            overlayTitle.innerText = count;
+            // Optional: play a tick sound if move sound is suitable
+            playMoveSound();
+        } else {
+            clearInterval(timer);
+            gameState.paused = false;
+            gameState.isCountingDown = false;
+            hideOverlay();
+            overlayTitle.classList.remove('huge-title');
+            if (btnPause) {
+                btnPause.innerHTML = '<i class="fas fa-pause"></i>';
+            }
+        }
+    }, 1000);
 }
 
 // ==================== INPUT HANDLERS ====================
@@ -847,29 +980,18 @@ function togglePause() {
  * Handle keyboard input
  */
 function handleKey(e) {
-    if (!gameState.running) return;
+    if (!gameState.running || gameState.paused || gameState.isCountingDown) return;
     if (!audioCtx) ensureAudio();
 
     if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        player.pos.x--;
-        if (collide(gameState.arena, player)) player.pos.x++;
-        else playMoveSound();
+        gameState.input.left = true;
     } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        player.pos.x++;
-        if (collide(gameState.arena, player)) player.pos.x--;
-        else playMoveSound();
+        gameState.input.right = true;
     } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        player.pos.y++;
-        if (collide(gameState.arena, player)) {
-            player.pos.y--;
-            merge(gameState.arena, player);
-            sweepLines();
-            spawnNext();
-        }
-        gameState.dropCounter = 0;
+        gameState.input.down = true;
     } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         playerRotate(1);
@@ -890,7 +1012,14 @@ function handleKey(e) {
     }
 }
 
+function handleKeyUp(e) {
+    if (e.key === 'ArrowLeft') gameState.input.left = false;
+    if (e.key === 'ArrowRight') gameState.input.right = false;
+    if (e.key === 'ArrowDown') gameState.input.down = false;
+}
+
 window.addEventListener('keydown', handleKey);
+window.addEventListener('keyup', handleKeyUp);
 
 // ==================== OVERLAY BUTTONS ====================
 overlayStart.addEventListener('click', () => {
@@ -961,7 +1090,8 @@ document.getElementById('btn-settings-back').addEventListener('click', () => {
         showOverlay(overlayTitle.innerText, overlayMsg.innerHTML,
             overlayStart.style.display === 'inline-block',
             overlayRestart.style.display === 'inline-block',
-            overlaySettings.style.display === 'inline-block'
+            overlaySettings.style.display === 'inline-block',
+            overlayClose.style.display === 'inline-block'
         );
     }
 });
