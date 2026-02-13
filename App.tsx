@@ -598,7 +598,14 @@ const App: React.FC = () => {
         logsByUser.set(l.user_id, arr);
       });
 
-      const prepared: ManagedInventory[] = Array.from(metaByUser.keys()).map(userId => {
+      const allActiveUserIds = new Set([
+        ...Array.from(metaByUser.keys()),
+        ...Array.from(roomsByUser.keys()),
+        ...Array.from(historyByUser.keys()),
+        ...Array.from(logsByUser.keys())
+      ]);
+
+      const prepared: ManagedInventory[] = Array.from(allActiveUserIds).map(userId => {
         const metaRow = metaByUser.get(userId);
         return {
           userId,
@@ -666,7 +673,7 @@ const App: React.FC = () => {
     // Final check if user is admin
     if (finalProfile?.account_type === 'admin') {
       setIsAdmin(true);
-      fetchAdminData();
+      fetchAdminData(true);
     }
 
     // Load available inventories

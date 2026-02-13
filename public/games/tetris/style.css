@@ -129,11 +129,11 @@ canvas#tetris {
 }
 
 .overlay h2.huge-title {
-    font-size: 28px;
+    font-size: 80px;
     margin-bottom: 20px;
     text-transform: uppercase;
-    color: #ff3333;
-    text-shadow: 0 0 20px rgba(255, 51, 51, 0.6);
+    color: #ffffff;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
     text-align: center;
     width: 100%;
     white-space: nowrap;
@@ -386,31 +386,36 @@ canvas#tetris {
 /* Side panel pause button */
 #btn-pause {
     position: absolute;
-    top: -58px;
+    top: -45px;
     right: 10px;
-    width: 50px;
-    height: 50px;
-    font-size: 22px;
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
     color: #fff;
-    background: linear-gradient(180deg, #00b4ff, #0050f0);
-    border: none;
-    border-radius: 16px;
-    box-shadow: 0 4px 0 #003a8c, 0 10px 20px rgba(0, 180, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1000;
 }
 
 #btn-pause:hover {
     transform: translateY(-2px);
-    background: linear-gradient(180deg, #33c1ff, #1a75ff);
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
 #btn-pause:active {
-    transform: translateY(2px);
+    transform: translateY(1px);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .side {

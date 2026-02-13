@@ -22,6 +22,8 @@ interface GameStateContextType {
     buyItem: (itemId: string, price: number) => boolean;
     consumeItem: (itemId: string) => void;
     addXP: (amount: number) => void;
+    activeBallId: string;
+    setActiveBallId: (id: string) => void;
 }
 
 const GameStateContext = createContext<GameStateContextType | undefined>(undefined);
@@ -36,6 +38,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const [isSleeping, setIsSleeping] = useState(false);
     const [isEating, setIsEating] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [activeBallId, setActiveBallId] = useState<string>('ball_red');
 
     const isHydrated = useRef(false);
     const saveTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -68,6 +71,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     setPetName(data.pet_name);
                     setPetColor(data.pet_color as PetColor);
                     setIsSleeping(data.is_sleeping);
+                    if (data.active_ball_id) setActiveBallId(data.active_ball_id);
                 }
 
                 // Load inventory from pet_inventory table
@@ -77,10 +81,15 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     .eq('user_id', currentUserId);
 
                 if (invData && !invError) {
-                    const invMap = invData.reduce((acc, curr) => ({
+                    const invMap: Record<string, number> = invData.reduce((acc, curr) => ({
                         ...acc,
                         [curr.item_id]: curr.quantity
                     }), {});
+
+                    // Self-healing: If active ball is not in inventory, add it (restores lost purchases)
+                    if (data?.active_ball_id && !invMap[data.active_ball_id] && data.active_ball_id !== 'ball_red') {
+                        invMap[data.active_ball_id] = 1;
+                    }
                     setInventory(invMap);
                 }
             } else {
@@ -93,6 +102,8 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 if (savedStats) setStats(JSON.parse(savedStats));
                 if (savedName) setPetName(savedName);
                 if (savedColor) setPetColor(savedColor as PetColor);
+                const savedBall = localStorage.getItem('pet_active_ball');
+                if (savedBall) setActiveBallId(savedBall);
                 if (savedInv) setInventory(JSON.parse(savedInv));
             }
             isHydrated.current = true;
@@ -131,6 +142,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     xp: stats.xp,
                     coins: stats.coins,
                     is_sleeping: isSleeping,
+                    active_ball_id: activeBallId,
                     last_interaction: new Date().toISOString()
                 });
 
@@ -151,7 +163,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     await supabase.from('pet_inventory')
                         .delete()
                         .eq('user_id', userId)
-                        .not('item_id', 'in', `(${currentItemIds.join(',')})`);
+                        .not('item_id', 'in', currentItemIds);
                 } else {
                     await supabase.from('pet_inventory')
                         .delete()
@@ -161,6 +173,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 localStorage.setItem('pet_stats', JSON.stringify(stats));
                 localStorage.setItem('pet_name', petName);
                 localStorage.setItem('pet_color', petColor);
+                localStorage.setItem('pet_active_ball', activeBallId);
                 localStorage.setItem('pet_inventory', JSON.stringify(inventory));
             }
         }, 2000); // 2 second debounce
@@ -168,7 +181,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return () => {
             if (saveTimeout.current) clearTimeout(saveTimeout.current);
         };
-    }, [stats, petName, petColor, inventory, isSleeping, userId]);
+    }, [stats, petName, petColor, inventory, isSleeping, activeBallId, userId]);
 
     // Game Loop (Stats decay)
     useEffect(() => {
@@ -254,7 +267,9 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             inventory,
             buyItem,
             consumeItem,
-            addXP
+            addXP,
+            activeBallId,
+            setActiveBallId
         }}>
             {children}
         </GameStateContext.Provider>

@@ -62,4 +62,13 @@ export interface Bubble {
   size: number;
 }
 
+export interface ToyItem {
+  id: string;
+  icon: string;
+  label: string;
+  price: number;
+  color: string;
+  levelReq?: number;
+}
+
 export type ToolType = 'soap' | 'shower';

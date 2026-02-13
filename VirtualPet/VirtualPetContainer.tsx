@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AiTwotoneHome } from "react-icons/ai";
+import { FcHome } from "react-icons/fc";
 import { PetRoom } from './PetRoom';
 import { GamePage } from './components/GamePage';
 import { GameStateProvider } from './context/GameStateContext';
@@ -28,10 +28,10 @@ const VirtualPetContent: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             {/* Close Overlay Button (Global) */}
             <button
                 onClick={onClose}
-                className="absolute top-5 left-5 z-[100] w-16 h-16 flex items-center justify-center text-slate-800/80 hover:scale-110 transition-all"
+                className="absolute top-5 left-5 z-[100] w-20 h-20 flex items-center justify-center text-slate-800/80 hover:scale-110 transition-all drop-shadow-lg"
                 title="Back to Inventory"
             >
-                <AiTwotoneHome size={65} />
+                <FcHome size={80} />
             </button>
 
             {view === 'ROOM' ? (
