@@ -56,8 +56,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout, onBack, onUpd
   };
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto w-full px-4 pt-5 pb-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-3xl mx-auto w-full px-4 pt-0 pb-2">
+      <div className="mb-6 flex items-center justify-between">
         <button 
           onClick={onBack}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-white transition-all font-bold text-sm shadow-sm border border-transparent hover:border-slate-100"
@@ -146,7 +146,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout, onBack, onUpd
               </div>
               <div className="flex flex-col">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.1em]">Email Address</span>
-                <span className="text-sm font-bold text-slate-700 truncate max-w-[180px]">{user.email}</span>
+                <span className="text-sm font-bold text-slate-700 truncate max-w-[240px]">{user.email}</span>
               </div>
             </div>
 

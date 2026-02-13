@@ -34,15 +34,21 @@ const Header: React.FC<HeaderProps> = ({
 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    // Check if app is already installed/running in standalone mode
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    setIsStandalone(checkStandalone);
+
+    // Detect iOS
+    const checkIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIOS(checkIOS);
 
     const handleBeforeInstallPrompt = (e: any) => {
       console.log('beforeinstallprompt event caught in Header');
       e.preventDefault();
-      if (!isStandalone) {
+      if (!checkStandalone) {
         setDeferredPrompt(e);
         setShowInstallBtn(true);
       }
@@ -169,7 +175,7 @@ const Header: React.FC<HeaderProps> = ({
                 onClick={handleProfileClick}
                 className="w-full flex items-center justify-between p-2 hover:bg-slate-50 rounded-xl transition-colors group text-left"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="relative">
                     {userAvatarUrl ? (
                       <img
@@ -187,7 +193,7 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 text-[16px] truncate">{user?.name || 'User'}</p>
+                    <p className="font-bold text-slate-800 text-[15px] truncate">{user?.name || 'User'}</p>
                     <p className="text-[12px] text-slate-500 font-medium truncate">{user?.email}</p>
                   </div>
                 </div>
@@ -244,6 +250,22 @@ const Header: React.FC<HeaderProps> = ({
                     <Download size={16} />
                     <span>Install App</span>
                   </button>
+                </div>
+              )}
+
+              {isIOS && !isStandalone && (
+                <div className="mt-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <h3 className="text-xs font-bold text-slate-700 tracking-normal mb-3">Install on iOS</h3>
+                  <div className="bg-emerald-50 border border-emerald-100/50 rounded-xl p-3">
+                    <div className="flex items-start gap-2 text-emerald-800">
+                      <div className="mt-0.5 shrink-0">
+                        <Download size={14} className="text-emerald-500" />
+                      </div>
+                      <p className="text-[11px] font-bold leading-relaxed">
+                        Tap the <span className="bg-white px-1 py-0.5 rounded shadow-sm text-blue-600">Share</span> icon below and select <span className="underline decoration-emerald-200 decoration-2 underline-offset-2">"Add to Home Screen"</span> to install MR.BUR on your iPhone.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
 

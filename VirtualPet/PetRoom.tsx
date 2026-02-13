@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RoomType, FoodItem, Bubble, ToolType } from './types';
-import { ROOM_THEMES, FOOD_ITEMS } from './constants';
+import { ROOM_THEMES, FOOD_ITEMS, TOY_ITEMS } from './constants';
 import Pet from './components/Pet';
 import StatsBar from './components/StatsBar';
 import BottomControls from './components/BottomControls';
@@ -8,6 +8,7 @@ import { FoodMenu, BathroomMenu, GamesMenu } from './components/RoomMenus';
 import DragLayer from './components/DragLayer';
 import Ball from './components/Ball';
 import ShopModal from './components/ShopModal';
+import ToyShopModal from './components/ToyShopModal';
 import { FridgeModal } from './components/FridgeModal';
 import { useGameState } from './hooks/useGameState';
 import { useBallPhysics } from './hooks/useBallPhysics';
@@ -31,7 +32,7 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
     isEating, setIsEating,
     isPlaying, setIsPlaying,
     inventory, buyItem, consumeItem,
-    addXP
+    addXP, activeBallId, setActiveBallId
   } = useGameState();
 
   const {
@@ -57,6 +58,7 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
   const [showBathroomMenu, setShowBathroomMenu] = useState(false);
   const [showShopModal, setShowShopModal] = useState(false);
   const [showFridgeModal, setShowFridgeModal] = useState(false);
+  const [showToyShop, setShowToyShop] = useState(false);
 
 
   // Drag & Drop / Tool State
@@ -182,8 +184,8 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
       const now = Date.now();
       const dt = now - lastDragPos.current.time;
       if (dt > 0) {
-        const vx = (e.clientX - lastDragPos.current.x) * 0.5;
-        const vy = (e.clientY - lastDragPos.current.y) * 0.5;
+        const vx = (e.clientX - lastDragPos.current.x) * 0.7;
+        const vy = (e.clientY - lastDragPos.current.y) * 0.7;
         ballVel.current = { vx, vy };
       }
       lastDragPos.current = { x: e.clientX, y: e.clientY, time: now };
@@ -376,7 +378,19 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
           <div className="absolute bottom-10 right-10 opacity-50 text-6xl animate-float">🦆</div>
         )}
         {currentRoom === RoomType.GAMES && (
-          <div className="absolute top-10 left-10 opacity-30 text-8xl animate-pulse">👾</div>
+          // Icon removed as requested
+          null
+        )}
+
+        {/* Playroom Store Button */}
+        {currentRoom === RoomType.PLAYROOM && (
+          <button
+            onClick={() => setShowToyShop(true)}
+            className="absolute bottom-10 right-10 bg-white/40 hover:bg-white/60 backdrop-blur-md p-4 rounded-3xl border-4 border-pink-200 shadow-xl transition-all hover:scale-110 active:scale-95 group z-30"
+          >
+            <div className="text-4xl group-hover:rotate-12 transition-transform">🏪</div>
+            <div className="mt-1 text-[10px] font-black text-pink-500 uppercase tracking-widest">Toy Shop</div>
+          </button>
         )}
       </div>
 
@@ -386,6 +400,8 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
           position={ballPos}
           isDragging={isDraggingBall}
           onPointerDown={handleBallDown}
+          color={TOY_ITEMS.find(t => t.id === activeBallId)?.color}
+          icon={TOY_ITEMS.find(t => t.id === activeBallId)?.icon}
         />
       )}
 
@@ -454,6 +470,18 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
           setShowFridgeModal(false);
           setShowShopModal(true);
         }}
+      />
+
+      <ToyShopModal
+        isOpen={showToyShop}
+        onClose={() => setShowToyShop(false)}
+        items={TOY_ITEMS}
+        inventory={inventory}
+        coins={stats.coins}
+        currentLevel={stats.level}
+        activeBallId={activeBallId}
+        onBuy={(toy) => buyItem(toy.id, toy.price)}
+        onSelect={(id) => setActiveBallId(id)}
       />
 
     </div>
