@@ -213,8 +213,7 @@ const App: React.FC = () => {
       chatAudioRef.current.addEventListener('error', (e) => {
         console.warn("Failed to load cat audio (this is often a browser cache issue):", e);
       });
-      getBootstrap()
-      
+      getBootstrap();
     } catch (err) {
       console.error("Audio initialization error:", err);
     }
@@ -222,7 +221,12 @@ const App: React.FC = () => {
 
   const getBootstrap = async () => {
     const res = await api.get('/bootstrap');
-    console.log("response bootstrap", res);
+    if(res && res.data) {
+      const { user } = res.data;
+      if(user) {
+        setIsAuthenticated(true);
+      }
+    }
   }
 
   const playMeowChat = () => {
