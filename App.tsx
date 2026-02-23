@@ -223,6 +223,7 @@ const App: React.FC = () => {
     const {data} = await api.get('/bootstrap') as any;
     if(data) {
       console.log('Bootstrap data:', data);
+      bootstrapUser(data.user?.profiles?.user_id);
       const { user } = data;
       if(user) {
         const {profiles} = user;
