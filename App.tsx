@@ -230,6 +230,7 @@ const App: React.FC = () => {
         await fetchAvailableInventories(profiles.user_id);
         setIsLoadingMain(false);
         setIsAuthenticated(true);
+        console.log('Bootstrap successful, user:', user);
         return user;
       }
     }
@@ -718,7 +719,7 @@ const App: React.FC = () => {
       avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
       backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
     });
-    console.log('this user logged in')
+
     setIsAuthenticated(true);
     setIsBootstrapped(true);
   };
