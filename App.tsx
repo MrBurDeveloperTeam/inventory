@@ -224,6 +224,7 @@ const App: React.FC = () => {
     if(res && res.data) {
       const { user } = res.data;
       if(user) {
+        setIsLoadingMain(false);
         setIsAuthenticated(true);
         return user;
       }
