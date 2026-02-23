@@ -424,11 +424,8 @@ const App: React.FC = () => {
   };
 
   const handleSSOLogin = async () => {
-    const r = await fetch("https://gallery.mrburstudio.com/api/supabase-token", {
-      method: "GET",
-      credentials: "include",
-    });
-    const { token } = await r.json();
+    const r = await api.get("/supabase-token");
+    const { token } = await r.data;
 
     await supabase.auth.setSession({
       access_token: token,
