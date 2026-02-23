@@ -725,12 +725,12 @@ const App: React.FC = () => {
     }
 
     try {
-      const { data: meta } = await supabase
-        .from('inventory_meta')
-        .select('*')
-        .eq('user_id', currentInventoryOwnerId)
-        .maybeSingle();
-      // const { data: meta } = await api.get('/inventory/meta');
+      // const { data: meta } = await supabase
+      //   .from('inventory_meta')
+      //   .select('*')
+      //   .eq('user_id', currentInventoryOwnerId)
+      //   .maybeSingle();
+      const { data: meta } = await api.get('/inventory/meta');
       console.log('res meta: ',meta);
       if(supabase.auth.getSession) {
       }
