@@ -378,14 +378,20 @@ const App: React.FC = () => {
     const list: { id: string; name: string; role: string }[] = [{ id: uid, name: 'My Inventory', role: 'owner' }];
 
     // 2. Shared Inventories - get collaborator records
-    const { data: shared, error } = await supabase
-      .from('collaborators')
-      .select('owner_id, role')
-      .eq('user_id', uid);
+    const shared = await api.get<any>('/collaborators', { params: { uid: uid } }).catch(async err => {
+      const { data: shared, error } = await supabase
+        .from('collaborators')
+        .select('owner_id, role')
+        .eq('user_id', uid);
 
-    if (error) {
-      console.error('Error fetching shared inventories:', error);
-    } else if (shared && shared.length > 0) {
+        if (error) {
+          console.error('Error fetching shared inventories:', error);
+        }
+        return shared as any
+      }
+      );
+      
+      if (shared && shared.length > 0) {
       // Fetch owner profiles separately to avoid FK join issues
       const ownerIds = shared.map((s: any) => s.owner_id);
       const { data: ownerProfiles } = await supabase
@@ -406,6 +412,7 @@ const App: React.FC = () => {
         });
       });
     }
+
 
     setAvailableInventories(list);
     // Determine which ID to use. If currentInventoryOwnerId is already set and valid, keep it. Otherwise default to own.
@@ -711,7 +718,6 @@ const App: React.FC = () => {
   };
 
   const loadInventory = useCallback(async () => {
-    console.log('Attempting to load inventory for owner:', currentInventoryOwnerId);
     if (!currentInventoryOwnerId) return;
     if (isDirty.current) {
       console.log('loadInventory: Local state is dirty, skipping reload to prevent overwrite');
