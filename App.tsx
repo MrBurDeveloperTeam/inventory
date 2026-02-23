@@ -16,6 +16,7 @@ import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { MessageCircle } from 'lucide-react';
 import { api } from './services/api';
+import { hydrateSupabaseFromSso } from './services/hydrateSupabase';
 
 type ManagedInventory = {
   userId: string;
@@ -423,19 +424,13 @@ const App: React.FC = () => {
     });
   };
 
-  const handleSSOLogin = async () => {
-    const r = await api.get("/supabase-token");
-    const { token } = await r.data;
-
-    await supabase.auth.setSession({
-      access_token: token,
-      refresh_token: token,
-    });
+  const hydrate = async () => {
+    return await hydrateSupabaseFromSso(supabase, api);
   }
 
-
   useEffect(() => {
-    handleSSOLogin();
+    const res = hydrate();
+    console.log('res: ',res)
     const fetchSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) {
