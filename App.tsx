@@ -220,10 +220,10 @@ const App: React.FC = () => {
   }, []);
 
   const getBootstrap = async () => {
-    const res = await api.get('/bootstrap') as any;
-    if(res) {
-      console.log('Bootstrap data:', res);
-      const { user } = res;
+    const {data} = await api.get('/bootstrap') as any;
+    if(data) {
+      console.log('Bootstrap data:', data);
+      const { user } = data;
       if(user) {
         setIsLoadingMain(false);
         setIsAuthenticated(true);
@@ -436,7 +436,7 @@ const App: React.FC = () => {
         setBlueprint(PRESET_BLUEPRINTS[0].url);
       }
     };
-    // fetchSession();
+    fetchSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         bootstrapUser(session.user.id);
