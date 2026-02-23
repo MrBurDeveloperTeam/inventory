@@ -425,7 +425,7 @@ const App: React.FC = () => {
   };
 
   const hydrate = async () => {
-    return await hydrateSupabaseFromSso(supabase, api);
+    return await hydrateSupabaseFromSso(supabase);
   }
 
   useEffect(() => {

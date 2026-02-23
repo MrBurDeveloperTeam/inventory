@@ -1,4 +1,6 @@
-export async function hydrateSupabaseFromSso(supabase, api) {
+import { api } from "./api";
+
+export async function hydrateSupabaseFromSso(supabase) {
   const { data: existing } = await supabase.auth.getSession();
   if (existing?.session) return; // already logged in normally
 
