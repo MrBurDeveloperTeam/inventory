@@ -220,9 +220,9 @@ const App: React.FC = () => {
   }, []);
 
   const getBootstrap = async () => {
-    const res = await api.get('/bootstrap');
-    if(res && res.data) {
-      const { user } = res.data;
+    const res = await api.get('/bootstrap') as any;
+    if(res) {
+      const { user } = res;
       if(user) {
         setIsLoadingMain(false);
         setIsAuthenticated(true);
