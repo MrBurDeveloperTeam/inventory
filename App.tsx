@@ -731,7 +731,7 @@ const App: React.FC = () => {
         .eq('user_id', currentInventoryOwnerId)
         .maybeSingle();
       // const { data: meta } = await api.get('/inventory/meta');
-      console.log('res: ',meta);
+      console.log('res meta: ',meta);
       if(supabase.auth.getSession) {
       }
 
