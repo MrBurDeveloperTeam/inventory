@@ -436,7 +436,7 @@ const App: React.FC = () => {
         setBlueprint(PRESET_BLUEPRINTS[0].url);
       }
     };
-    fetchSession();
+    // fetchSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         bootstrapUser(session.user.id);
