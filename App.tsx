@@ -725,16 +725,20 @@ const App: React.FC = () => {
     }
 
     try {
-      const { data: meta } = await supabase
+      const { data: meta } = await api.get(`/inventory/meta`).then(res => res.data[0]).catch(async err => {
+        return await supabase
         .from('inventory_meta')
         .select('*')
-        .eq('user_id', currentInventoryOwnerId)
+        .eq('user_id', currentInventoryOwnerId) 
         .maybeSingle();
+      });
 
-      const { data: roomsData, error: roomsError } = await supabase
+      const { data: roomsData, error: roomsError } = await api.get(`/inventory/rooms?user_id=${currentInventoryOwnerId}`).then(res => res.data).catch(async err => {
+        return await supabase
         .from('inventory_rooms')
         .select('id, name, pos_x, pos_y')
         .eq('user_id', currentInventoryOwnerId);
+      })
       if (roomsError) {
         console.error('Rooms fetch error', roomsError);
       }
