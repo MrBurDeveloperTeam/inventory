@@ -225,6 +225,8 @@ const App: React.FC = () => {
       console.log('Bootstrap data:', data);
       const { user } = data;
       if(user) {
+        const {profiles} = user;
+        await fetchAvailableInventories(profiles.user_id);
         setIsLoadingMain(false);
         setIsAuthenticated(true);
         return user;
