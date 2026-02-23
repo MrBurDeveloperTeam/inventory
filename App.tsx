@@ -732,7 +732,7 @@ const App: React.FC = () => {
       //   .maybeSingle();
       const { data: meta } = await api.get('/inventory/meta');
       console.log('res meta: ',meta);
-      const { data: roomsData } = await api.get('/inventory/rooms', { params: { ownerId: currentInventoryOwnerId } });
+      const { data: roomsData } = await api.get(`/inventory/rooms?ownerId=${currentInventoryOwnerId}`);
       console.log('res rooms: ',roomsData);
       if(supabase.auth.getSession) {
       }
