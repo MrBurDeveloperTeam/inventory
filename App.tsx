@@ -751,41 +751,49 @@ const App: React.FC = () => {
       logData = res.log_data;
       console.log('Bootstrap data fetched', { meta, roomsData, itemsData, historyData, logData });
 
-      // const { data: meta } = await api.get(`/inventory/meta`).then(res => res.data[0]).catch(async err => {
-      //   return await supabase
-      //   .from('inventory_meta')
-      //   .select('*')
-      //   .eq('user_id', currentInventoryOwnerId) 
-      //   .maybeSingle();
-      // });
+      if(!meta || !roomsData) {
+      const { data:metadata } = await api.get(`/inventory/meta`).then(res => res.data[0]).catch(async err => {
+        return await supabase
+        .from('inventory_meta')
+        .select('*')
+        .eq('user_id', currentInventoryOwnerId) 
+        .maybeSingle();
+      });
 
-      // const { data: roomsData, error: roomsError } = await api.get(`/inventory/rooms?user_id=${currentInventoryOwnerId}`).then(res => res.data).catch(async err => {
-      //   return await supabase
-      //   .from('inventory_rooms')
-      //   .select('id, name, pos_x, pos_y')
-      //   .eq('user_id', currentInventoryOwnerId);
-      // })
-      // if (roomsError) {
-      //   console.error('Rooms fetch error', roomsError);
-      // }
+      meta = metadata;
+
+      const { data:roomdata, error: roomsError } = await api.get(`/inventory/rooms?user_id=${currentInventoryOwnerId}`).then(res => res.data).catch(async err => {
+        return await supabase
+        .from('inventory_rooms')
+        .select('id, name, pos_x, pos_y')
+        .eq('user_id', currentInventoryOwnerId);
+      })
+
+      roomsData = roomdata;
+      if (roomsError) {
+        console.error('Rooms fetch error', roomsError);
+      }
+    
 
       const roomIds = (roomsData || []).map((r: any) => r.id);
-      // const { data: itemsData } = roomIds.length
-      //   ? await supabase.from('inventory_items').select('*, item_batches:inventory_item_batches(*)').in('room_id', roomIds)
-      //   : { data: [] as any[] };
-
-      // const { data: historyData } = await supabase
-      //   .from('inventory_purchase_history')
-      //   .select('*')
-      //   .eq('user_id', currentInventoryOwnerId)
-      //   .order('occurred_at', { ascending: false })
-      //   .order('created_at', { ascending: false });
-
-      // const { data: logData } = await supabase
-      //   .from('inventory_activity_logs')
-      //   .select('*, actor:actor_id(name, email)')
-      //   .eq('user_id', currentInventoryOwnerId)
-      //   .order('created_at', { ascending: false });
+      const { data: itemData } = roomIds.length
+        ? await supabase.from('inventory_items').select('*, item_batches:inventory_item_batches(*)').in('room_id', roomIds)
+        : { data: [] as any[] };
+      itemsData = itemData;
+      const { data: historiesData } = await supabase
+        .from('inventory_purchase_history')
+        .select('*')
+        .eq('user_id', currentInventoryOwnerId)
+        .order('occurred_at', { ascending: false })
+        .order('created_at', { ascending: false });
+      historyData = historiesData;
+      const { data: logsData } = await supabase
+        .from('inventory_activity_logs')
+        .select('*, actor:actor_id(name, email)')
+        .eq('user_id', currentInventoryOwnerId)
+        .order('created_at', { ascending: false });
+        logData = logsData;
+    }
 
       const itemsByRoom: Record<string, Item[]> = {};
       (itemsData || []).forEach((row: any) => {
