@@ -742,8 +742,13 @@ const App: React.FC = () => {
     }
 
     try {
-      const { meta, rooms: roomsData, items_data: itemsData, history_data: historyData, log_data: logData } = await getBootstrap() as any;
-
+      let meta = null, roomsData = null, itemsData = null, historyData = null, logData = null;
+      const res = await getBootstrap() as any;
+      meta = res.meta;
+      roomsData = res.rooms;
+      itemsData = res.items_data;
+      historyData = res.history_data;
+      logData = res.log_data;
       console.log('Bootstrap data fetched', { meta, roomsData, itemsData, historyData, logData });
 
       // const { data: meta } = await api.get(`/inventory/meta`).then(res => res.data[0]).catch(async err => {
