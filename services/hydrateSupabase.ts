@@ -3,7 +3,7 @@ export async function hydrateSupabaseFromSso(supabase, api) {
   if (existing?.session) return; // already logged in normally
 
   // try SSO cookie -> supabase session
-  const r = await api.get("/supabase-session", { withCredentials: true });
+  const r = await api.get("/supabase-session");
   if (!r.data?.ok) return;
 
   const { access_token, refresh_token } = r.data;
