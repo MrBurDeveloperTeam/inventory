@@ -718,7 +718,7 @@ const App: React.FC = () => {
       avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
       backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
     });
-
+    console.log('this user logged in')
     setIsAuthenticated(true);
     setIsBootstrapped(true);
   };
