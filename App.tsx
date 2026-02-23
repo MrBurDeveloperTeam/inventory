@@ -725,12 +725,15 @@ const App: React.FC = () => {
     }
 
     try {
-      // const { data: meta } = await supabase
-      //   .from('inventory_meta')
-      //   .select('*')
-      //   .eq('user_id', currentInventoryOwnerId)
-      //   .maybeSingle();
-      const { data: meta } = await api.get('/inventory/meta');
+      // const { data: meta } = 
+      const { data: meta } = await api.get('/inventory/meta').catch(async err => {
+        console.error('Failed to fetch inventory meta:', err);
+        return await supabase
+        .from('inventory_meta')
+        .select('*')
+        .eq('user_id', currentInventoryOwnerId)
+        .maybeSingle();
+      });
       console.log('res meta: ',meta);
       const { data: roomsData } = await api.get(`/inventory/rooms?ownerId=${currentInventoryOwnerId}`);
       console.log('res rooms: ',roomsData);
