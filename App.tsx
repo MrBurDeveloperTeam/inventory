@@ -711,6 +711,7 @@ const App: React.FC = () => {
   };
 
   const loadInventory = useCallback(async () => {
+    console.log('Attempting to load inventory for owner:', currentInventoryOwnerId);
     if (!currentInventoryOwnerId) return;
     if (isDirty.current) {
       console.log('loadInventory: Local state is dirty, skipping reload to prevent overwrite');
