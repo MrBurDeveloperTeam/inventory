@@ -1420,11 +1420,11 @@ const App: React.FC = () => {
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       try {
-        const { error } = await supabase
+        await api.patch('/inventory/rooms/position', { id, pos_x: x, pos_y: y }).catch(async err => {
+         await supabase
           .from('inventory_rooms')
           .update({ pos_x: x, pos_y: y })
-          .eq('id', id);
-        if (error) throw error;
+          .eq('id', id)});
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to update room position in DB:', err);
