@@ -729,6 +729,8 @@ const App: React.FC = () => {
     try {
       const { meta, rooms: roomsData, items_data: itemsData, history_data: historyData, log_data: logData } = getBootstrap() as any;
 
+      console.log('Bootstrap data fetched', { meta, roomsData, itemsData, historyData, logData });
+
       // const { data: meta } = await api.get(`/inventory/meta`).then(res => res.data[0]).catch(async err => {
       //   return await supabase
       //   .from('inventory_meta')
