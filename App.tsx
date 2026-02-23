@@ -742,7 +742,7 @@ const App: React.FC = () => {
     }
 
     try {
-      const { meta, rooms: roomsData, items_data: itemsData, history_data: historyData, log_data: logData } = getBootstrap() as any;
+      const { meta, rooms: roomsData, items_data: itemsData, history_data: historyData, log_data: logData } = await getBootstrap() as any;
 
       console.log('Bootstrap data fetched', { meta, roomsData, itemsData, historyData, logData });
 
