@@ -658,7 +658,7 @@ const App: React.FC = () => {
     const { data: authUser } = await supabase.auth.getUser();
     const storedImages = loadUserImages(userId);
 
-    //  const { data: profile, error: profileError } = await api.get('/api/inventory/profile/latest', { params: { user_id: userId } }).catch(async err => {
+     const { data: profile, error: profileError } = await api.get('/api/inventory/profile/latest', { params: { user_id: userId } }).catch(async err => {
        const { data: profile, error: profileError } = await supabase
          .from('profiles')
          .select('*')
@@ -666,8 +666,8 @@ const App: React.FC = () => {
          .order('updated_at', { ascending: false })
          .limit(1)
          .maybeSingle();
-        //  return { data, profileError } as any;
-    // });
+         return { profile, profileError } as any;
+    });
 
     if (profileError && profileError.code !== 'PGRST116') {
       console.error('Profile fetch error', profileError);
