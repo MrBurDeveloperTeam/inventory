@@ -16,7 +16,6 @@ import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { MessageCircle } from 'lucide-react';
 import { api } from './services/api';
-import { hydrateSupabaseFromSso } from './services/hydrateSupabase';
 
 type ManagedInventory = {
   userId: string;
@@ -424,13 +423,8 @@ const App: React.FC = () => {
     });
   };
 
-  const hydrate = async () => {
-    return await hydrateSupabaseFromSso(supabase);
-  }
 
   useEffect(() => {
-    const res = hydrate();
-    console.log('res: ',res)
     const fetchSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) {
@@ -732,22 +726,24 @@ const App: React.FC = () => {
 
     try {
       const { data: meta } = await api.get('/inventory/meta');
-      console.log('res: ',supabase);
+      console.log('res: ',meta);
       if(supabase.auth.getSession) {
-      const { data: meta } = await supabase
-        .from('inventory_meta')
-        .select('*')
-        .eq('user_id', currentInventoryOwnerId)
-        .maybeSingle();
+      // const { data: meta } = await supabase
+      //   .from('inventory_meta')
+      //   .select('*')
+      //   .eq('user_id', currentInventoryOwnerId)
+      //   .maybeSingle();
       }
+      const { data: roomsData } = await api.get('/inventory/rooms');
+      console.log('roomsData: ',roomsData);
 
-      const { data: roomsData, error: roomsError } = await supabase
-        .from('inventory_rooms')
-        .select('id, name, pos_x, pos_y')
-        .eq('user_id', currentInventoryOwnerId);
-      if (roomsError) {
-        console.error('Rooms fetch error', roomsError);
-      }
+      // const { data: roomsData, error: roomsError } = await supabase
+      //   .from('inventory_rooms')
+      //   .select('id, name, pos_x, pos_y')
+      //   .eq('user_id', currentInventoryOwnerId);
+      // if (roomsError) {
+      //   console.error('Rooms fetch error', roomsError);
+      // }
 
       const roomIds = (roomsData || []).map((r: any) => r.id);
       const { data: itemsData } = roomIds.length
