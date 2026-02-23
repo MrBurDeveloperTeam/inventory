@@ -658,7 +658,7 @@ const App: React.FC = () => {
     const { data: authUser } = await supabase.auth.getUser();
     const storedImages = loadUserImages(userId);
 
-     const { data: profile, error: profileError } = await api.get('/api/inventory/profile/latest', { params: { userId } }).catch(async err => {
+     const { data: profile, error: profileError } = await api.get('/inventory/profile/latest', { params: { userId } }).catch(async err => {
        const { data: profile, error: profileError } = await supabase
          .from('profiles')
          .select('*')
