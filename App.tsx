@@ -725,28 +725,19 @@ const App: React.FC = () => {
     }
 
     try {
-      // const { data: meta } = 
-      const { data: meta } = await api.get('/inventory/meta').catch(async err => {
-        console.error('Failed to fetch inventory meta:', err);
-        return await supabase
+      const { data: meta } = await supabase
         .from('inventory_meta')
         .select('*')
         .eq('user_id', currentInventoryOwnerId)
         .maybeSingle();
-      });
-      console.log('res meta: ',meta);
-      const { data: roomsData } = await api.get(`/inventory/rooms?ownerId=${currentInventoryOwnerId}`);
-      console.log('res rooms: ',roomsData);
-      if(supabase.auth.getSession) {
-      }
 
-      // const { data: roomsData, error: roomsError } = await supabase
-      //   .from('inventory_rooms')
-      //   .select('id, name, pos_x, pos_y')
-      //   .eq('user_id', currentInventoryOwnerId);
-      // if (roomsError) {
-      //   console.error('Rooms fetch error', roomsError);
-      // }
+      const { data: roomsData, error: roomsError } = await supabase
+        .from('inventory_rooms')
+        .select('id, name, pos_x, pos_y')
+        .eq('user_id', currentInventoryOwnerId);
+      if (roomsError) {
+        console.error('Rooms fetch error', roomsError);
+      }
 
       const roomIds = (roomsData || []).map((r: any) => r.id);
       const { data: itemsData } = roomIds.length
