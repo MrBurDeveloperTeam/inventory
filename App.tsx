@@ -734,16 +734,14 @@ const App: React.FC = () => {
       //   .eq('user_id', currentInventoryOwnerId)
       //   .maybeSingle();
       }
-      const { data: roomsData } = await api.get('/inventory/rooms');
-      console.log('roomsData: ',roomsData);
 
-      // const { data: roomsData, error: roomsError } = await supabase
-      //   .from('inventory_rooms')
-      //   .select('id, name, pos_x, pos_y')
-      //   .eq('user_id', currentInventoryOwnerId);
-      // if (roomsError) {
-      //   console.error('Rooms fetch error', roomsError);
-      // }
+      const { data: roomsData, error: roomsError } = await supabase
+        .from('inventory_rooms')
+        .select('id, name, pos_x, pos_y')
+        .eq('user_id', currentInventoryOwnerId);
+      if (roomsError) {
+        console.error('Rooms fetch error', roomsError);
+      }
 
       const roomIds = (roomsData || []).map((r: any) => r.id);
       const { data: itemsData } = roomIds.length
