@@ -222,6 +222,7 @@ const App: React.FC = () => {
   const getBootstrap = async () => {
     const res = await api.get('/bootstrap') as any;
     if(res) {
+      console.log('Bootstrap data:', res);
       const { user } = res;
       if(user) {
         setIsLoadingMain(false);
