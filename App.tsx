@@ -423,8 +423,22 @@ const App: React.FC = () => {
     });
   };
 
+  const handleSSOLogin = async () => {
+    const r = await fetch("https://gallery.mrburstudio.com/api/supabase-token", {
+      method: "GET",
+      credentials: "include",
+    });
+    const { token } = await r.json();
+
+    await supabase.auth.setSession({
+      access_token: token,
+      refresh_token: token,
+    });
+  }
+
 
   useEffect(() => {
+    handleSSOLogin();
     const fetchSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) {
@@ -725,11 +739,15 @@ const App: React.FC = () => {
     }
 
     try {
+      const { data: meta } = await api.get('/inventory/meta');
+      console.log('res: ',supabase);
+      if(supabase.auth.getSession) {
       const { data: meta } = await supabase
         .from('inventory_meta')
         .select('*')
         .eq('user_id', currentInventoryOwnerId)
         .maybeSingle();
+      }
 
       const { data: roomsData, error: roomsError } = await supabase
         .from('inventory_rooms')
