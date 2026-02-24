@@ -214,11 +214,21 @@ const App: React.FC = () => {
       chatAudioRef.current.addEventListener('error', (e) => {
         console.warn("Failed to load cat audio (this is often a browser cache issue):", e);
       });
+      checkSession();
       // getBootstrap();
     } catch (err) {
       console.error("Audio initialization error:", err);
     }
   }, []);
+
+  const checkSession = async () => {
+        const sso = await api.get('/sso/exchange');
+    console.log('SSO exchange response:', sso);
+    await supabase.auth.setSession({
+      access_token: sso.data.access_token,
+      refresh_token: sso.data.refresh_token
+    });
+  };
 
   const fetchBootstrap = useCallback(async () => {
     const { data } = await api.get('/bootstrap');
@@ -226,12 +236,6 @@ const App: React.FC = () => {
   }, []);
 
   const getBootstrap = async () => {
-    const sso = await api.get('/sso/exchange');
-    console.log('SSO exchange response:', sso);
-    await supabase.auth.setSession({
-      access_token: sso.data.access_token,
-      refresh_token: sso.data.refresh_token
-    })
     const {data} = await api.get('/bootstrap') as any;
     if(data) {
       console.log('Bootstrap data:', data);
