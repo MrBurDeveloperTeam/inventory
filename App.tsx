@@ -680,7 +680,7 @@ const App: React.FC = () => {
          .order('updated_at', { ascending: false })
          .limit(1)
          .maybeSingle();
-         return { prof, profError } as any;
+        //  return { prof, profError } as any;
     // });
       profile = prof.data;
       profileError = profError;
