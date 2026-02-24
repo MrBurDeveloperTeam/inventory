@@ -670,7 +670,7 @@ const App: React.FC = () => {
          .maybeSingle();
          return { prof, profError } as any;
     });
-      profile = prof;
+      profile = prof.data;
       profileError = profError;
 
     if (profileError && profileError.code !== 'PGRST116') {
