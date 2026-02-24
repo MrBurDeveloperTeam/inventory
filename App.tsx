@@ -388,7 +388,7 @@ const App: React.FC = () => {
     const list: { id: string; name: string; role: string }[] = [{ id: uid, name: 'My Inventory', role: 'owner' }];
 
     // 2. Shared Inventories - get collaborator records
-    const shared = await api.get<any>('/collaborators', { params: { uid: uid } }).catch(async err => {
+    // const shared = await api.get<any>('/collaborators', { params: { uid: uid } }).catch(async err => {
       const { data: shared, error } = await supabase
         .from('collaborators')
         .select('owner_id, role')
@@ -397,9 +397,9 @@ const App: React.FC = () => {
         if (error) {
           console.error('Error fetching shared inventories:', error);
         }
-        return shared as any
-      }
-      );
+        // return shared as any
+      // }
+      // );
       
       if (shared && shared.length > 0) {
       // Fetch owner profiles separately to avoid FK join issues
