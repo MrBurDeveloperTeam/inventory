@@ -672,7 +672,7 @@ const App: React.FC = () => {
     const { data: authUser } = await supabase.auth.getUser();
     const storedImages = loadUserImages(userId);
 
-     const { data: prof, error: profError } = await api.get('/inventory/profile/latest', { params: { userId } }).catch(async err => {
+    //  const { data: prof, error: profError } = await api.get('/inventory/profile/latest', { params: { userId } }).catch(async err => {
        const { data: prof, error: profError } = await supabase
          .from('profiles')
          .select('*')
@@ -681,7 +681,7 @@ const App: React.FC = () => {
          .limit(1)
          .maybeSingle();
          return { prof, profError } as any;
-    });
+    // });
       profile = prof.data;
       profileError = profError;
 
