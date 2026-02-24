@@ -653,14 +653,15 @@ const App: React.FC = () => {
   };
 
   const bootstrapUser = async (userId: string) => {
+    let profile, profileError;
     setIsBootstrapped(false);
     setSupabaseUserId(userId);
 
     const { data: authUser } = await supabase.auth.getUser();
     const storedImages = loadUserImages(userId);
 
-     const { data: profile, error: profileError } = await api.get('/inventory/profile/latest', { params: { userId } }).catch(async err => {
-       const { data: profile, error: profileError } = await supabase
+     const { data: prof, error: profError } = await api.get('/inventory/profile/latest', { params: { userId } }).catch(async err => {
+       const { data: prof, error: profError } = await supabase
          .from('profiles')
          .select('*')
          .eq('user_id', userId)
@@ -669,6 +670,8 @@ const App: React.FC = () => {
          .maybeSingle();
          return { profile, profileError } as any;
     });
+      profile = prof;
+      profileError = profError;
 
     if (profileError && profileError.code !== 'PGRST116') {
       console.error('Profile fetch error', profileError);
