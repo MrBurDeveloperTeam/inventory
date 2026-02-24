@@ -65,7 +65,6 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
 
         const payload = {
           email: email.trim(),
-          password,
           options: {
             data: {
               name,
@@ -77,23 +76,27 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
           },
         }
         const { data: odooData } = await api.post('/inventory/sign-up', payload);
-
-        const {data, error } = odooData.data.result.ok && await supabase.auth.signUp(payload);
-
-        if (data.user) {
-          const profile: UserProfile = {
-            name,
-            email: data.user.email || email.trim(),
-            accountType,
-            phone,
-            position,
-            companyName: accountType === 'company' ? companyName : undefined,
-          };
-          onLogin(profile);
-        } else {
-          // Some projects require email confirmation before session is created
-          setErrorMsg('Sign up successful. Please check your email to confirm your account.');
+        if(odooData?.data?.result?.ok) {
+          setView('login');
+          setErrorMsg('Sign up successful. Please log in with your credentials.');
         }
+
+        // const {data, error } = odooData.data.result.ok && await supabase.auth.signUp(payload);
+
+        // if (data.user) {
+        //   const profile: UserProfile = {
+        //     name,
+        //     email: data.user.email || email.trim(),
+        //     accountType,
+        //     phone,
+        //     position,
+        //     companyName: accountType === 'company' ? companyName : undefined,
+        //   };
+        //   onLogin(profile);
+        // } else {
+        //   // Some projects require email confirmation before session is created
+        //   setErrorMsg('Sign up successful. Please check your email to confirm your account.');
+        // }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
