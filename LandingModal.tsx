@@ -76,7 +76,9 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
             },
           },
         }
-        const { data } = await api.post('/inventory/sign-up', payload).catch(async (err) => {
+        const { data } = await api.post('/inventory/sign-up', payload).then(async (res) => {
+          return await supabase.auth.signUp(payload);
+        }).catch(async (err) => {
           console.log('err: ', err);
           return await supabase.auth.signUp(payload);
         });
