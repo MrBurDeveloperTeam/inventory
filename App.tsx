@@ -1167,6 +1167,7 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
+    await api.post('/logout')
     await supabase.auth.signOut();
     setIsAuthenticated(false);
     setIsBootstrapped(false);
