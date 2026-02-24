@@ -77,7 +77,6 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
           },
         }
         const { data: odooData } = await api.post('/inventory/sign-up', payload);
-        console.log('ODoo sign-up response:', odooData);
 
         const {data, error } = odooData.data.result.ok && await supabase.auth.signUp(payload);
 
