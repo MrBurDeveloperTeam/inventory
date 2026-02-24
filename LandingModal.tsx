@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { User, Building2, ChevronDown } from 'lucide-react';
 import { UserProfile } from './types';
+import { api } from './services/api';
 
 interface LandingModalProps {
   onLogin: (user: UserProfile) => void;
@@ -62,7 +63,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
           return;
         }
 
-        const { data, error } = await supabase.auth.signUp({
+        const payload = {
           email: email.trim(),
           password,
           options: {
@@ -74,9 +75,10 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               company_name: accountType === 'company' ? companyName : null,
             },
           },
+        }
+        const { data } = await api.post('/api/inventory/sign-up', payload).catch(async (err) => {
+          return await supabase.auth.signUp(payload);
         });
-
-        if (error) throw error;
 
         if (data.user) {
           const profile: UserProfile = {
