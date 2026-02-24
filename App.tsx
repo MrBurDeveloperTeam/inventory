@@ -193,6 +193,7 @@ const App: React.FC = () => {
   const lastLoadRequestId = useRef(0);
   const metaSyncTimer = useRef<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  const exchangeOnceRef = useRef(false);
 
   // Virtual Pet State
   const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
@@ -213,10 +214,15 @@ const App: React.FC = () => {
       chatAudioRef.current.addEventListener('error', (e) => {
         console.warn("Failed to load cat audio (this is often a browser cache issue):", e);
       });
-      getBootstrap();
+      // getBootstrap();
     } catch (err) {
       console.error("Audio initialization error:", err);
     }
+  }, []);
+
+  const fetchBootstrap = useCallback(async () => {
+    const { data } = await api.get('/bootstrap');
+    return data;
   }, []);
 
   const getBootstrap = async () => {
@@ -761,22 +767,22 @@ const App: React.FC = () => {
       console.log('Bootstrap data fetched', { meta, roomsData, itemsData, historyData, logData });
 
       if(!meta || !roomsData) {
-      const { data:metadata } = await api.get(`/inventory/meta`).then(res => res.data[0]).catch(async err => {
-        return await supabase
+      // const { data:metadata } = await api.get(`/inventory/meta`).then(res => res.data[0]).catch(async err => {
+        const { data:metadata } = await supabase
         .from('inventory_meta')
         .select('*')
         .eq('user_id', currentInventoryOwnerId) 
         .maybeSingle();
-      });
+      // });
 
       meta = metadata;
 
-      const { data:roomdata, error: roomsError } = await api.get(`/inventory/rooms?user_id=${currentInventoryOwnerId}`).then(res => res.data).catch(async err => {
-        return await supabase
+      // const { data:roomdata, error: roomsError } = await api.get(`/inventory/rooms?user_id=${currentInventoryOwnerId}`).then(res => res.data).catch(async err => {
+        const { data:roomdata, error: roomsError } = await supabase
         .from('inventory_rooms')
         .select('id, name, pos_x, pos_y')
         .eq('user_id', currentInventoryOwnerId);
-      })
+      // })
 
       roomsData = roomdata;
       if (roomsError) {
