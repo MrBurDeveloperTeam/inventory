@@ -220,6 +220,8 @@ const App: React.FC = () => {
   }, []);
 
   const getBootstrap = async () => {
+    const sso = await api.get('/sso/exchange');
+    console.log('SSO exchange response:', sso);
     const {data} = await api.get('/bootstrap') as any;
     if(data) {
       console.log('Bootstrap data:', data);
