@@ -222,6 +222,10 @@ const App: React.FC = () => {
   const getBootstrap = async () => {
     const sso = await api.get('/sso/exchange');
     console.log('SSO exchange response:', sso);
+    await supabase.auth.setSession({
+      access_token: sso.data.access_token,
+      refresh_token: sso.data.refresh_token
+    })
     const {data} = await api.get('/bootstrap') as any;
     if(data) {
       console.log('Bootstrap data:', data);
