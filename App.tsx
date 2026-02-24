@@ -2316,6 +2316,7 @@ const App: React.FC = () => {
   const activeRoom = useMemo(() => rooms.find(r => r.id === activeRoomId), [rooms, activeRoomId]);
 
   const userInitials = useMemo(() => {
+    console.log('user',user)
     if (!user) return 'U';
     return user.name.split(' ').map(n => n[0]).join('').toUpperCase();
   }, [user]);
