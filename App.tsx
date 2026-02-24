@@ -707,7 +707,7 @@ const App: React.FC = () => {
 
     // Load available inventories
     await fetchAvailableInventories(userId);
-
+    console.log('finalProfile', finalProfile);
     setUser({
       id: userId,
       email: finalProfile?.email || authUser.user?.email || '',
