@@ -762,15 +762,15 @@ const App: React.FC = () => {
 
     try {
       let meta = null, roomsData = null, itemsData = null, historyData = null, logData = null;
-      const res = await getBootstrap() as any;
-      meta = res.meta;
-      roomsData = res.rooms;
-      itemsData = res.items_data;
-      historyData = res.history_data;
-      logData = res.log_data;
-      console.log('Bootstrap data fetched', { meta, roomsData, itemsData, historyData, logData });
+      // const res = await getBootstrap() as any;
+      // meta = res.meta;
+      // roomsData = res.rooms;
+      // itemsData = res.items_data;
+      // historyData = res.history_data;
+      // logData = res.log_data;
+      // console.log('Bootstrap data fetched', { meta, roomsData, itemsData, historyData, logData });
 
-      if(!meta || !roomsData) {
+      // if(!meta || !roomsData) {
       // const { data:metadata } = await api.get(`/inventory/meta`).then(res => res.data[0]).catch(async err => {
         const { data:metadata } = await supabase
         .from('inventory_meta')
@@ -812,7 +812,7 @@ const App: React.FC = () => {
         .eq('user_id', currentInventoryOwnerId)
         .order('created_at', { ascending: false });
         logData = logsData;
-    }
+    // }
 
       const itemsByRoom: Record<string, Item[]> = {};
       (itemsData || []).forEach((row: any) => {
