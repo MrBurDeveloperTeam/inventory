@@ -685,14 +685,13 @@ const App: React.FC = () => {
          .maybeSingle();
         //  return { prof, profError } as any;
     // });
-    console.log('prof: ', prof);
       profile = prof.data;
       profileError = profError;
 
     if (profileError && profileError.code !== 'PGRST116') {
       console.error('Profile fetch error', profileError);
     }
-
+    console.log('the profile: ',profile)
     let finalProfile = profile;
     if (!profile && authUser.user) {
       const fallbackProfile = {
