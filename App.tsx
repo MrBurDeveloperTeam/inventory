@@ -673,7 +673,6 @@ const App: React.FC = () => {
     setSupabaseUserId(userId);
 
     const { data: authUser } = await supabase.auth.getUser();
-    const storedImages = loadUserImages(userId);
 
     const { data: prof, error: profError } = await supabase
        .from('profiles')
@@ -686,7 +685,6 @@ const App: React.FC = () => {
     if (profError && profError.code !== 'PGRST116') {
       console.error('Profile fetch error', profError);
     }
-    console.log('the profile: ',prof)
     setFinalProfile(prof);
     if (!prof && authUser.user) {
       const fallbackProfile = {
@@ -708,7 +706,6 @@ const App: React.FC = () => {
       if (insertProfileError && insertProfileError.code !== '23505') {
         console.error('Profile upsert error', insertProfileError);
       } else if (insertedProfile) {
-        console.log('insert: ',insertedProfile);
         setFinalProfile(insertedProfile);
       }
     }
@@ -721,22 +718,25 @@ const App: React.FC = () => {
 
     // Load available inventories
     await fetchAvailableInventories(userId);
-    console.log('finalProfile', finalProfile);
-    setUser({
-      id: userId,
-      email: finalProfile?.email || authUser.user?.email || '',
-      name: finalProfile?.name || 'User',
-      accountType: finalProfile?.account_type as any || 'individual',
-      phone: finalProfile?.phone || '',
-      position: finalProfile?.position || '',
-      clinicName: finalProfile?.company_name || undefined,
-      avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
-      backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
-    });
 
     setIsAuthenticated(true);
     setIsBootstrapped(true);
   };
+
+  useEffect(() => {
+        const storedImages = loadUserImages(supabaseUserId);
+        setUser({
+          id: supabaseUserId,
+          email: finalProfile?.email || '',
+          name: finalProfile?.name || 'User',
+          accountType: finalProfile?.account_type as any || 'individual',
+          phone: finalProfile?.phone || '',
+          position: finalProfile?.position || '',
+          clinicName: finalProfile?.company_name || undefined,
+          avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
+          backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
+        });
+  },[finalProfile])
 
   const loadInventory = useCallback(async () => {
     if (!currentInventoryOwnerId) return;
