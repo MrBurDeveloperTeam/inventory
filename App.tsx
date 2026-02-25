@@ -675,23 +675,20 @@ const App: React.FC = () => {
     const { data: authUser } = await supabase.auth.getUser();
     const storedImages = loadUserImages(userId);
 
-    //  const { data: prof, error: profError } = await api.get('/inventory/profile/latest', { params: { userId } }).catch(async err => {
-       const { data: prof, error: profError } = await supabase
-         .from('profiles')
-         .select('*')
-         .eq('user_id', userId)
-         .order('updated_at', { ascending: false })
-         .limit(1)
-         .maybeSingle();
-        //  return { prof, profError } as any;
-    // });
-      profile = prof;
-      profileError = profError;
+    const { data: prof, error: profError } = await supabase
+       .from('profiles')
+       .select('*')
+       .eq('user_id', userId)
+       .order('updated_at', { ascending: false })
+       .limit(1)
+       .maybeSingle();
+    profile = prof;
+    profileError = profError;
 
     if (profileError && profileError.code !== 'PGRST116') {
       console.error('Profile fetch error', profileError);
     }
-    console.log('the profile: ',profile)
+    console.log('the profile: ',prof)
     let finalProfile = profile;
     if (!profile && authUser.user) {
       const fallbackProfile = {
