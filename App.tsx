@@ -216,7 +216,6 @@ const App: React.FC = () => {
         console.warn("Failed to load cat audio (this is often a browser cache issue):", e);
       });
       checkSession();
-      // getBootstrap();
     } catch (err) {
       console.error("Audio initialization error:", err);
     }
