@@ -715,7 +715,7 @@ const App: React.FC = () => {
         console.error('Profile upsert error', insertProfileError);
       } else if (insertedProfile) {
         console.log('insert: ',insertedProfile);
-        finalProfile = insertedProfile.data;
+        finalProfile = insertedProfile;
       }
     }
 
