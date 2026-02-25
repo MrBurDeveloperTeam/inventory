@@ -222,8 +222,7 @@ const App: React.FC = () => {
   }, []);
 
   const checkSession = async () => {
-        const sso = await api.get('/sso/exchange');
-    console.log('SSO exchange response:', sso);
+    const sso = await api.get('/sso/exchange');
     await supabase.auth.setSession({
       access_token: sso.data.access_token,
       refresh_token: sso.data.refresh_token
@@ -730,7 +729,7 @@ const App: React.FC = () => {
     setUser({
       id: userId,
       email: finalProfile?.email || authUser.user?.email || '',
-      name: finalProfile?.name || 'User',
+      name: finalProfile?.user_metadata?.name || 'User',
       accountType: finalProfile?.account_type as any || 'individual',
       phone: finalProfile?.phone || '',
       position: finalProfile?.position || '',
