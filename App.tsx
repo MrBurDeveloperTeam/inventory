@@ -221,12 +221,15 @@ const App: React.FC = () => {
   }, []);
 
   const checkSession = async () => {
+    try{
     const sso = await api.get('/sso/exchange');
-    console.log('SSO exchange response:', sso);
     await supabase.auth.setSession({
       access_token: sso.data.access_token,
       refresh_token: sso.data.refresh_token
     });
+  } catch (err) {
+    console.error('SSO exchange failed:', err);
+  }
   };
 
   const fetchBootstrap = useCallback(async () => {
