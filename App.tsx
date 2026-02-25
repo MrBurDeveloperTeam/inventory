@@ -712,8 +712,9 @@ const App: React.FC = () => {
 
       if (insertProfileError && insertProfileError.code !== '23505') {
         console.error('Profile upsert error', insertProfileError);
-      } else {
-        if (insertedProfile) finalProfile = insertedProfile.data;
+      } else if (insertedProfile) {
+        console.log('insert: ',insertedProfile);
+        finalProfile = insertedProfile.data;
       }
     }
 
