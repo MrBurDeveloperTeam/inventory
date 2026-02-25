@@ -685,6 +685,7 @@ const App: React.FC = () => {
          .maybeSingle();
         //  return { prof, profError } as any;
     // });
+    console.log('prof: ', prof);
       profile = prof.data;
       profileError = profError;
 
