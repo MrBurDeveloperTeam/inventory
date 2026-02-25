@@ -668,7 +668,6 @@ const App: React.FC = () => {
   };
 
   const bootstrapUser = async (userId: string) => {
-    let profile, profileError;
     setIsBootstrapped(false);
     setSupabaseUserId(userId);
 
@@ -682,15 +681,13 @@ const App: React.FC = () => {
        .order('updated_at', { ascending: false })
        .limit(1)
        .maybeSingle();
-    profile = prof;
-    profileError = profError;
 
-    if (profileError && profileError.code !== 'PGRST116') {
-      console.error('Profile fetch error', profileError);
+    if (profError && profError.code !== 'PGRST116') {
+      console.error('Profile fetch error', profError);
     }
     console.log('the profile: ',prof)
-    let finalProfile = profile;
-    if (!profile && authUser.user) {
+    let finalProfile = prof;
+    if (!prof && authUser.user) {
       const fallbackProfile = {
         user_id: userId,
         email: authUser.user.email || '',
@@ -727,7 +724,7 @@ const App: React.FC = () => {
     setUser({
       id: userId,
       email: finalProfile?.email || authUser.user?.email || '',
-      name: finalProfile?.user_metadata?.name || 'User',
+      name: finalProfile?.name || 'User',
       accountType: finalProfile?.account_type as any || 'individual',
       phone: finalProfile?.phone || '',
       position: finalProfile?.position || '',
