@@ -178,6 +178,7 @@ const App: React.FC = () => {
   const [managedInventories, setManagedInventories] = useState<ManagedInventory[]>([]);
   const [adminDataLoading, setAdminDataLoading] = useState<boolean>(false);
   const [adminDataError, setAdminDataError] = useState<string | null>(null);
+  const [finalProfile, setFinalProfile] = useState<ProfileRow | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'profile'>('dashboard');
 
   const [isLocked, setIsLocked] = useState(false);
@@ -686,7 +687,7 @@ const App: React.FC = () => {
       console.error('Profile fetch error', profError);
     }
     console.log('the profile: ',prof)
-    let finalProfile = prof;
+    setFinalProfile(prof);
     if (!prof && authUser.user) {
       const fallbackProfile = {
         user_id: userId,
@@ -708,7 +709,7 @@ const App: React.FC = () => {
         console.error('Profile upsert error', insertProfileError);
       } else if (insertedProfile) {
         console.log('insert: ',insertedProfile);
-        finalProfile = insertedProfile;
+        setFinalProfile(insertedProfile);
       }
     }
 
