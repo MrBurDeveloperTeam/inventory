@@ -236,14 +236,10 @@ useEffect(() => {
   const checkSession = async () => {
     try{
       const sso = await api.get('/sso/exchange');
-      const res = await supabase.auth.setSession({
+      await supabase.auth.setSession({
         access_token: sso.data.access_token,
         refresh_token: sso.data.refresh_token
       });
-      console.log('SSO exchange result:', res);
-      if (res.error) {
-        throw res.error;
-      }
     } catch (err) {
       await supabase.auth.signOut();
       console.error('SSO exchange failed:', err);
@@ -453,18 +449,18 @@ useEffect(() => {
 
 
   useEffect(() => {
-    // const fetchSession = async () => {
-    //   const { data } = await supabase.auth.getSession();
-    //   if (data.session?.user) {
-    //     await bootstrapUser(data.session.user.id);
-    //   } else {
-    //     setBlueprint(PRESET_BLUEPRINTS[0].url);
-    //   }
-    // };
-    // fetchSession();
+    const fetchSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user) {
+        await bootstrapUser(data.session.user.id);
+      } else {
+        setBlueprint(PRESET_BLUEPRINTS[0].url);
+      }
+    };
+    fetchSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        bootstrapUser(session.user.id);
+        bootstrapUser(session.user);
       } else {
         setIsAuthenticated(false);
         setSupabaseUserId(null);
@@ -666,11 +662,12 @@ useEffect(() => {
     }
   };
 
-  const bootstrapUser = async (userId: string) => {
+  const bootstrapUser = async (sbUser: any) => {
     setIsBootstrapped(false);
+    const userId = sbUser.id;
     setSupabaseUserId(userId);
 
-    const { data: authUser } = await supabase.auth.getUser();
+    // const { data: authUser } = await supabase.auth.getUser();
 
     const { data: prof, error: profError } = await supabase
        .from('profiles')
@@ -684,15 +681,15 @@ useEffect(() => {
       console.error('Profile fetch error', profError);
     }
     setFinalProfile(prof);
-    if (!prof && authUser.user) {
+    if (!prof && sbUser) {
       const fallbackProfile = {
         user_id: userId,
-        email: authUser.user.email || '',
-        name: authUser.user.user_metadata?.name || 'User',
-        account_type: (authUser.user.user_metadata?.account_type as any) || 'individual',
-        phone: authUser.user.user_metadata?.phone || '',
-        position: authUser.user.user_metadata?.position || '',
-        company_name: authUser.user.user_metadata?.company_name || null
+        email: sbUser.email || '',
+        name: sbUser.user_metadata?.name || 'User',
+        account_type: (sbUser.user_metadata?.account_type as any) || 'individual',
+        phone: sbUser.user_metadata?.phone || '',
+        position: sbUser.user_metadata?.position || '',
+        company_name: sbUser.user_metadata?.company_name || null
       };
 
       const { data: insertedProfile, error: insertProfileError } = await supabase
