@@ -228,6 +228,7 @@ const App: React.FC = () => {
       refresh_token: sso.data.refresh_token
     });
   } catch (err) {
+    await supabase.auth.signOut();
     console.error('SSO exchange failed:', err);
   }
   };
