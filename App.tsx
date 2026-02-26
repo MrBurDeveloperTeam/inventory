@@ -236,10 +236,14 @@ useEffect(() => {
   const checkSession = async () => {
     try{
       const sso = await api.get('/sso/exchange');
-      await supabase.auth.setSession({
+      const res = await supabase.auth.setSession({
         access_token: sso.data.access_token,
         refresh_token: sso.data.refresh_token
       });
+      console.log('SSO exchange result:', res);
+      if (res.error) {
+        throw res.error;
+      }
     } catch (err) {
       await supabase.auth.signOut();
       console.error('SSO exchange failed:', err);
