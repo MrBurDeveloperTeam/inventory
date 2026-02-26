@@ -2329,6 +2329,17 @@ useEffect(() => {
   const canManageStructure = currentRole === 'owner' || currentRole === 'admin';
   const canEditItems = currentRole === 'owner' || currentRole === 'admin' || currentRole === 'editor';
 
+    if(isPending) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-indigo-900 font-medium">Checking Authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return <LandingModal onLogin={handleLogin} />;
   }
@@ -2347,17 +2358,6 @@ useEffect(() => {
         adminError={adminDataError}
         onRefreshAdminData={() => fetchAdminData(true)}
       />
-    );
-  }
-
-  if(isPending) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-indigo-900 font-medium">Checking Authentication...</p>
-        </div>
-      </div>
     );
   }
 
