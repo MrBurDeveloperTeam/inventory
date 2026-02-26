@@ -206,54 +206,50 @@ const App: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  useEffect(() => {
+useEffect(() => {
+  let cancelled = false;
+
+  (async () => {
     try {
-      const baseUrl = import.meta.env.BASE_URL || '/';
-      const audioPath = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}images/cat-meow.mp3`.replace(/\/+/g, '/');
+      const baseUrl = import.meta.env.BASE_URL || "/";
+      const audioPath = `${baseUrl.endsWith("/") ? baseUrl : baseUrl + "/"}images/cat-meow.mp3`.replace(/\/+/g, "/");
+
       chatAudioRef.current = new Audio(audioPath);
-      chatAudioRef.current.addEventListener('error', (e) => {
+      chatAudioRef.current.addEventListener("error", (e) => {
         console.warn("Failed to load cat audio (this is often a browser cache issue):", e);
       });
-      checkSession();
+
+      // ✅ wait until session exchange + setSession is done
+      await checkSession();
+
+      if (cancelled) return;
+
+      // ✅ put anything that must run AFTER auth is ready here
+      // await loadProfile();
+      // await fetchInventory();
+      // startRealtime();
     } catch (err) {
-      console.error("Audio initialization error:", err);
+      console.error("Init error:", err);
     }
-  }, []);
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   const checkSession = async () => {
     try{
-    const sso = await api.get('/sso/exchange');
-    await supabase.auth.setSession({
-      access_token: sso.data.access_token,
-      refresh_token: sso.data.refresh_token
-    });
-  } catch (err) {
-    await supabase.auth.signOut();
-    console.error('SSO exchange failed:', err);
-  }
-  };
-
-  const fetchBootstrap = useCallback(async () => {
-    const { data } = await api.get('/bootstrap');
-    return data;
-  }, []);
-
-  const getBootstrap = async () => {
-    const {data} = await api.get('/bootstrap') as any;
-    if(data) {
-      console.log('Bootstrap data:', data);
-      bootstrapUser(data.user?.profiles?.user_id);
-      const { user } = data;
-      if(user) {
-        const {profiles} = user;
-        await fetchAvailableInventories(profiles.user_id);
-        setIsLoadingMain(false);
-        setIsAuthenticated(true);
-        console.log('Bootstrap successful, user:', user);
-        return user;
-      }
+      const sso = await api.get('/sso/exchange');
+      await supabase.auth.setSession({
+        access_token: sso.data.access_token,
+        refresh_token: sso.data.refresh_token
+      });
+    } catch (err) {
+      await supabase.auth.signOut();
+      console.error('SSO exchange failed:', err);
     }
-  }
+  };
 
   const playMeowChat = () => {
     if (chatAudioRef.current) {
@@ -760,31 +756,19 @@ const App: React.FC = () => {
 
     try {
       let meta = null, roomsData = null, itemsData = null, historyData = null, logData = null;
-      // const res = await getBootstrap() as any;
-      // meta = res.meta;
-      // roomsData = res.rooms;
-      // itemsData = res.items_data;
-      // historyData = res.history_data;
-      // logData = res.log_data;
-      // console.log('Bootstrap data fetched', { meta, roomsData, itemsData, historyData, logData });
-
-      // if(!meta || !roomsData) {
-      // const { data:metadata } = await api.get(`/inventory/meta`).then(res => res.data[0]).catch(async err => {
         const { data:metadata } = await supabase
         .from('inventory_meta')
         .select('*')
         .eq('user_id', currentInventoryOwnerId) 
         .maybeSingle();
-      // });
 
       meta = metadata;
 
-      // const { data:roomdata, error: roomsError } = await api.get(`/inventory/rooms?user_id=${currentInventoryOwnerId}`).then(res => res.data).catch(async err => {
-        const { data:roomdata, error: roomsError } = await supabase
-        .from('inventory_rooms')
-        .select('id, name, pos_x, pos_y')
-        .eq('user_id', currentInventoryOwnerId);
-      // })
+      
+      const { data:roomdata, error: roomsError } = await supabase
+      .from('inventory_rooms')
+      .select('id, name, pos_x, pos_y')
+      .eq('user_id', currentInventoryOwnerId);
 
       roomsData = roomdata;
       if (roomsError) {
@@ -810,7 +794,6 @@ const App: React.FC = () => {
         .eq('user_id', currentInventoryOwnerId)
         .order('created_at', { ascending: false });
         logData = logsData;
-    // }
 
       const itemsByRoom: Record<string, Item[]> = {};
       (itemsData || []).forEach((row: any) => {
