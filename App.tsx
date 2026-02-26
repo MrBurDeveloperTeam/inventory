@@ -195,6 +195,7 @@ const App: React.FC = () => {
   const metaSyncTimer = useRef<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [authReady, setAuthReady] = useState(false);
+  const [authInitializing, setAuthInitializing] = useState(true);
 
   // Virtual Pet State
   const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
@@ -208,17 +209,41 @@ const App: React.FC = () => {
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
 
 useEffect(() => {
+  let cancelled = false;
+
   (async () => {
     try {
-      const baseUrl = import.meta.env.BASE_URL || '/';
-      const audioPath = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}images/cat-meow.mp3`.replace(/\/+/g, '/');
+      // audio init
+      const baseUrl = import.meta.env.BASE_URL || "/";
+      const audioPath = `${baseUrl.endsWith("/") ? baseUrl : baseUrl + "/"}images/cat-meow.mp3`.replace(/\/+/g, "/");
       chatAudioRef.current = new Audio(audioPath);
 
-      await checkSession();          // ✅ wait
+      // 1) try SSO -> setSession (may fail, that's ok)
+      await checkSession();
+
+      // 2) read session after SSO exchange attempt
+      const { data } = await supabase.auth.getSession();
+
+      if (cancelled) return;
+
+      if (data.session?.user) {
+        await bootstrapUser(data.session.user); // <-- pass the user object
+      } else {
+        setBlueprint(PRESET_BLUEPRINTS[0].url);
+        setIsAuthenticated(false);
+      }
+    } catch (e) {
+      console.error("Auth boot failed:", e);
+      setIsAuthenticated(false);
+      setBlueprint(PRESET_BLUEPRINTS[0].url);
     } finally {
-      setAuthReady(true);            // ✅ allow other auth effects
+      if (!cancelled) setAuthInitializing(false);
     }
   })();
+
+  return () => {
+    cancelled = true;
+  };
 }, []);
 
 useEffect(() => {
@@ -449,15 +474,6 @@ useEffect(() => {
 
 
   useEffect(() => {
-    const fetchSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.user) {
-        // await bootstrapUser(data.session.user.id);
-      } else {
-        setBlueprint(PRESET_BLUEPRINTS[0].url);
-      }
-    };
-    fetchSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         // bootstrapUser(session.user);
@@ -2326,6 +2342,17 @@ useEffect(() => {
 
   const canManageStructure = currentRole === 'owner' || currentRole === 'admin';
   const canEditItems = currentRole === 'owner' || currentRole === 'admin' || currentRole === 'editor';
+
+  if (authInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-700 font-medium">Checking session...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <LandingModal onLogin={handleLogin} />;
