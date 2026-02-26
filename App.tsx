@@ -16,7 +16,6 @@ import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { MessageCircle } from 'lucide-react';
 import { api } from './services/api';
-import { useSsoExchange } from './mutation/useSsoExchange';
 
 type ManagedInventory = {
   userId: string;
@@ -162,7 +161,6 @@ const adjustBatchesWithDelta = (item: Item, delta: number) => {
 };
 
 const App: React.FC = () => {
-  const { mutateAsync: exchangeSso, isPending } = useSsoExchange();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isCollaboratorModalOpen, setIsCollaboratorModalOpen] = useState(false);
@@ -237,7 +235,7 @@ useEffect(() => {
 
   const checkSession = async () => {
     try{
-      const sso = await exchangeSso();
+      const sso = await api.get('/sso/exchange');
       await supabase.auth.setSession({
         access_token: sso.data.access_token,
         refresh_token: sso.data.refresh_token
@@ -2328,17 +2326,6 @@ useEffect(() => {
 
   const canManageStructure = currentRole === 'owner' || currentRole === 'admin';
   const canEditItems = currentRole === 'owner' || currentRole === 'admin' || currentRole === 'editor';
-
-    if(isPending) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-indigo-900 font-medium">Checking Authentication...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (!isAuthenticated) {
     return <LandingModal onLogin={handleLogin} />;
