@@ -194,6 +194,7 @@ const App: React.FC = () => {
   const lastLoadRequestId = useRef(0);
   const metaSyncTimer = useRef<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  const [authReady, setAuthReady] = useState(false);
 
   // Virtual Pet State
   const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
@@ -207,36 +208,30 @@ const App: React.FC = () => {
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
 
 useEffect(() => {
-  let cancelled = false;
-
   (async () => {
     try {
-      const baseUrl = import.meta.env.BASE_URL || "/";
-      const audioPath = `${baseUrl.endsWith("/") ? baseUrl : baseUrl + "/"}images/cat-meow.mp3`.replace(/\/+/g, "/");
-
+      const baseUrl = import.meta.env.BASE_URL || '/';
+      const audioPath = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}images/cat-meow.mp3`.replace(/\/+/g, '/');
       chatAudioRef.current = new Audio(audioPath);
-      chatAudioRef.current.addEventListener("error", (e) => {
-        console.warn("Failed to load cat audio (this is often a browser cache issue):", e);
-      });
 
-      // ✅ wait until session exchange + setSession is done
-      await checkSession();
-
-      if (cancelled) return;
-
-      // ✅ put anything that must run AFTER auth is ready here
-      // await loadProfile();
-      // await fetchInventory();
-      // startRealtime();
-    } catch (err) {
-      console.error("Init error:", err);
+      await checkSession();          // ✅ wait
+    } finally {
+      setAuthReady(true);            // ✅ allow other auth effects
     }
   })();
-
-  return () => {
-    cancelled = true;
-  };
 }, []);
+
+useEffect(() => {
+  if (!authReady) return;            // ✅ block until checkSession done
+
+  const fetchSession = async () => {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) await bootstrapUser(data.session.user.id);
+    else setBlueprint(PRESET_BLUEPRINTS[0].url);
+  };
+
+  fetchSession();
+}, [authReady]);
 
   const checkSession = async () => {
     try{
@@ -454,15 +449,15 @@ useEffect(() => {
 
 
   useEffect(() => {
-    const fetchSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.user) {
-        await bootstrapUser(data.session.user.id);
-      } else {
-        setBlueprint(PRESET_BLUEPRINTS[0].url);
-      }
-    };
-    fetchSession();
+    // const fetchSession = async () => {
+    //   const { data } = await supabase.auth.getSession();
+    //   if (data.session?.user) {
+    //     await bootstrapUser(data.session.user.id);
+    //   } else {
+    //     setBlueprint(PRESET_BLUEPRINTS[0].url);
+    //   }
+    // };
+    // fetchSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         bootstrapUser(session.user.id);
