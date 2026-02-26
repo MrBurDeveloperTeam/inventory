@@ -460,7 +460,7 @@ useEffect(() => {
     fetchSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        bootstrapUser(session.user);
+        // bootstrapUser(session.user);
       } else {
         setIsAuthenticated(false);
         setSupabaseUserId(null);
