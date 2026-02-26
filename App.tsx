@@ -226,7 +226,7 @@ useEffect(() => {
 
   const fetchSession = async () => {
     const { data } = await supabase.auth.getSession();
-    if (data.session?.user) await bootstrapUser(data.session.user.id);
+    if (data.session?.user) await bootstrapUser(data.session.user);
     else setBlueprint(PRESET_BLUEPRINTS[0].url);
   };
 
@@ -452,7 +452,7 @@ useEffect(() => {
     const fetchSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) {
-        await bootstrapUser(data.session.user.id);
+        // await bootstrapUser(data.session.user.id);
       } else {
         setBlueprint(PRESET_BLUEPRINTS[0].url);
       }
@@ -666,8 +666,6 @@ useEffect(() => {
     setIsBootstrapped(false);
     const userId = sbUser.id;
     setSupabaseUserId(userId);
-
-    // const { data: authUser } = await supabase.auth.getUser();
 
     const { data: prof, error: profError } = await supabase
        .from('profiles')
