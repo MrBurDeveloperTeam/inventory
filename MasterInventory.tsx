@@ -26,7 +26,8 @@ import {
   SlidersHorizontal,
   Tag,
   Truck,
-  Layers
+  Layers,
+  MapPin
 } from 'lucide-react';
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
@@ -463,30 +464,55 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
               </div>
               {/* FILTER AREA */}
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-sm animate-in slide-in-from-top-2 duration-500">
-                <select
-                  value={inventoryCategory}
-                  onChange={e => setInventoryCategory(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
-                >
-                  <option value="all">All Categories</option>
-                  {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </select>
-                <select
-                  value={inventoryVendor}
-                  onChange={e => setInventoryVendor(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
-                >
-                  <option value="all">All Vendors</option>
-                  {uniqueInventoryVendors.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-                <select
-                  value={inventoryLocation}
-                  onChange={e => setInventoryLocation(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
-                >
-                  <option value="all">All Locations</option>
-                  {inventoryLocations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
-                </select>
+
+                {/* Category Filter */}
+                <div className="relative group">
+                  <Layers className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+                  <select
+                    value={inventoryCategory}
+                    onChange={e => setInventoryCategory(e.target.value)}
+                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
+                  >
+                    <option value="all">All Categories</option>
+                    {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <div className="w-1.5 h-1.5 border-r-2 border-b-2 border-slate-400 rotate-45" />
+                  </div>
+                </div>
+
+                {/* Vendor Filter */}
+                <div className="relative group">
+                  <Truck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+                  <select
+                    value={inventoryVendor}
+                    onChange={e => setInventoryVendor(e.target.value)}
+                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
+                  >
+                    <option value="all">All Vendors</option>
+                    {uniqueInventoryVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <div className="w-1.5 h-1.5 border-r-2 border-b-2 border-slate-400 rotate-45" />
+                  </div>
+                </div>
+
+                {/* Location Filter */}
+                <div className="relative group">
+                  <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+                  <select
+                    value={inventoryLocation}
+                    onChange={e => setInventoryLocation(e.target.value)}
+                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
+                  >
+                    <option value="all">All Locations</option>
+                    {inventoryLocations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                  </select>
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <div className="w-1.5 h-1.5 border-r-2 border-b-2 border-slate-400 rotate-45" />
+                  </div>
+                </div>
+
                 <div className="md:col-span-2 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
@@ -1479,6 +1505,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
               <h4 className="text-lg font-extrabold text-slate-800 tracking-wider uppercase">Recent Global Activity</h4>
             </div>
           </div>
+
         </div>
 
         <div className="grid grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">

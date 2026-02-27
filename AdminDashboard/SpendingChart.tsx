@@ -137,6 +137,7 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
             onHoverDay(null);
             return;
           }
+
           // Calculate which day we are over based on SVG internal units
           const chartX = svgP.x - padding;
           const dayIdx = Math.round((chartX / chartWidth) * 30);
@@ -153,10 +154,18 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
       >
         {data.yAxisSteps.map((val, i) => {
           const y = height - padding - (val / data.maxVal) * chartHeight;
+          const formattedVal = val >= 1000 ? `${(val / 1000).toFixed(1).replace(/\.0$/, '')}k` : Math.round(val);
           return (
             <g key={i}>
               <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" />
-              <text x={padding - 10} y={y + 4} textAnchor="end" className="text-[10px] fill-slate-400 font-bold">${Math.round(val)}</text>
+              <text
+                x={padding - 12}
+                y={y + 4}
+                textAnchor="end"
+                className={`${windowWidth < 640 ? 'text-[12px]' : 'text-[10px]'} fill-slate-500 font-black`}
+              >
+                ${formattedVal}
+              </text>
             </g>
           );
         })}
@@ -169,16 +178,16 @@ const SpendingChart: React.FC<SpendingChartProps> = ({
               <text
                 key={day}
                 x={x}
-                y={height - padding + 20}
+                y={height - padding + 24}
                 textAnchor="middle"
-                className="text-[10px] fill-slate-500 font-bold"
+                className={`${windowWidth < 640 ? 'text-[13px]' : 'text-[10px]'} fill-slate-600 font-black`}
               >
                 {day}
               </text>
             );
           });
         })()}
-        <text x="50%" y={height - 0} textAnchor="middle" className="text-[10px] fill-slate-400 font-black uppercase tracking-widest">Day of Month</text>
+        <text x="50%" y={height + 5} textAnchor="middle" className={`${windowWidth < 640 ? 'text-[11px]' : 'text-[10px]'} fill-slate-400 font-black uppercase tracking-[0.2em]`}>Day of Month</text>
 
         {analysisMode === 'compare' && getPath(data.periodBStats.data, '#f97316', 'fillSpB')}
         {getPath(data.periodAStats.data, '#2563eb', 'fillSpA')}

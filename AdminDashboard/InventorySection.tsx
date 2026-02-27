@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Search, Calendar, AlertTriangle, Building2, Map as MapIcon, ClipboardList, History as HistoryIcon } from 'lucide-react';
+import { Search, Calendar, AlertTriangle, Building2, Map as MapIcon, ClipboardList, History as HistoryIcon, Filter, Layers, Truck, MapPin } from 'lucide-react';
 import { GlobalInventoryItem, MockGlobalOrder } from './types';
 
 interface InventorySectionProps {
@@ -22,6 +22,13 @@ const InventorySection: React.FC<InventorySectionProps> = ({
 }) => {
   const [openBatchRows, setOpenBatchRows] = React.useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [selectedCategory, setSelectedCategory] = React.useState('all');
+  const [selectedVendor, setSelectedVendor] = React.useState('all');
+  const [selectedLocation, setSelectedLocation] = React.useState('all');
+
+  const categories = React.useMemo(() => ['all', ...Array.from(new Set(inventory.map(item => item.category || 'Unknown'))).sort()], [inventory]);
+  const vendors = React.useMemo(() => ['all', ...Array.from(new Set(inventory.map(item => item.vendor || 'Unknown'))).sort()], [inventory]);
+  const locations = React.useMemo(() => ['all', ...Array.from(new Set(inventory.map(item => item.location || 'Unknown'))).sort()], [inventory]);
 
   const getDaysDiff = (dateStr: string) => {
     const now = new Date();
@@ -35,9 +42,23 @@ const InventorySection: React.FC<InventorySectionProps> = ({
   };
 
   const filteredInventory = React.useMemo(() => {
-    if (!searchQuery.trim()) return inventory;
+    let filtered = inventory;
+
+    // Apply categorical filters
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(item => item.category === selectedCategory);
+    }
+    if (selectedVendor !== 'all') {
+      filtered = filtered.filter(item => item.vendor === selectedVendor);
+    }
+    if (selectedLocation !== 'all') {
+      filtered = filtered.filter(item => item.location === selectedLocation);
+    }
+
+    // Apply search query
+    if (!searchQuery.trim()) return filtered;
     const q = searchQuery.toLowerCase();
-    return inventory.filter((item) => {
+    return filtered.filter((item) => {
       return (
         item.name.toLowerCase().includes(q) ||
         item.brand.toLowerCase().includes(q) ||
@@ -48,7 +69,7 @@ const InventorySection: React.FC<InventorySectionProps> = ({
         item.clinic.toLowerCase().includes(q)
       );
     });
-  }, [inventory, searchQuery]);
+  }, [inventory, searchQuery, selectedCategory, selectedVendor, selectedLocation]);
 
   const filteredItemsByCategory = React.useMemo(() => {
     const groups: Record<string, GlobalInventoryItem[]> = {};
@@ -138,32 +159,107 @@ const InventorySection: React.FC<InventorySectionProps> = ({
           </button>
         </div>
         <div className="hidden md:flex px-4 border-l border-slate-100">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search global data..."
-              className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none w-64"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+          {tab !== 'all' && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search global data..."
+                className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none w-64"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          )}
         </div>
       </div>
 
       <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 md:hidden">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search global data..."
-              className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none w-full"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        {tab === 'all' && (
+          <div className="px-6 py-6 bg-slate-50/40 border-b border-slate-100 flex flex-col md:flex-row items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Category Filter */}
+              <div className="relative group">
+                <Layers className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all appearance-none cursor-pointer min-w-[200px] shadow-sm hover:shadow-md"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.filter(c => c !== 'all').map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <div className="w-1.5 h-1.5 border-r-2 border-b-2 border-slate-400 rotate-45" />
+                </div>
+              </div>
+
+              {/* Vendor Filter */}
+              <div className="relative group">
+                <Truck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-amber-500 transition-colors" />
+                <select
+                  value={selectedVendor}
+                  onChange={(e) => setSelectedVendor(e.target.value)}
+                  className="pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500/50 transition-all appearance-none cursor-pointer min-w-[200px] shadow-sm hover:shadow-md"
+                >
+                  <option value="all">All Vendors</option>
+                  {vendors.filter(v => v !== 'all').map(vendor => (
+                    <option key={vendor} value={vendor}>{vendor}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <div className="w-1.5 h-1.5 border-r-2 border-b-2 border-slate-400 rotate-45" />
+                </div>
+              </div>
+
+              {/* Location Filter */}
+              <div className="relative group">
+                <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                <select
+                  value={selectedLocation}
+                  onChange={(e) => setSelectedLocation(e.target.value)}
+                  className="pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500/50 transition-all appearance-none cursor-pointer min-w-[200px] shadow-sm hover:shadow-md"
+                >
+                  <option value="all">All Locations</option>
+                  {locations.filter(l => l !== 'all').map(loc => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <div className="w-1.5 h-1.5 border-r-2 border-b-2 border-slate-400 rotate-45" />
+                </div>
+              </div>
+            </div>
+
+            <div className="relative group w-full md:flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-blue-600 transition-colors" />
+              <input
+                type="text"
+                placeholder="Search records..."
+                className="pl-12 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all w-full shadow-sm"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
-        </div>
+        )}
+
+        {tab !== 'all' && (
+          <div className="px-6 py-4 border-b border-slate-100 md:hidden">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search global data..."
+                className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none w-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="overflow-x-auto custom-scrollbar p-1">
           {tab === 'all' && (
@@ -253,10 +349,10 @@ const InventorySection: React.FC<InventorySectionProps> = ({
 
                               <td
                                 className={`px-6 py-4 text-xs whitespace-nowrap ${isExpired
-                                    ? 'text-rose-600 font-bold'
-                                    : isExpiringSoon
-                                      ? 'text-amber-600 font-bold'
-                                      : 'text-slate-500'
+                                  ? 'text-rose-600 font-bold'
+                                  : isExpiringSoon
+                                    ? 'text-amber-600 font-bold'
+                                    : 'text-slate-500'
                                   }`}
                               >
                                 {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-GB') : '-'}
@@ -402,10 +498,10 @@ const InventorySection: React.FC<InventorySectionProps> = ({
 
                             <td
                               className={`px-6 py-4 text-xs whitespace-nowrap ${isExpired
-                                  ? 'text-rose-600 font-bold'
-                                  : isExpiringSoon
-                                    ? 'text-amber-600 font-bold'
-                                    : 'text-slate-500'
+                                ? 'text-rose-600 font-bold'
+                                : isExpiringSoon
+                                  ? 'text-amber-600 font-bold'
+                                  : 'text-slate-500'
                                 }`}
                             >
                               {expiryDate ? (
@@ -505,7 +601,7 @@ const InventorySection: React.FC<InventorySectionProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 };
 
