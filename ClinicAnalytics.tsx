@@ -175,6 +175,7 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
     const totalExpense = distributionHistory.reduce((acc, curr) => acc + curr.totalPrice, 0);
     const totalQuantity = distributionHistory.reduce((acc, curr) => acc + curr.qty, 0);
     const totalReorders = distributionHistory.length;
+
     // Category Breakdown
     const categoryBreakdown = CATEGORIES.map(cat => {
       const catHistory = distributionHistory.filter(h => h.category === cat.id);
@@ -307,6 +308,7 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
       const days = getDaysInMonth(monthStr);
       const data = Array(days).fill(0);
       const [targetYear, targetMonth] = monthStr.split('-').map(Number);
+
       let total = 0;
       history.forEach(h => {
         // Apply Category Filter
@@ -834,10 +836,18 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
         >
           {spendingAnalysisData.yAxisSteps.map((val, i) => {
             const y = height - padding - (val / spendingAnalysisData.maxVal) * chartHeight;
+            const formattedVal = val >= 1000 ? `${(val / 1000).toFixed(1).replace(/\.0$/, '')}k` : Math.round(val);
             return (
               <g key={i}>
                 <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" />
-                <text x={padding - 10} y={y + 4} textAnchor="end" className="text-[10px] fill-slate-400 font-bold">${Math.round(val)}</text>
+                <text
+                  x={padding - 12}
+                  y={y + 4}
+                  textAnchor="end"
+                  className={`${windowWidth < 640 ? 'text-[12px]' : 'text-[10px]'} fill-slate-500 font-black`}
+                >
+                  ${formattedVal}
+                </text>
               </g>
             );
           })}
@@ -850,16 +860,16 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
                 <text
                   key={day}
                   x={x}
-                  y={height - padding + 20}
+                  y={height - padding + 24}
                   textAnchor="middle"
-                  className="text-[10px] fill-slate-500 font-bold"
+                  className={`${windowWidth < 640 ? 'text-[13px]' : 'text-[10px]'} fill-slate-600 font-black`}
                 >
                   {day}
                 </text>
               );
             });
           })()}
-          <text x="50%" y={height - 0} textAnchor="middle" className="text-[10px] fill-slate-400 font-black uppercase tracking-widest">Day of Month</text>
+          <text x="50%" y={height + 5} textAnchor="middle" className={`${windowWidth < 640 ? 'text-[11px]' : 'text-[10px]'} fill-slate-400 font-black uppercase tracking-[0.2em]`}>Day of Month</text>
 
           {analysisMode === 'compare' && getPath(spendingAnalysisData.periodBStats.data, '#f97316', 'fillB')}
           {getPath(spendingAnalysisData.periodAStats.data, '#2563eb', 'fillA')}

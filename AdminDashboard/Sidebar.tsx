@@ -32,7 +32,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemSelect, onLogout, i
       )}
 
       <aside className={`
-        w-64 bg-white border-r border-slate-200 flex flex-col shrink-0
+        w-55 bg-white border-r border-slate-200 flex flex-col shrink-0
         fixed inset-y-0 left-0 z-[70] transition-transform duration-300 ease-in-out
         md:relative md:translate-x-0 md:z-0
         ${isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}

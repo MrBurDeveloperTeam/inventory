@@ -35,7 +35,7 @@ let velocityY = 0; //bird jump speed
 let gravity = 0.4;
 let jumpStrength = -6;
 let scale = 1;
-const BIRD_SCALE = 1.5; // increase this to make the bird sprite larger
+const BIRD_SCALE = 1.3; // increase this to make the bird sprite larger
 const BASE_WIDTH = 360;
 const BASE_HEIGHT = 640;
 const MIN_WIDTH = 320;
@@ -171,7 +171,7 @@ function placePipes() {
     // 0 -> -128 (pipeHeight/4)
     // 1 -> -128 - 256 (pipeHeight/4 - pipeHeight/2) = -3/4 pipeHeight
     let randomPipeY = pipeY - pipeHeight / 4 - Math.random() * (pipeHeight / 2);
-    let openingSpace = board.height / 4;
+    let openingSpace = board.height / 5;
 
     let spawnX = boardWidth; // start at the right edge
 
@@ -310,7 +310,7 @@ function startGame() {
     if (pipeInterval) {
         clearInterval(pipeInterval);
     }
-    pipeInterval = setInterval(placePipes, 1600);
+    pipeInterval = setInterval(placePipes, 1800);
 }
 
 function drawHUD() {
