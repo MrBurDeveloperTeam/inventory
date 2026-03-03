@@ -389,7 +389,7 @@ useEffect(() => {
         ...prev,
         { role: "model", parts: [{ text: finalResponseText }] }
       ]);
-      playMeowChat();
+      // playMeowChat();
     } catch (err) {
       console.error(err);
       setChatHistory([
