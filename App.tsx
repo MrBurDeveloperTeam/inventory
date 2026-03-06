@@ -1148,7 +1148,6 @@ useEffect(() => {
 
   const handleLogin = async (userProfile: UserProfile) => {
     const { data: userData } = await supabase.auth.getUser();
-    console.log('Login successful, fetched user data:', userData);
     const userId = userData?.user?.id || null;
     if (userId) setSupabaseUserId(userId);
     const storedImages = userId ? loadUserImages(userId) : {};
@@ -1170,7 +1169,7 @@ useEffect(() => {
         background_url: storedImages.backgroundUrl || null
       });
       if (error) console.error('Profile upsert error', error);
-      await bootstrapUser(userId);
+      await bootstrapUser(userData?.user);
     }
   };
 
