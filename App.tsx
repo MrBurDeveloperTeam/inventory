@@ -1148,7 +1148,8 @@ useEffect(() => {
 
   const handleLogin = async (userProfile: UserProfile) => {
     const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id || null;
+    console.log('Login successful, fetched user data:', userData);
+    const userId = userData?.user?.id || null;
     if (userId) setSupabaseUserId(userId);
     const storedImages = userId ? loadUserImages(userId) : {};
 
