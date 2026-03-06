@@ -13,6 +13,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
   const [accountType, setAccountType] = useState<'individual' | 'company'>('individual');
 
   // Form states
+  const [rememberMe, setRememberMe] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -347,6 +348,10 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+              </div>
+              <div className="flex items-center">
+                <input type="checkbox" className="w-4 h-4 text-[#004aad]" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}/>
+                <span className="text-xs text-slate-600 ml-2">Remember me</span>
               </div>
 
               <button
