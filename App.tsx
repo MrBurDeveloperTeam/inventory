@@ -681,6 +681,7 @@ useEffect(() => {
   const bootstrapUser = async (sbUser: any) => {
     setIsBootstrapped(false);
     const userId = sbUser.id;
+    console.log('Bootstrapping user:', userId);
     setSupabaseUserId(userId);
 
     const { data: prof, error: profError } = await supabase
