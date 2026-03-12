@@ -2323,7 +2323,7 @@ useEffect(() => {
   };
 
   const navigatetoSnabbb = () => {
-    window.open('https://app.snabbb.com', '_blank');
+    window.open('https://app.snabbb.com', '_self');
   }
 
   const activeRoom = useMemo(() => rooms.find(r => r.id === activeRoomId), [rooms, activeRoomId]);
