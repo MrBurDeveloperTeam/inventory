@@ -2322,6 +2322,10 @@ useEffect(() => {
     }
   };
 
+  const navigatetoSnabbb = () => {
+    window.open('https://app.snabbb.com', '_blank');
+  }
+
   const activeRoom = useMemo(() => rooms.find(r => r.id === activeRoomId), [rooms, activeRoomId]);
 
   const userInitials = useMemo(() => {
@@ -2380,7 +2384,8 @@ useEffect(() => {
     <div className="min-h-screen flex flex-col select-none bg-slate-50">
       <Header
         onProfileClick={() => setCurrentView('profile')}
-        onDashboardClick={() => setCurrentView('dashboard')}
+        onDashboardClick={() => navigatetoSnabbb()}
+        // onDashboardClick={() => setCurrentView('dashboard')}
         onLogout={handleLogout}
         onAddCollaborator={currentRole === 'owner' ? () => setIsCollaboratorModalOpen(true) : undefined}
         user={user}

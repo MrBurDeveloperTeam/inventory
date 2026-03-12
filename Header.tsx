@@ -136,8 +136,8 @@ const Header: React.FC<HeaderProps> = ({
           onKeyDown={(e) => e.key === 'Enter' && onDashboardClick?.()}
         >
           <img
-            src="/images/mrbur_logo.png"
-            alt="MR.BUR logo."
+            src="/images/snabbb_teal.png"
+            alt="SNABBB logo."
             className="h-10 w-auto transition-transform group-hover:scale-105"
           />
         </div>
