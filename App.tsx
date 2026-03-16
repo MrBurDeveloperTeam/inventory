@@ -1189,6 +1189,7 @@ useEffect(() => {
     setRooms([]);
     setHistory([]);
     setLogs([]);
+    window.location.href = "https://app.snabbb.com";
   };
 
   const handleUpdateUserImages = async (payload: { type: 'avatar' | 'background'; file: File; previewUrl: string }) => {
