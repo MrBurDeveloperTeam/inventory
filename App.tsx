@@ -1174,9 +1174,11 @@ useEffect(() => {
     }
   };
 
-  const handleLogout = async () => {
-    await api.post('/logout')
+const handleLogout = async () => {
+  try {
+    await api.post('/logout');
     await supabase.auth.signOut();
+
     setIsAuthenticated(false);
     setIsBootstrapped(false);
     setUser(null);
@@ -1189,8 +1191,19 @@ useEffect(() => {
     setRooms([]);
     setHistory([]);
     setLogs([]);
-    window.location.href = "https://app.snabbb.com";
-  };
+
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(
+        { type: 'SSO_LOGOUT', source: 'miniapp' },
+        'https://app.snabbb.com'
+      );
+    }
+  } catch (error) {
+    console.error('Logout failed:', error);
+  } finally {
+    window.location.href = 'https://app.snabbb.com';
+  }
+};
 
   const handleUpdateUserImages = async (payload: { type: 'avatar' | 'background'; file: File; previewUrl: string }) => {
     if (!supabaseUserId) throw new Error('User is not authenticated.');
