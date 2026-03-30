@@ -749,6 +749,7 @@ useEffect(() => {
 
   useEffect(() => {
         const storedImages = loadUserImages(supabaseUserId);
+        console.log("theUser and finalProfile", theUser, finalProfile);
         setUser({
           id: supabaseUserId,
           email: finalProfile?.email || '',
