@@ -760,7 +760,7 @@ useEffect(() => {
           avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
           backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
         });
-  },[finalProfile])
+  },[finalProfile, theUser])
 
   const loadInventory = useCallback(async () => {
     if (!currentInventoryOwnerId) return;
