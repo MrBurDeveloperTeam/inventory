@@ -88,11 +88,11 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
+        }).catch(async err => {
+          return await loginOdoo(email, password); 
         });
         
         if (error) {
-          const res = await loginOdoo(email, password); // Attempt Odoo login first
-          console.log('Odoo login response:', res);
            const { data: checkRes } = await api.post('/inventory/check-user', {
              email: email.trim(),
            });
