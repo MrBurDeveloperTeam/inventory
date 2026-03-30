@@ -89,7 +89,36 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
           password,
         });
 
-        if (error) throw error;
+        if (error) {
+           const { data: checkRes } = await api.post('/inventory/check-user', {
+             email: email.trim(),
+           });
+
+           const userExistsInOdoo = checkRes?.data?.result?.exists;
+           if (userExistsInOdoo) {
+
+             const payload = {
+               email: email.trim(),
+               password,
+               options: {
+                 data: {
+                   name,
+                   account_type: accountType,
+                   phone,
+                   position,
+                   company_name: accountType === 'company' ? companyName : null,
+                 },
+               },
+             };
+           
+             // ✅ create in Supabase
+             const { error } = await supabase.auth.signUp(payload);
+           
+             if (error) throw error;
+           
+             setErrorMsg('Sign up successful. Please check your email to confirm your account.');
+           }
+        };
 
         if (data.user) {
           const inferredAccountType = (data.user.user_metadata?.account_type as any) || (email.trim().toLowerCase() === 'admin123@gmail.com' ? 'admin' : 'individual');

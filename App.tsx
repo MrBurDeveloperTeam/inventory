@@ -16,6 +16,8 @@ import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { MessageCircle } from 'lucide-react';
 import { api } from './services/api';
+import PromoBanner from './component/PromoBanner';
+import { usePromotions } from './hooks/usePromotions';
 
 type ManagedInventory = {
   userId: string;
@@ -36,6 +38,7 @@ type ProfileRow = {
   company_name?: string | null;
   avatar_url?: string | null;
   background_url?: string | null;
+  segments?: string[] | null;
 };
 
 const PROFILE_IMAGE_STORAGE_PREFIX = 'denta_profile_images_';
@@ -173,6 +176,7 @@ const App: React.FC = () => {
   const [isBootstrapped, setIsBootstrapped] = useState<boolean>(false);
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [theUser, setTheUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [managedProfiles, setManagedProfiles] = useState<ProfileRow[]>([]);
   const [managedInventories, setManagedInventories] = useState<ManagedInventory[]>([]);
@@ -207,6 +211,14 @@ const App: React.FC = () => {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  //promotions
+  const role = finalProfile?.position || 'staff';
+  const segments = finalProfile?.segments || [];
+
+  const { promotions } = usePromotions('inventory', role, segments);
+
+  const bannerPromos = promotions.filter((p) => p.placement === 'banner');
 
 useEffect(() => {
   let cancelled = false;
@@ -683,6 +695,8 @@ useEffect(() => {
     const userId = sbUser.id;
     console.log('Bootstrapping user:', userId);
     setSupabaseUserId(userId);
+    const { data: { user } } = await supabase.auth.getUser();
+    setTheUser(user);
 
     const { data: prof, error: profError } = await supabase
        .from('profiles')
@@ -738,7 +752,7 @@ useEffect(() => {
         setUser({
           id: supabaseUserId,
           email: finalProfile?.email || '',
-          name: finalProfile?.name || 'User',
+          name: finalProfile?.name || theUser?.user_metadata?.display_name || 'User',
           accountType: finalProfile?.account_type as any || 'individual',
           phone: finalProfile?.phone || '',
           position: finalProfile?.position || '',
@@ -2428,6 +2442,9 @@ const handleLogout = async () => {
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Syncing...</span>
                 </div>
               )}
+              {bannerPromos.map((promo) => (
+                <PromoBanner key={promo.id} appCode="inventory" promo={promo} />
+              ))}
               <ClinicMap
                 rooms={rooms}
                 blueprint={blueprint}
