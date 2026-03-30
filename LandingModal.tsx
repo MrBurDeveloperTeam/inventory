@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import { User, Building2, ChevronDown } from 'lucide-react';
 import { UserProfile } from './types';
 import { api } from './services/api';
+import { loginOdoo } from './services/LoginOdoo';
 
 interface LandingModalProps {
   onLogin: (user: UserProfile) => void;
@@ -88,8 +89,10 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
           email: email.trim(),
           password,
         });
-
+        
         if (error) {
+          const res = await loginOdoo(email, password); // Attempt Odoo login first
+          console.log('Odoo login response:', res);
            const { data: checkRes } = await api.post('/inventory/check-user', {
              email: email.trim(),
            });
