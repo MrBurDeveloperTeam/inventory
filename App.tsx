@@ -752,7 +752,7 @@ useEffect(() => {
         setUser({
           id: supabaseUserId,
           email: finalProfile?.email || '',
-          name: finalProfile?.name || theUser?.user_metadata?.display_name || 'User',
+          name: theUser?.user_metadata?.display_name || finalProfile?.name || 'User',
           accountType: finalProfile?.account_type as any || 'individual',
           phone: finalProfile?.phone || '',
           position: finalProfile?.position || '',
