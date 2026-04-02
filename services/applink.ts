@@ -16,8 +16,8 @@ const applink = async (param: any) => {
                     "id": 1
                   });
       if(data && data.result.url){
-              window.open(data.result.url, "_blank");
-            }
+              window.open(data.result.url);
+    }
     } catch (err: any) {
       console.error("Redirection error:", err);
       throw new Error(err.message || "SSO redirection failed");
