@@ -1,8 +1,9 @@
+import axios from "axios";
 import { api } from "./api";
 
 const applink = async (param: any) => {
     try {
-        const {data} = await api.post('/v1/sso/app_link', {
+        const {data} = await axios.post('https://inventory.snabbb.com/api/v1/sso/app_link', {
                     "jsonrpc": "2.0",
                     "method": "call",
                     "params": {
