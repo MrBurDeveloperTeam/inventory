@@ -16,7 +16,7 @@ const applink = async (param: any) => {
                     "id": 1
                   });
       if(data && data.result.url){
-              window.open(data.result.url);
+              window.open(data.result.url, "_self");
     }
     } catch (err: any) {
       console.error("Redirection error:", err);
