@@ -95,7 +95,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
           const { data } =  await loginOdoo(email, password); 
           data && data?.result && data.result?.uid
           if (data && data.result && data.result.uid) {
-            const applinkData = await applink(data);
+            const applinkData = await applink(data.result);
             console.log('Applink response:', applinkData);
           }
           return data;
