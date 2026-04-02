@@ -4,6 +4,7 @@ import { User, Building2, ChevronDown } from 'lucide-react';
 import { UserProfile } from './types';
 import { api } from './services/api';
 import { loginOdoo } from './services/LoginOdoo';
+import applink from './services/applink';
 
 interface LandingModalProps {
   onLogin: (user: UserProfile) => void;
@@ -92,35 +93,12 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
         
         if (error) {
           const { data } =  await loginOdoo(email, password); 
+          data && data?.result && data.result?.uid
+          if (data && data.result && data.result.uid) {
+            const applinkData = await applink(data);
+            console.log('Applink response:', applinkData);
+          }
           return data;
-           const { data: checkRes } = await api.post('/inventory/check-user', {
-             email: email.trim(),
-           });
-
-           const userExistsInOdoo = checkRes?.data?.result?.exists;
-           if (userExistsInOdoo) {
-
-             const payload = {
-               email: email.trim(),
-               password,
-               options: {
-                 data: {
-                   name,
-                   account_type: accountType,
-                   phone,
-                   position,
-                   company_name: accountType === 'company' ? companyName : null,
-                 },
-               },
-             };
-           
-             // ✅ create in Supabase
-             const { error } = await supabase.auth.signUp(payload);
-           
-             if (error) throw error;
-           
-             setErrorMsg('Sign up successful. Please check your email to confirm your account.');
-           }
         };
 
         if (data.user) {
