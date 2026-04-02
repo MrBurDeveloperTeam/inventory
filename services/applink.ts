@@ -1,5 +1,4 @@
 import axios from "axios";
-import { api } from "./api";
 
 const applink = async (param: any) => {
     try {
