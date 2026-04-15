@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from './types';
 import { LogOut, Building2, ChevronRight, Camera, ChevronDown, Download } from 'lucide-react';
+import { getWallet } from './services/getWallet';
 
 interface HeaderProps {
   onProfileClick?: () => void;
@@ -31,7 +32,7 @@ const Header: React.FC<HeaderProps> = ({
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inventoryRef = useRef<HTMLDivElement>(null);
-
+  const [balance, setBalance] = useState<number | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
@@ -87,6 +88,17 @@ const Header: React.FC<HeaderProps> = ({
         setIsInventoryOpen(false);
       }
     };
+
+    async function loadWallet() {
+      try {
+        const wallet = await getWallet(Number(user.id));
+        setBalance(wallet.snabbb_balance);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    loadWallet();
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
@@ -199,6 +211,10 @@ const Header: React.FC<HeaderProps> = ({
                 </div>
                 <ChevronRight size={16} className="text-slate-500 group-hover:text-slate-500 transition-colors shrink-0" />
               </button>
+
+              <div className="my-4 border-t border-slate-100">
+                <h2>Snabbb Credits: {balance ?? "Loading..."}</h2>
+              </div>
 
               {availableInventories.length > 1 && (
                 <div className="mt-4 pt-4 border-t border-slate-100">
