@@ -18,6 +18,8 @@ import { MessageCircle } from 'lucide-react';
 import { api } from './services/api';
 import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
+import { getCreditBalance } from './services/get_credit_balance';
+import { jwtDecode } from 'jwt-decode';
 
 type ManagedInventory = {
   userId: string;
@@ -250,6 +252,7 @@ useEffect(() => {
       setBlueprint(PRESET_BLUEPRINTS[0].url);
     } finally {
       if (!cancelled) setAuthInitializing(false);
+      await getCreditBalance(Number(supabaseUserId))
     }
   })();
 
@@ -277,6 +280,13 @@ useEffect(() => {
         access_token: sso.data.access_token,
         refresh_token: sso.data.refresh_token
       });
+      // Decode the token (no verification)
+      const decoded_token = jwtDecode(sso.data.access_token);
+
+      // Extract the user or partner ID from the 'sub' field
+      const user_id = decoded_token.sub;
+
+      console.log(`User ID: ${user_id}`)
     } catch (err) {
       await supabase.auth.signOut();
       console.error('SSO exchange failed:', err);
