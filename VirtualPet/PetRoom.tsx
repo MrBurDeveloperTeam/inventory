@@ -14,6 +14,8 @@ import { useGameState } from './hooks/useGameState';
 import { useBallPhysics } from './hooks/useBallPhysics';
 import LevelIndicator from './components/LevelIndicator';
 import CoinIndicator from './components/CoinIndicator';
+import { consumeGameCredit } from '@/services/consumeGameCredit';
+import api from '@/services/odooApi';
 
 const MAX_BUBBLES = 120;
 
@@ -234,20 +236,20 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
   };
 
   // --- Game Actions ---
-  const handlePlay = () => {
-    if (stats.energy < 20) return;
-    if (isSleeping) return;
+  // const handlePlay = () => {
+  //   if (stats.energy < 20) return;
+  //   if (isSleeping) return;
 
-    setIsPlaying(true);
-    setStats(prev => ({
-      ...prev,
-      happiness: Math.min(100, prev.happiness + 15),
-      energy: Math.max(0, prev.energy - 10),
-      hunger: Math.max(0, prev.hunger - 5)
-    }));
-    addXP(15);
-    setTimeout(() => setIsPlaying(false), 800);
-  };
+  //   setIsPlaying(true);
+  //   setStats(prev => ({
+  //     ...prev,
+  //     happiness: Math.min(100, prev.happiness + 15),
+  //     energy: Math.max(0, prev.energy - 10),
+  //     hunger: Math.max(0, prev.hunger - 5)
+  //   }));
+  //   addXP(15);
+  //   setTimeout(() => setIsPlaying(false), 800);
+  // };
 
   const handlePetClick = () => {
     if (isSleeping) {
@@ -259,6 +261,25 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
     setTimeout(() => setIsPlaying(false), 500);
   };
 
+  async function handlePlay(gameId: string) {
+    const sessionInfo = await api.post('/web/session/get_session_info', {
+      credentials: 'include',
+    });
+
+    const odooPartnerId = sessionInfo.data.partner_id;
+    const userId = sessionInfo.data.uid;
+    const sessionId = crypto.randomUUID();
+
+    const allowed = await consumeGameCredit(odooPartnerId, userId, sessionId);
+
+    if (allowed) {
+      onNavigateToGame(gameId);
+    } else {
+      // setError('Insufficient credits. Please top up your Snabbb balance.');
+    }
+
+    // setLoading(false);
+  }
 
   // Room switching cleanup & auto-show menus
   useEffect(() => {
@@ -280,7 +301,7 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
   const roomConfig = ROOM_THEMES[currentRoom];
 
   const handleStartGame = (gameId: string) => {
-    onNavigateToGame(gameId);
+    handlePlay(gameId);
   };
 
   return (
