@@ -1,11 +1,13 @@
+import { env } from "process";
+
 export async function callSnabbbApi<T>(
   path: string,
   method: 'GET' | 'POST' = 'GET',
   body?: Record<string, any>
 ): Promise<T> {
-  const baseUrl = import.meta.env.VITE_ODOO_BASE_URL;
+  const baseUrl = env.VITE_ODOO_BASE_URL;
   // const baseUrl = 'https://semistiffly-largando-alane.ngrok-free.dev';
-  const apiKey = import.meta.env.VITE_SNABBB_API_KEY;
+  const apiKey = env.VITE_SNABBB_API_KEY;
   // const apiKey = 'UiFKcg6lJvSHZUuQFJxg0oDjjIm8QCON';
 
   const res = await fetch(`${baseUrl}${path}`, {
