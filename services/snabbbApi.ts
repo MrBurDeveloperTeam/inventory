@@ -8,7 +8,7 @@ export async function callSnabbbApi<T>(
   const baseUrl = import.meta.env.VITE_ODOO_BASE_URL;
   const apiKey = import.meta.env.VITE_SNABBB_API_KEY;
 
-  const res = await api.post(`${baseUrl}${path}`, {
+  const res = await api.post(`${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
