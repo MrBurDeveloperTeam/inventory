@@ -3,10 +3,10 @@ export async function callSnabbbApi<T>(
   method: 'GET' | 'POST' = 'GET',
   body?: Record<string, any>
 ): Promise<T> {
-  // const baseUrl = import.meta.env.VITE_ODOO_BASE_URL;
-  const baseUrl = 'https://semistiffly-largando-alane.ngrok-free.dev';
-  // const apiKey = import.meta.env.VITE_SNABBB_API_KEY;
-  const apiKey = 'UiFKcg6lJvSHZUuQFJxg0oDjjIm8QCON';
+  const baseUrl = import.meta.env.VITE_ODOO_BASE_URL;
+  // const baseUrl = 'https://semistiffly-largando-alane.ngrok-free.dev';
+  const apiKey = import.meta.env.VITE_SNABBB_API_KEY;
+  // const apiKey = 'UiFKcg6lJvSHZUuQFJxg0oDjjIm8QCON';
 
   const res = await fetch(`${baseUrl}${path}`, {
     method,
