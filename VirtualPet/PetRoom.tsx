@@ -266,8 +266,8 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
       credentials: 'include',
     });
     console.log('Session Info:', sessionInfo);
-    const odooPartnerId = sessionInfo.data.partner_id;
-    const userId = sessionInfo.data.uid;
+    const odooPartnerId = sessionInfo.data.result.partner_id;
+    const userId = sessionInfo.data.result.uid;
     const sessionId = crypto.randomUUID();
 
     const allowed = await consumeGameCredit(odooPartnerId, userId, sessionId);
