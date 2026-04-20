@@ -11,7 +11,7 @@ export async function consumeGameCredit(
   try {
     // Step 1: Deduct credit from Odoo (source of truth)
     const result = await callSnabbbApi<{ ok: boolean; snabbb_balance: number }>(
-      '/snabbb/consume',
+      '/api/snabbb/consume',
       'POST',
       {
         partner_id: odooPartnerId,
