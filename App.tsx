@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
@@ -109,7 +110,7 @@ const ensureBatches = (item: Item): Item => {
   const baseBatches = item.batches && item.batches.length > 0
     ? item.batches.map(b => ({ ...b }))
     : [{
-      id: crypto.randomUUID(),
+      id: generateId(),
       qty: item.quantity,
       unitPrice: item.price,
       expiryDate: item.expiryDate || null
@@ -140,7 +141,7 @@ const mergeBatchAdd = (item: Item, qty: number, price: number, expiry?: string) 
     const newPrice = newQty > 0 ? ((b.qty * b.unitPrice) + (qty * price)) / newQty : price;
     batches[idx] = { ...b, qty: newQty, unitPrice: newPrice, expiryDate: key };
   } else {
-    batches.push({ id: crypto.randomUUID(), qty, unitPrice: price, expiryDate: key });
+    batches.push({ id: generateId(), qty, unitPrice: price, expiryDate: key });
   }
   const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(batches);
   return { ...normalized, batches, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
@@ -150,7 +151,7 @@ const adjustBatchesWithDelta = (item: Item, delta: number) => {
   const normalized = ensureBatches(item);
   let batches = normalized.batches ? normalized.batches.map(b => ({ ...b })) : [];
   if (delta > 0) {
-    if (batches.length === 0) batches.push({ id: crypto.randomUUID(), qty: 0, unitPrice: normalized.price, expiryDate: normalized.expiryDate || null });
+    if (batches.length === 0) batches.push({ id: generateId(), qty: 0, unitPrice: normalized.price, expiryDate: normalized.expiryDate || null });
     batches[0].qty += delta;
   } else if (delta < 0) {
     let remaining = Math.abs(delta);
@@ -213,6 +214,16 @@ const App: React.FC = () => {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
+  const handleClearChat = () => setChatHistory([]);
+
+  const [badgeText, setBadgeText] = useState("Ask Me");
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBadgeText(prev => prev === "Ask Me" ? "Try Me!" : "Ask Me");
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   //promotions
   const role = finalProfile?.position || 'staff';
@@ -241,7 +252,16 @@ useEffect(() => {
       if (cancelled) return;
 
       if (data.session?.user) {
-        await bootstrapUser(data.session.user); // <-- pass the user object
+        await bootstrapUser(data.session.user);
+        
+        // Only fetch balance if we have a valid ID (wait for bootstrap to set it or use it directly)
+        const userId = data.session.user.id;
+        // If the API expects an integer ID, we need to find where that comes from.
+        // For now, let's keep it safe and avoid NaN.
+        const partnerId = parseInt(userId); 
+        if (!isNaN(partnerId)) {
+          await getCreditBalance(partnerId).catch(err => console.error("Credit fetch failed:", err));
+        }
       } else {
         setBlueprint(PRESET_BLUEPRINTS[0].url);
         setIsAuthenticated(false);
@@ -252,7 +272,6 @@ useEffect(() => {
       setBlueprint(PRESET_BLUEPRINTS[0].url);
     } finally {
       if (!cancelled) setAuthInitializing(false);
-      await getCreditBalance(Number(supabaseUserId))
     }
   })();
 
@@ -400,6 +419,18 @@ useEffect(() => {
               actionData.qty,
               actionData.expiry
             );
+          } else if (actionData.type === 'transfer') {
+            const fromRoom = rooms.find(r => r.id === actionData.fromRoomId || r.name === (actionData.fromRoomName || actionData.fromRoom));
+            const toRoom = rooms.find(r => r.id === actionData.toRoomId || r.name === (actionData.toRoomName || actionData.toRoom));
+            if (fromRoom && toRoom) {
+              const item = fromRoom.items.find(i => 
+                i.name.toLowerCase() === actionData.itemName.toLowerCase() &&
+                (actionData.brand ? i.brand.toLowerCase() === actionData.brand.toLowerCase() : true)
+              );
+              if (item) {
+                moveItem(fromRoom.id, toRoom.id, item.id, actionData.qty);
+              }
+            }
           }
           finalResponseText = response.replace(/<ACTION>.*?<\/ACTION>/s, '').trim();
         } catch (err) {
@@ -416,7 +447,7 @@ useEffect(() => {
       console.error(err);
       setChatHistory([
         ...newHistory,
-        { role: "model", parts: [{ text: "Meow... I coughed up a hairball (error). Try again?" }] }
+        { role: "model", parts: [{ text: "I'm having trouble processing your request at the moment. Please try again shortly." }] }
       ]);
     } finally {
       setIsChatLoading(false);
@@ -1509,7 +1540,7 @@ const handleLogout = async () => {
         const normalized = ensureBatches(existingItem);
         const batches = normalized.batches ? [...normalized.batches] : [];
         batches.push({
-          id: crypto.randomUUID(),
+          id: generateId(),
           qty,
           unitPrice: price,
           expiryDate: expiry || null
@@ -1565,7 +1596,7 @@ const handleLogout = async () => {
       ? new Date(`${purchaseDate}T${new Date().toTimeString().split(' ')[0]}`).toISOString()
       : new Date().toISOString();
     const historyEntry: PurchaseHistory = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       timestamp: historyTimestamp,
       productName: itemData.name || '',
       brand: itemData.brand || '',
@@ -2002,7 +2033,7 @@ const handleLogout = async () => {
     } else {
       // Create a batch if missing
       updatedItem.batches = [{
-        id: crypto.randomUUID(),
+        id: generateId(),
         qty: updatedItem.quantity,
         unitPrice: updatedItem.price,
         expiryDate: updatedItem.expiryDate || null
@@ -2265,7 +2296,7 @@ const handleLogout = async () => {
     const { kept, moved } = (typeof batchIndex === 'number')
       ? {
         kept: item.batches?.map((b, idx) => idx === batchIndex ? { ...b, qty: Math.max(0, b.qty - quantity) } : b).filter(b => b.qty > 0) || [],
-        moved: [{ ...item.batches![batchIndex], qty: quantity, id: crypto.randomUUID() }]
+        moved: [{ ...item.batches![batchIndex], qty: quantity, id: generateId() }]
       }
       : splitBatchesForTransfer(item.batches, quantity);
 
@@ -2273,7 +2304,7 @@ const handleLogout = async () => {
     const updatedFromItem = { ...item, batches: kept, quantity: keptSummary.totalQty, price: keptSummary.avgPrice, expiryDate: keptSummary.earliestExpiry };
 
     const movedSummary = summarizeBatches(moved);
-    const movedItemTemplate = { ...item, id: crypto.randomUUID(), batches: moved, quantity: movedSummary.totalQty, price: movedSummary.avgPrice, expiryDate: movedSummary.earliestExpiry, roomId: toRoomId };
+    const movedItemTemplate = { ...item, id: generateId(), batches: moved, quantity: movedSummary.totalQty, price: movedSummary.avgPrice, expiryDate: movedSummary.earliestExpiry, roomId: toRoomId };
 
     let finalMovedItem: Item = movedItemTemplate;
     const existingInTarget = toRoom.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
@@ -2576,22 +2607,29 @@ const handleLogout = async () => {
 
       {/* Global Molar AI Chat */}
       {!isChatOpen && !isVirtualPetOpen && (
-        <button
-          onClick={() => setIsChatOpen(true)}
-          className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-[9999]"
-        >
-          <div className="relative w-full h-full rounded-full overflow-hidden p-2">
-            <img
-              src="/images/MolarAI.png"
-              alt="Molar AI"
-              className="w-full h-full object-contain scale-[1.6] translate-y-[0.35rem]"
-            />
-          </div>
-          {/* Tooltip */}
-          <div className="absolute right-full mr-4 bg-slate-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            Chat with Molar AI
-          </div>
-        </button>
+        <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-center group">
+           <div className="relative flex items-center justify-center">
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-[70] pointer-events-none">
+                 <AnimatePresence mode="wait">
+                    <motion.div
+                      key={badgeText}
+                      initial={{ opacity: 0, y: 5, scale: 0.9 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -5, scale: 0.9 }}
+                      className="bg-white text-emerald-500 text-[12px] font-bold tracking-wider px-2 py-0.5 rounded-full shadow-lg shadow-emerald-500/40 whitespace-nowrap"
+                    >
+                      {badgeText}
+                    </motion.div>
+                 </AnimatePresence>
+              </div>
+              <button
+                onClick={() => setIsChatOpen(true)}
+                className="w-16 h-16 bg-[#1F7A6F] rounded-full flex items-center justify-center text-white shadow-lg hover:scale-105 hover:shadow-xl transition-all shadow-[#1F7A6F]/30"
+              >
+                <img src="/icons/ai_logo.png" alt="SNAI" className="w-10 h-10 object-contain drop-shadow-sm transition-transform" />
+              </button>
+           </div>
+        </div>
       )}
 
       {!isVirtualPetOpen && (
@@ -2603,6 +2641,7 @@ const handleLogout = async () => {
           chatInput={chatInput}
           setChatInput={setChatInput}
           onSendMessage={handleSendChat}
+          onClearChat={handleClearChat}
           chatEndRef={chatEndRef}
         />
       )}

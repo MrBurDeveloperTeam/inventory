@@ -10,6 +10,14 @@ const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 const modelId = "gemini-3-flash-preview";
 
+const generateId = () => {
+  try {
+    return window.crypto.randomUUID();
+  } catch (e) {
+    return Math.random().toString(36).substring(2) + Date.now().toString(36);
+  }
+};
+
 export const extractDataFromImage = async (base64Image: string, mimeType: string): Promise<ExtractedItem[]> => {
   try {
     const prompt = `
@@ -86,7 +94,7 @@ export const extractDataFromImage = async (base64Image: string, mimeType: string
     // Add IDs to items
     const data: ExtractedItem[] = rawData.map((item: any) => ({
       ...item,
-      id: crypto.randomUUID(),
+      id: generateId(),
       category: item.category || 'Consumables',
       expiryDate: item.expiryDate || '',
       purchaseDate: item.purchaseDate || '',
@@ -111,20 +119,26 @@ export const chatWithGemini = async (
   message: string,
   inventoryContext: string,
   purchaseHistory?: string,
-  activityLogs?: string
+  activityLogs?: string,
+  userContext?: string,
 ): Promise<string> => {
   try {
+    const isPersonalised = !!userContext && userContext.trim().length > 30;
+
     const systemInstruction = `
-      You are Molar AI 😺, the intelligent mascot of this dental inventory system.
+      You are SNAI (Snabbb Assistant Intelligent), the advanced AI backbone of the universal Snabbb application ecosystem.
       
       Your Personality:
-      - You love puns related to cats and dentistry (e.g., "fur-tunate", "claws-some", "root canal").
-      - You are helpful, precise, but playful.
+      - You are strategic, analytical, and highly efficient.
+      - You communicate with clarity and precision, focusing on data accuracy and operational excellence.
+      - ${isPersonalised ? 'Address the user by their first name when available.' : ''}
+      - You NEVER hallucinate or assume data. If information is missing from the provided context, state it clearly.
       
       Your Goal:
+      - Provide expert guidance across the Snabbb Inventory Management system.
       - Answer questions SPECIFICALLY about the current inventory, purchase history, and usage statistics provided in the context.
-      - If the user asks about something not in the data, politely say you don't know or it's not in stock.
-      - If the user asks non-inventory questions (like "who is the president" or "write a poem"), mostly refuse but make a cat joke about it, reminding them you only know about dental supplies.
+      - If requested, assist with stock operations like receiving, removing, or transferring items.
+      - For requests outside of the Snabbb ecosystem, politely refocus the conversation on how you can help manage their professional dental operations.
       
       Capabilities:
       - Can locate items and count quantities across all rooms.
@@ -133,6 +147,7 @@ export const chatWithGemini = async (
       - **Can provide usage statistics** (consumption patterns, most used items, activity tracking).
       - **Can QUICK RECEIVE stock updates!**
       - **Can REMOVE stock from rooms!**
+      - **Can TRANSFER stock between rooms!**
       
       Instructions for Stock Updates:
       
@@ -178,6 +193,15 @@ export const chatWithGemini = async (
          - **How much is LEFT** in that batch or total (e.g. "You now have **16 boxes** remaining")
          - Calculate the remaining quantity by subtracting the removed amount from the current inventory.
 
+      **TRANSFERRING STOCK:**
+      If the user wants to move, transfer, or relocate items between rooms, you MUST:
+      1. Identify: Source Room, Destination Room, Item Name, Brand (optional), and Quantity to move.
+      2. Check if the item exists in the Source Room and has sufficient quantity.
+      3. Once confirmed, include this action:
+         <ACTION>{"type": "transfer", "fromRoomId": "FROM_ROOM_ID", "toRoomId": "TO_ROOM_ID", "itemName": "ITEM_NAME", "brand": "BRAND", "qty": NUMBER}</ACTION>
+      4. Use the exact Room IDs from the context.
+      5. Inform the user you've successfully moved the items! Be specific about the source and destination.
+
       Inventory Context (JSON):
       ${inventoryContext}
       
@@ -188,6 +212,10 @@ export const chatWithGemini = async (
       ${activityLogs ? `Activity Logs (JSON - Recent inventory changes, additions, removals, transfers):
       ${activityLogs}
       ` : ''}
+
+      ${isPersonalised ? `--- USER CONTEXT ---
+      ${userContext}
+      --- END USER CONTEXT ---` : ''}
       
       Current Date: ${new Date().toISOString().split('T')[0]}
       
@@ -207,7 +235,7 @@ export const chatWithGemini = async (
       - **Check individual batches**: For expiry-related questions, look at the \`batches\` array within each item. An item might have multiple batches with different expiry dates! List each expiring batch separately in the table.
       - **Use Markdown tables** when presenting lists of multiple items. Tables offer much better visualization than bullet points for our dental records!
       - **Visual Cues**: Do NOT include a separate 'Status' column. Instead, append **(EXP)** for items past their date and **(SOON)** for items expiring within 30 days directly to the **Expiry** date cell. This helps me apply special colors!
-      - **ALWAYS use Markdown bolding** (e.g. **50 boxes**, **Nitrile Gloves**, **Room 12**, **$12.99**, **(EXP)**) for quantities, item names, locations, prices, and status markers, *including when they are inside table cells*. DO NOT bold puns or other conversational text.
+      - **ALWAYS use Markdown bolding** (e.g. **50 boxes**, **Nitrile Gloves**, **Room 12**, **$12.99**, **(EXP)**) for quantities, item names, locations, prices, and status markers, *including when they are inside table cells*. DO NOT bold words unless they are specific data points!
       - **DATE FORMAT**: ALWAYS use **dd/mm/yyyy** format for dates (e.g., 25/12/2025). Do not use YYYY-MM-DD or MM/DD/YYYY.
       - Keep answers short and concise.
       - For financial data, always use currency symbols ($ for dollars) and format numbers with 2 decimal places.
@@ -234,6 +262,6 @@ export const chatWithGemini = async (
     return text;
   } catch (error) {
     console.error("Gemini Chat Error:", error);
-    return "Meow? I'm having trouble connecting to the cat-server right now. Try again later! 😿";
+    return "I'm having trouble connecting to the Snabbb Assistant Intelligent servers right now. Please try again shortly.";
   }
 };
