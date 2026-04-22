@@ -92,7 +92,7 @@ const Header: React.FC<HeaderProps> = ({
     async function loadWallet() {
       try {
         console.log('Loading wallet for user:', user);
-        const wallet = await getWallet(Number(user.id));
+        const wallet = await getWallet(user.id);
         setBalance(wallet.snabbb_balance);
       } catch (err) {
         console.error(err);
