@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from './types';
 import { LogOut, Building2, ChevronRight, Camera, ChevronDown, Download } from 'lucide-react';
-import { api, creditApi } from './services/api';
+import { api, creditApi, odooApi } from './services/api';
 
 interface HeaderProps {
   onProfileClick?: () => void;
@@ -92,7 +92,7 @@ const Header: React.FC<HeaderProps> = ({
     async function loadWallet() {
       try {
         console.log('Loading wallet for user:', user);
-        api.post('https://app.snabbb.com/api/web/session/get_session_info').then(res => {
+        odooApi.post('/web/session/get_session_info').then(res => {
           console.log('Session info response:', res);
         }).catch(err => {
           console.error('Session info error:', err);
