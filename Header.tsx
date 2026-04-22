@@ -92,7 +92,7 @@ const Header: React.FC<HeaderProps> = ({
     async function loadWallet() {
       try {
         console.log('Loading wallet for user:', user);
-        odooApi.post('/web/session/get_session_info').then(res => {
+        odooApi.post('/web/session/get_session_info', {}).then(res => {
           console.log('Session info response:', res);
         }).catch(err => {
           console.error('Session info error:', err);
