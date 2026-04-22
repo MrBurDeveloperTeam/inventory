@@ -213,12 +213,12 @@ const Header: React.FC<HeaderProps> = ({
                 <ChevronRight size={16} className="text-slate-500 group-hover:text-slate-500 transition-colors shrink-0" />
               </button>
 
-              <div className="my-4 border-t border-slate-100">
-                <h2>Snabbb Credits: {balance ?? "Loading..."}</h2>
+              <div className="my-4 border-t border-slate-100 flex items-center">
+                <h2>Snabbb Credits: {balance ?? balance}</h2>
               </div>
 
               {availableInventories.length > 1 && (
-                <div className="mt-4 pt-4 border-t border-slate-100">
+                <div className="pt-4 border-t border-slate-100">
                   <h3 className="text-xs font-bold text-slate-700 tracking-wide mb-3">Switch Inventory</h3>
                   <div className="space-y-1">
                     {availableInventories.map((inv) => (

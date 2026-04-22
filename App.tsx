@@ -259,6 +259,7 @@ useEffect(() => {
         // If the API expects an integer ID, we need to find where that comes from.
         // For now, let's keep it safe and avoid NaN.
         const partnerId = parseInt(userId); 
+        console.log(`Bootstrap complete for user ${userId} with partner ID ${partnerId}`);
         if (!isNaN(partnerId)) {
           await getCreditBalance(partnerId).catch(err => console.error("Credit fetch failed:", err));
         }
