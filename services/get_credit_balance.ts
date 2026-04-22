@@ -2,7 +2,7 @@ import { api, creditApi } from "./api";
 
 export const getCreditBalance = async (partnerId: number) => {
   try {
-    const res = await creditApi.get(`/wallet?partner_id=${partnerId}`);
+    const res = await creditApi.get(`/api/wallet?partner_id=${partnerId}`);
     const data = await res.data;
 
     if (!data.ok) {

@@ -92,7 +92,7 @@ const Header: React.FC<HeaderProps> = ({
     async function loadWallet() {
       try {
         console.log('Loading wallet for user:', user);
-        const { data } = await creditApi.get(`/wallet?partner_id=${user.id}`);
+        const { data } = await creditApi.get(`/api/wallet?partner_id=${user.id}`);
         setBalance(data.snabbb_balance);
       } catch (err) {
         console.error(err);
