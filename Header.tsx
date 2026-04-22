@@ -214,7 +214,7 @@ const Header: React.FC<HeaderProps> = ({
               </button>
 
               <div className="border-t border-slate-100 flex items-center h-10">
-                <h3 className="text-xs font-bold text-slate-700 tracking-normal mb-3">Snabbb Credits: {balance ?? balance}</h3>
+                <h3 className="text-xs font-bold text-slate-700 tracking-normal">Snabbb Credits: {balance ?? balance}</h3>
               </div>
 
               {availableInventories.length > 1 && (
