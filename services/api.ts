@@ -1,7 +1,8 @@
 import axios from "axios";
+import { env } from "process";
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL, 
+  baseURL: env.VITE_API_BASE_URL, 
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -21,7 +22,7 @@ api.interceptors.response.use(
 );
 
 export const creditApi = axios.create({
-  baseURL: import.meta.env.ODOO_API_URL, 
+  baseURL: env.ODOO_API_URL, 
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -29,7 +30,7 @@ export const creditApi = axios.create({
 });
 
 // Optional: basic error unwrap
-api.interceptors.response.use(
+creditApi.interceptors.response.use(
   (res) => res,
   (err) => {
     const msg =
