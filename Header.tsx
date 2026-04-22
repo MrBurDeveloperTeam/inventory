@@ -213,7 +213,7 @@ const Header: React.FC<HeaderProps> = ({
                 <ChevronRight size={16} className="text-slate-500 group-hover:text-slate-500 transition-colors shrink-0" />
               </button>
 
-              <div className="mb-4 border-t border-slate-100 flex items-center h-10">
+              <div className="border-t border-slate-100 flex items-center h-10">
                 <h2>Snabbb Credits: {balance ?? balance}</h2>
               </div>
 
