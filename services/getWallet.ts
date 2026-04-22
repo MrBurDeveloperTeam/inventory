@@ -1,13 +1,11 @@
-import api from "./odooApi";
-
 export async function getWallet(partnerId: number) {
-  const res = await api.get(`/snabbb/wallet?partner_id=${partnerId}`);
+  const res = await fetch(`https://semistiffly-largando-alane.ngrok-free.dev/api/snabbb/wallet?partner_id=${partnerId}`);
 
-  const data = await res.data;
+  const data = await res.json();
 
-  if (!res || !data.ok) {
+  if (!res.ok || !data.ok) {
     throw new Error(data.error || "Failed to fetch wallet");
   }
- 
-  return data;
+
+  return data.data;
 }
