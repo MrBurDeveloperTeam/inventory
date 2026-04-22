@@ -21,7 +21,7 @@ api.interceptors.response.use(
 );
 
 export const creditApi = axios.create({
-  baseURL: import.meta.env.VITE_API_URL, 
+  baseURL: import.meta.env.ODOO_API_URL, 
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
