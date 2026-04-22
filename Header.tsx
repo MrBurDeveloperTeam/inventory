@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from './types';
 import { LogOut, Building2, ChevronRight, Camera, ChevronDown, Download } from 'lucide-react';
 import { getWallet } from './services/getWallet';
+import { api } from './services/api';
 
 interface HeaderProps {
   onProfileClick?: () => void;
@@ -92,8 +93,8 @@ const Header: React.FC<HeaderProps> = ({
     async function loadWallet() {
       try {
         console.log('Loading wallet for user:', user);
-        const wallet = await getWallet(user.id);
-        setBalance(wallet.snabbb_balance);
+        const { data } = await api.get(`/api/snabbb/wallet?partner_id=${user.id}`);
+        setBalance(data.snabbb_balance);
       } catch (err) {
         console.error(err);
       }
