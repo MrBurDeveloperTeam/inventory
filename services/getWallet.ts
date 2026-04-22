@@ -1,11 +1,13 @@
+import api from "./odooApi";
+
 export async function getWallet(partnerId: number) {
-  const res = await fetch(`/api/snabbb/wallet?partner_id=${partnerId}`);
+  const res = await api.get(`/snabbb/wallet?partner_id=${partnerId}`);
 
-  const data = await res.json();
+  const data = await res.data;
 
-  if (!res.ok || !data.ok) {
+  if (!res || !data.ok) {
     throw new Error(data.error || "Failed to fetch wallet");
   }
-
-  return data.data;
+ 
+  return data;
 }
