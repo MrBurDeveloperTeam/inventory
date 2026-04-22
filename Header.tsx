@@ -246,7 +246,7 @@ const Header: React.FC<HeaderProps> = ({
                   </div>
                 </div>
               )}
-              <div className="mt-4 pt-4 border-t border-slate-100">
+              <div className="pt-4 border-t border-slate-100">
                 <h3 className="text-xs font-bold text-slate-700 tracking-normal mb-3">Collaborator</h3>
                 <button
                   onClick={handleAddCollaborator}
