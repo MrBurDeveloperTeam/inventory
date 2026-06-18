@@ -4,6 +4,7 @@ import { LogOut, Building2, ChevronRight, Camera, Download } from 'lucide-react'
 import { getWallet } from './services/getWallet';
 import { supabase } from './supabaseClient';
 import { PET_OPTIONS, getPetOption, normalizePetId, PetId } from './VirtualPet/petOptions';
+import { creditApi, odooApi } from './services/api';
 
 interface HeaderProps {
   onProfileClick?: () => void;
