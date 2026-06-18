@@ -99,8 +99,12 @@ const Header: React.FC<HeaderProps> = ({
     async function loadWallet() {
       try {
         console.log('Loading wallet for user:', user);
-        const wallet = await getWallet(Number(user.id));
-        setBalance(wallet.snabbb_balance);
+        const info  = await odooApi.post('/web/session/get_session_info', {}).catch(err => {
+          console.error('Session info error:', err);
+        });
+        const { data: sessionData } = info || {};
+        const { data } = await creditApi.get(`/api/wallet?partner_id=${sessionData.result.partner_id}`);
+        setBalance(data.snabbb_balance);
       } catch (err) {
         console.error(err);
       }
@@ -375,7 +379,7 @@ const Header: React.FC<HeaderProps> = ({
               </div>
 
               {availableInventories.length > 1 && (
-                <div className="mt-4 pt-4 border-t border-slate-100">
+                <div className="pt-4 border-t border-slate-100">
                   <h3 className="text-xs font-bold text-slate-700 tracking-wide mb-3">Switch Inventory</h3>
                   <div className="space-y-1">
                     {availableInventories.map((inv) => (
@@ -403,7 +407,7 @@ const Header: React.FC<HeaderProps> = ({
                   </div>
                 </div>
               )}
-              <div className="mt-4 pt-4 border-t border-slate-100">
+              <div className="pt-4 border-t border-slate-100">
                 <h3 className="text-xs font-bold text-slate-700 tracking-normal mb-3">Collaborator</h3>
                 <button
                   onClick={handleAddCollaborator}

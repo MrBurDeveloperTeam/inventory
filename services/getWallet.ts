@@ -1,5 +1,5 @@
-export async function getWallet(partnerId: number) {
-  const res = await fetch(`/api/snabbb/wallet?partner_id=${partnerId}`);
+export async function getWallet(partnerId: string) {
+  const res = await fetch(`https://semistiffly-largando-alane.ngrok-free.dev/api/snabbb/wallet?partner_id=${partnerId}`);
 
   const data = await res.json();
 
