@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from './types';
-import { LogOut, Building2, ChevronRight, Camera, ChevronDown, Download } from 'lucide-react';
-import { api, creditApi, odooApi } from './services/api';
+import { LogOut, Building2, ChevronRight, Camera, Download } from 'lucide-react';
+import { getWallet } from './services/getWallet';
+import { supabase } from './supabaseClient';
+import { PET_OPTIONS, getPetOption, normalizePetId, PetId } from './VirtualPet/petOptions';
 
 interface HeaderProps {
   onProfileClick?: () => void;
@@ -30,6 +32,9 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+  const [accountMenuView, setAccountMenuView] = useState<'main' | 'pets'>('main');
+  const [selectedPetId, setSelectedPetId] = useState<PetId>(() => normalizePetId(localStorage.getItem('pet_name')));
+  const [isSavingPet, setIsSavingPet] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inventoryRef = useRef<HTMLDivElement>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -37,6 +42,7 @@ const Header: React.FC<HeaderProps> = ({
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const selectedPet = getPetOption(selectedPetId);
 
   useEffect(() => {
     const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
@@ -83,6 +89,7 @@ const Header: React.FC<HeaderProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        setAccountMenuView('main');
       }
       if (inventoryRef.current && !inventoryRef.current.contains(event.target as Node)) {
         setIsInventoryOpen(false);
@@ -114,6 +121,50 @@ const Header: React.FC<HeaderProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPetSelection = async () => {
+      const localPetId = normalizePetId(localStorage.getItem('pet_name'));
+      if (isMounted) setSelectedPetId(localPetId);
+
+      if (!user?.id) return;
+
+      const { data, error } = await supabase
+        .from('inventory_pet')
+        .select('pet_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!isMounted || error || !data) return;
+
+      const petId = normalizePetId(data.pet_name);
+      setSelectedPetId(petId);
+      localStorage.setItem('pet_name', petId);
+      window.dispatchEvent(new CustomEvent('virtual-pet-selection-change', { detail: petId }));
+    };
+
+    const handlePetSelectionChange = (event: Event) => {
+      setSelectedPetId(normalizePetId((event as CustomEvent).detail));
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'pet_name') {
+        setSelectedPetId(normalizePetId(event.newValue));
+      }
+    };
+
+    loadPetSelection();
+    window.addEventListener('virtual-pet-selection-change', handlePetSelectionChange);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('virtual-pet-selection-change', handlePetSelectionChange);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [user?.id]);
+
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
 
@@ -138,6 +189,35 @@ const Header: React.FC<HeaderProps> = ({
     setIsOpen(false);
     onAddCollaborator?.();
   }
+
+  const handlePetSelect = async (petId: PetId) => {
+    const nextPetId = normalizePetId(petId);
+    if (nextPetId === selectedPetId || isSavingPet) return;
+
+    setIsSavingPet(true);
+    try {
+      if (user?.id) {
+        const { error } = await supabase
+          .from('inventory_pet')
+          .update({
+            pet_name: nextPetId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      }
+
+      setSelectedPetId(nextPetId);
+      localStorage.setItem('pet_name', nextPetId);
+      window.dispatchEvent(new CustomEvent('virtual-pet-selection-change', { detail: nextPetId }));
+      setAccountMenuView('main');
+    } catch (error) {
+      console.error('Failed to update pet selection:', error);
+    } finally {
+      setIsSavingPet(false);
+    }
+  };
 
   const currentInventoryName = availableInventories.find(i => i.id === currentInventoryId)?.name || 'My Inventory';
 
@@ -184,8 +264,58 @@ const Header: React.FC<HeaderProps> = ({
         )}
 
         {isOpen && (
-          <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-100 font-sans">
+          <div className={`absolute top-full right-0 mt-2 ${accountMenuView === 'pets' ? 'w-[386px]' : 'w-[400px]'} bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-100 font-sans`}>
             <div className="p-4">
+              {accountMenuView === 'pets' ? (
+                <>
+                  <div className="-m-4 mb-4 px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setAccountMenuView('main')}
+                      className="flex items-center gap-3 text-base font-bold text-slate-800 hover:text-emerald-600 transition-colors"
+                    >
+                      <ChevronRight size={16} className="rotate-180" />
+                      Pet
+                    </button>
+                    <span className="text-base font-bold text-emerald-600">{selectedPet.label}</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {PET_OPTIONS.map((pet) => {
+                      const isSelected = pet.id === selectedPetId;
+                      return (
+                        <button
+                          key={pet.id}
+                          type="button"
+                          disabled={isSavingPet}
+                          onClick={() => handlePetSelect(pet.id)}
+                          className={`min-h-[102px] rounded-xl border p-3 flex flex-col items-center justify-center gap-1 text-base font-bold transition-all ${
+                            isSelected
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-600'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/40'
+                          } ${isSavingPet ? 'cursor-wait opacity-70' : ''}`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="block"
+                            style={{
+                              width: 38,
+                              height: 42,
+                              backgroundImage: `url("${pet.spriteSheetUrl}")`,
+                              backgroundRepeat: 'no-repeat',
+                              backgroundSize: `${192 * 8 * 0.2}px ${208 * 9 * 0.2}px`,
+                              backgroundPosition: '0 0',
+                              imageRendering: 'pixelated',
+                            }}
+                          />
+                          {pet.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <>
               <h3 className="text-xs font-bold text-slate-700 tracking-wide mb-2">Accounts</h3>
 
               <button
@@ -217,8 +347,35 @@ const Header: React.FC<HeaderProps> = ({
                 <ChevronRight size={16} className="text-slate-500 group-hover:text-slate-500 transition-colors shrink-0" />
               </button>
 
-              <div className="border-t border-slate-100 flex items-center h-10">
-                <h3 className="text-xs font-bold text-slate-700 tracking-normal">Snabbb Credits: {balance ?? balance}</h3>
+              <button
+                type="button"
+                onClick={() => setAccountMenuView('pets')}
+                className="w-full flex items-center justify-between px-2 py-3 mt-2 hover:bg-slate-50 rounded-xl transition-colors text-left group"
+              >
+                <span className="flex items-center gap-3 min-w-0">
+                  <span
+                    aria-hidden="true"
+                    className="block shrink-0"
+                    style={{
+                      width: 34,
+                      height: 36,
+                      backgroundImage: `url("${selectedPet.spriteSheetUrl}")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundSize: `${192 * 8 * 0.17}px ${208 * 9 * 0.17}px`,
+                      backgroundPosition: '0 0',
+                      imageRendering: 'pixelated',
+                    }}
+                  />
+                  <span className="flex flex-col min-w-0">
+                    <span className="text-xs font-black uppercase tracking-wide text-slate-500">Pet</span>
+                    <span className="text-sm font-bold text-slate-800 truncate">{selectedPet.label}</span>
+                  </span>
+                </span>
+                <ChevronRight size={16} className="text-slate-500 group-hover:text-emerald-600 transition-colors shrink-0" />
+              </button>
+
+              <div className="my-4 border-t border-slate-100">
+                <h2>Snabbb Credits: {balance ?? "Loading..."}</h2>
               </div>
 
               {availableInventories.length > 1 && (
@@ -299,6 +456,8 @@ const Header: React.FC<HeaderProps> = ({
                   <span>Log out</span>
                 </button>
               </div>
+                </>
+              )}
             </div>
           </div>
         )}

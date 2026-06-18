@@ -1,5 +1,5 @@
 
-import { PetStats, PetColor, RoomType, FoodItem, ToyItem } from './types';
+import { PetStats, RoomType, FoodItem, ToyItem, BedItem } from './types';
 
 export const INITIAL_STATS: PetStats = {
   hunger: 80,
@@ -26,15 +26,6 @@ export const ROOM_THEMES: Record<RoomType, { bg: string; accent: string; icon: s
   [RoomType.GARDEN]: { bg: 'bg-gradient-to-br from-[#F0FDF4] via-[#DCFCE7] to-[#86EFAC]', accent: 'text-emerald-600', icon: '🌳' },
   [RoomType.GAMES]: { bg: 'bg-gradient-to-br from-[#EEF2FF] via-[#E0E7FF] to-[#C7D2FE]', accent: 'text-indigo-600', icon: '🕹️' },
 };
-
-export const COLORS = [
-  { value: PetColor.POTATO, label: 'Classic' },
-  { value: PetColor.PINK, label: 'Berry' },
-  { value: PetColor.BLUE, label: 'Sky' },
-  { value: PetColor.GREEN, label: 'Mint' },
-  { value: PetColor.PURPLE, label: 'Lavender' },
-  { value: PetColor.ORANGE, label: 'Peach' },
-];
 
 export const FOOD_ITEMS: FoodItem[] = [
   // Breakfast
@@ -106,4 +97,10 @@ export const TOY_ITEMS: ToyItem[] = [
   { id: 'ball_tennis', icon: '🥎', label: 'Tennis Ball', price: 150, color: '#d4fc79', levelReq: 2 },
   { id: 'ball_rugby', icon: '🏉', label: 'Rugby Ball', price: 400, color: '#a52a2a', levelReq: 5 },
   { id: 'ball_8ball', icon: '🎱', label: '8-Ball', price: 600, color: '#212529', levelReq: 6 },
+];
+
+export const BED_ITEMS: BedItem[] = [
+  { id: 'bed_grey', label: 'Grey Bed', price: 0, src: '/pets/grey_bed.png', energyGain: 2, levelReq: 1 },
+  { id: 'bed_red', label: 'Red Bed', price: 300, src: '/pets/red_bed.png', energyGain: 3, levelReq: 1 },
+  { id: 'bed_purple', label: 'Purple Bed', price: 600, src: '/pets/purple_bed.png', energyGain: 4, levelReq: 1 },
 ];
