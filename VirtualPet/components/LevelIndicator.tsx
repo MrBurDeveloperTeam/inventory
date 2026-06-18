@@ -1,14 +1,12 @@
 
 import React, { useState } from 'react';
-import { PetStats, PetColor } from '../types';
-import { COLORS } from '../constants';
+import { PetStats } from '../types';
 
 interface LevelIndicatorProps {
   stats: PetStats;
-  onColorChange: (color: PetColor) => void;
 }
 
-const LevelIndicator: React.FC<LevelIndicatorProps> = ({ stats, onColorChange }) => {
+const LevelIndicator: React.FC<LevelIndicatorProps> = ({ stats }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   // The main body shape
@@ -121,20 +119,6 @@ const LevelIndicator: React.FC<LevelIndicatorProps> = ({ stats, onColorChange })
                     </div>
                 </div>
 
-                <div className="border-t border-slate-200 pt-4">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">Pet Color</p>
-                    <div className="grid grid-cols-3 gap-3">
-                         {COLORS.map((c) => (
-                             <button
-                               key={c.value}
-                               className="w-10 h-10 rounded-full border-2 border-white shadow-md hover:scale-110 active:scale-95 transition-all mx-auto"
-                               style={{ backgroundColor: c.value }}
-                               onClick={() => onColorChange(c.value)}
-                               title={c.label}
-                             />
-                           ))}
-                    </div>
-                </div>
             </div>
         )}
     </div>

@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
@@ -11,11 +10,11 @@ import LandingModal from './LandingModal';
 import ProfilePage from './ProfilePage';
 import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
-import { MolarChat } from './MolarChat';
 import { VirtualPetContainer } from './VirtualPet/VirtualPetContainer';
+import CatMascot from './components/CatMascot';
+import MolarAIFloat from './components/MolarAIFloat';
 import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
-import { MessageCircle } from 'lucide-react';
 import { api } from './services/api';
 import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
@@ -216,15 +215,6 @@ const App: React.FC = () => {
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
   const handleClearChat = () => setChatHistory([]);
 
-  const [badgeText, setBadgeText] = useState("Ask Me");
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setBadgeText(prev => prev === "Ask Me" ? "Try Me!" : "Ask Me");
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
   //promotions
   const role = finalProfile?.position || 'staff';
   const segments = finalProfile?.segments || [];
@@ -325,6 +315,52 @@ useEffect(() => {
     }
   }, [chatHistory, isChatOpen]);
 
+  const getPredefinedChatResponse = async (message: string): Promise<string | null> => {
+    const normalizedMessage = message.toLowerCase();
+
+    const { data: targetApps, error: targetAppsError } = await supabase
+      .from('aiboard_response_target_apps')
+      .select('response_id')
+      .in('app_name', ['Inventory', 'All']);
+
+    if (targetAppsError) {
+      console.error('Failed to fetch response target apps:', targetAppsError);
+      return null;
+    }
+
+    const responseIds = [...new Set((targetApps || []).map((app: any) => app.response_id).filter(Boolean))];
+    if (responseIds.length === 0) return null;
+
+    const { data: keywords, error: keywordsError } = await supabase
+      .from('aiboard_response_keywords')
+      .select('keyword, response_id')
+      .in('response_id', responseIds);
+
+    if (keywordsError) {
+      console.error('Failed to fetch response keywords:', keywordsError);
+      return null;
+    }
+
+    const matchedKeyword = (keywords || [])
+      .filter((item: any) => item.keyword && normalizedMessage.includes(String(item.keyword).toLowerCase()))
+      .sort((a: any, b: any) => String(b.keyword).length - String(a.keyword).length)[0];
+
+    if (!matchedKeyword?.response_id) return null;
+
+    const { data: responseData, error: responseError } = await supabase
+      .from('aiboard_responses')
+      .select('response')
+      .eq('id', matchedKeyword.response_id)
+      .maybeSingle();
+
+    if (responseError) {
+      console.error('Failed to fetch predefined response:', responseError);
+      return null;
+    }
+
+    return responseData?.response || null;
+  };
+
   const handleSendChat = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!chatInput.trim() || isChatLoading) return;
@@ -386,7 +422,8 @@ useEffect(() => {
       const purchaseHistoryStr = recentPurchases.length ? JSON.stringify(recentPurchases) : undefined;
       const activityLogsStr = recentLogs.length ? JSON.stringify(recentLogs) : undefined;
 
-      const response = await chatWithGemini(chatHistory, userMsg, contextStr, purchaseHistoryStr, activityLogsStr);
+      const response = await getPredefinedChatResponse(userMsg)
+        || await chatWithGemini(chatHistory, userMsg, contextStr, purchaseHistoryStr, activityLogsStr);
 
       let finalResponseText = response;
       const actionMatch = response.match(/<ACTION>(.*?)<\/ACTION>/);
@@ -2605,36 +2642,12 @@ const handleLogout = async () => {
         currentUser={user}
       />
 
-      {/* Global Molar AI Chat */}
-      {!isChatOpen && !isVirtualPetOpen && (
-        <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-center group">
-           <div className="relative flex items-center justify-center">
-              <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-[70] pointer-events-none">
-                 <AnimatePresence mode="wait">
-                    <motion.div
-                      key={badgeText}
-                      initial={{ opacity: 0, y: 5, scale: 0.9 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -5, scale: 0.9 }}
-                      className="bg-white text-emerald-500 text-[12px] font-bold tracking-wider px-2 py-0.5 rounded-full shadow-lg shadow-emerald-500/40 whitespace-nowrap"
-                    >
-                      {badgeText}
-                    </motion.div>
-                 </AnimatePresence>
-              </div>
-              <button
-                onClick={() => setIsChatOpen(true)}
-                className="w-16 h-16 bg-[#1F7A6F] rounded-full flex items-center justify-center text-white shadow-lg hover:scale-105 hover:shadow-xl transition-all shadow-[#1F7A6F]/30"
-              >
-                <img src="/icons/ai_logo.png" alt="SNAI" className="w-10 h-10 object-contain drop-shadow-sm transition-transform" />
-              </button>
-           </div>
-        </div>
-      )}
-
       {!isVirtualPetOpen && (
-        <MolarChat
+        <>
+        <CatMascot onCatClick={() => setIsVirtualPetOpen(true)} disabled={!isAuthenticated} />
+        <MolarAIFloat
           isOpen={isChatOpen}
+          onOpen={() => setIsChatOpen(true)}
           onClose={() => setIsChatOpen(false)}
           chatHistory={chatHistory}
           isChatLoading={isChatLoading}
@@ -2643,7 +2656,13 @@ const handleLogout = async () => {
           onSendMessage={handleSendChat}
           onClearChat={handleClearChat}
           chatEndRef={chatEndRef}
+          onPetToggle={() => {
+            setIsChatOpen(false);
+            setIsVirtualPetOpen(true);
+          }}
+          disabled={!isAuthenticated}
         />
+        </>
       )}
 
       <VirtualPetContainer isOpen={isVirtualPetOpen} onClose={() => setIsVirtualPetOpen(false)} />

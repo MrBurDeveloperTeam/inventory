@@ -24,9 +24,9 @@ export const useBallPhysics = (currentRoom: RoomType) => {
                         const floor = window.innerHeight;
                         const walls = window.innerWidth;
 
-                        // Air Resistance
-                        vx *= 0.995;
-                        vy *= 0.995;
+                        // Air resistance / rolling friction. Lower values make the ball stop sooner.
+                        vx *= 0.990;
+                        vy *= 0.990;
 
                         // Update position
                         x += vx;
