@@ -2552,7 +2552,7 @@ const handleLogout = async () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col select-none bg-slate-50">
+    <div className={`min-h-screen flex flex-col select-none ${theme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       <Header
         onProfileClick={() => setCurrentView('profile')}
         onDashboardClick={() => navigatetoSnabbb()}

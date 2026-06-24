@@ -227,7 +227,7 @@ const Header: React.FC<HeaderProps> = ({
   const currentInventoryName = availableInventories.find(i => i.id === currentInventoryId)?.name || 'My Inventory';
 
   return (
-    <header className="bg-white shadow-sm px-6 md:px-16 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 w-full z-50">
+    <header className={`shadow-sm px-6 md:px-16 py-4 flex flex-wrap items-center justify-between gap-4 border-b w-full z-50 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
       {/* Logo and Inventory Switcher */}
       <div className="flex items-center gap-6">
         <div
@@ -280,7 +280,7 @@ const Header: React.FC<HeaderProps> = ({
         )}
 
         {isOpen && (
-          <div className={`absolute top-full right-0 mt-2 ${accountMenuView === 'pets' ? 'w-[386px]' : 'w-[400px]'} bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-100 font-sans`}>
+          <div className={`absolute top-full right-0 mt-2 ${accountMenuView === 'pets' ? 'w-[386px]' : 'w-[400px]'} rounded-2xl shadow-xl border overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-100 font-sans ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-100'}`}>
             <div className="p-4">
               {accountMenuView === 'pets' ? (
                 <>

@@ -8,6 +8,13 @@
     <link rel="icon" type="image/png" href="/images/InventoryIcon.png">
     <link rel="apple-touch-icon" href="/images/InventoryIcon.png">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Enable class-based dark mode for Tailwind CDN
+      tailwind.config = {
+        darkMode: 'class',
+        theme: { extend: {} },
+      };
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
