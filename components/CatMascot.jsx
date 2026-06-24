@@ -803,11 +803,10 @@ export default function CatMascot({ onCatClick, disabled = false }) {
               onClick={(e) => e.stopPropagation()}
             >
               <div
-                className="p-4 text-sm font-semibold leading-relaxed flex flex-col relative z-10 bg-white rounded-lg"
-                style={{ color: '#334155', backgroundColor: '#ffffff' }}
+                className="p-4 text-sm font-semibold leading-relaxed flex flex-col relative z-10 bg-white rounded-lg text-slate-700"
               >
                 <div className="flex-1 flex items-center justify-center text-center">
-                  <p className="whitespace-pre-wrap" style={{ color: '#334155' }}>{dialogSteps[dialogStep]}</p>
+                  <p className="whitespace-pre-wrap text-slate-700">{dialogSteps[dialogStep]}</p>
                 </div>
                 <div className="pt-4 flex justify-between items-center mt-auto">
                   <button

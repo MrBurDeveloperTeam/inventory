@@ -317,3 +317,18 @@ body {
 /* bg-white/95 is used on room hexagons — ensure text stays readable in dark  */
 .dark .hexagon.bg-white\/95 { background-color: rgba(30,41,59,0.95) !important; }
 .dark .hexagon span { color: #e2e8f0 !important; }
+
+/* ── Emerald badge (SKU count on room hexagons) ──────────────────────────── */
+.dark .bg-emerald-100    { background-color: #064e3b !important; }
+.dark .text-emerald-700  { color: #34d399 !important; }
+.dark .border-emerald-200 { border-color: #065f46 !important; }
+.dark .bg-emerald-50     { background-color: #022c22 !important; }
+.dark .text-emerald-600  { color: #34d399 !important; }
+.dark .border-emerald-100 { border-color: #064e3b !important; }
+.dark .border-emerald-100\/50 { border-color: rgba(6,78,59,0.5) !important; }
+
+/* ── Cat mascot dialog bubble ────────────────────────────────────────────── */
+/* The bubble uses bg-white (covered) but dialog text has inline style color */
+/* Target the dialog wrapper and force text color on all children            */
+.dark .cat-mascot-wrapper p { color: #e2e8f0 !important; }
+.dark .cat-mascot-wrapper span { color: #e2e8f0 !important; }
