@@ -296,6 +296,13 @@ body {
 .dark input::placeholder,
 .dark textarea::placeholder { color: #64748b !important; }
 
+/* Transparent inputs (room name, inline table cells) keep no background */
+.dark input.bg-transparent,
+.dark textarea.bg-transparent {
+  background-color: transparent !important;
+  border-color: inherit !important;
+}
+
 /* ── Hover states ─────────────────────────────────────────── */
 .dark .hover\:bg-slate-50:hover  { background-color: #273549 !important; }
 .dark .hover\:bg-slate-100:hover { background-color: #2d3f56 !important; }
