@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
@@ -13,6 +12,16 @@ import CollaboratorModal from './CollaboratorModal';
 import { VirtualPetContainer } from './VirtualPet/VirtualPetContainer';
 import CatMascot from './components/CatMascot';
 import MolarAIFloat from './components/MolarAIFloat';
+import {
+  readStoredTheme,
+  writeThemeCookie,
+  writeStoredTheme,
+  applyThemeToDocument,
+  syncThemeFromOdoo,
+  pushThemeToOdoo,
+  readThemeCookie,
+  parseTheme,
+} from './src/utils/themeSync';
 import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { api } from './services/api';
@@ -202,6 +211,61 @@ const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
+
+  // ─── Theme state — hybrid: cookie (instant) + Odoo (cross-device) ───────────
+  const [theme, setThemeState] = useState<string>(() => readStoredTheme() || 'light');
+
+  // Apply theme to DOM whenever it changes
+  useEffect(() => {
+    applyThemeToDocument(theme);
+  }, [theme]);
+
+  // Sync from Odoo on mount (cross-device)
+  useEffect(() => {
+    syncThemeFromOdoo((odooTheme) => {
+      setThemeState(odooTheme);
+    });
+  }, []);
+
+  // 1s cookie poll — catches gallery/appointment changing theme on same browser
+  useEffect(() => {
+    let lastCookie = readThemeCookie();
+    const interval = window.setInterval(() => {
+      const current = readThemeCookie();
+      if (current && current !== lastCookie) {
+        lastCookie = current;
+        setThemeState(current);
+      }
+    }, 1000);
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== 'theme') return;
+      const next = parseTheme(e.newValue);
+      if (next) setThemeState(next);
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  // Sync Odoo on auth completion
+  useEffect(() => {
+    if (isAuthenticated) {
+      syncThemeFromOdoo((odooTheme) => setThemeState(odooTheme));
+    }
+  }, [isAuthenticated]);
+
+  const handleSetTheme = (newTheme: string) => {
+    const valid = new Set(['light', 'dark', 'system']);
+    const t = valid.has(newTheme) ? newTheme : 'light';
+    setThemeState(t);
+    writeThemeCookie(t);
+    writeStoredTheme(t);
+    pushThemeToOdoo(t); // fire and forget
+  };
 
   // Virtual Pet State
   const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
@@ -2501,6 +2565,8 @@ const handleLogout = async () => {
         availableInventories={availableInventories}
         currentInventoryId={currentInventoryOwnerId}
         onSwitchInventory={setCurrentInventoryOwnerId}
+        theme={theme}
+        onSetTheme={handleSetTheme}
       />
 
       <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-8 px-0 md:px-16 lg:px-32 py-8">

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from './types';
-import { LogOut, Building2, ChevronRight, Camera, Download } from 'lucide-react';
+import { LogOut, Building2, ChevronRight, Camera, Download, Sun, Moon } from 'lucide-react';
 import { getWallet } from './services/getWallet';
 import { supabase } from './supabaseClient';
 import { PET_OPTIONS, getPetOption, normalizePetId, PetId } from './VirtualPet/petOptions';
@@ -17,6 +17,8 @@ interface HeaderProps {
   availableInventories?: { id: string; name: string; role: string }[];
   currentInventoryId?: string | null;
   onSwitchInventory?: (id: string) => void;
+  theme?: string;
+  onSetTheme?: (theme: string) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -29,7 +31,9 @@ const Header: React.FC<HeaderProps> = ({
   userAvatarUrl,
   availableInventories = [],
   currentInventoryId,
-  onSwitchInventory
+  onSwitchInventory,
+  theme = 'light',
+  onSetTheme,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
@@ -244,6 +248,17 @@ const Header: React.FC<HeaderProps> = ({
 
 
       <div className="flex items-center gap-4 relative" ref={dropdownRef}>
+        {/* Theme toggle */}
+        {onSetTheme && (
+          <button
+            onClick={() => onSetTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="w-9 h-9 flex items-center justify-center rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors shadow-sm"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        )}
         {onProfileClick && (
           <button
             onClick={() => setIsOpen(!isOpen)}
