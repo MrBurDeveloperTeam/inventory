@@ -332,3 +332,25 @@ body {
 /* Target the dialog wrapper and force text color on all children            */
 .dark .cat-mascot-wrapper p { color: #e2e8f0 !important; }
 .dark .cat-mascot-wrapper span { color: #e2e8f0 !important; }
+
+/* ── MolarChat / SNAI chat modal ─────────────────────────────────────────── */
+.dark .text-black          { color: #f1f5f9 !important; }
+.dark .bg-white\/80        { background-color: rgba(30,41,59,0.92) !important; }
+.dark .bg-white\/60        { background-color: rgba(30,41,59,0.75) !important; }
+.dark .border-white\/40    { border-color: rgba(51,65,85,0.6) !important; }
+.dark .ring-slate-900\/5   { --tw-ring-color: rgba(51,65,85,0.3) !important; }
+.dark .shadow-slate-200\/50 { box-shadow: 0 16px 48px rgba(0,0,0,0.5) !important; }
+
+/* AI response bubbles */
+.dark .bg-slate-100\/70    { background-color: rgba(39,53,73,0.85) !important; }
+.dark .border-slate-200\/80 { border-color: rgba(51,65,85,0.6) !important; }
+
+/* Typing indicator bubble */
+.dark .bg-white\/80.border.border-slate-100 { background-color: rgba(30,41,59,0.9) !important; }
+
+/* Suggestion cards */
+.dark .hover\:bg-emerald-50\/30:hover { background-color: rgba(6,78,59,0.2) !important; }
+.dark .hover\:border-emerald-200:hover { border-color: #065f46 !important; }
+
+/* Chat input area */
+.dark .backdrop-blur-2xl { background-color: rgba(15,23,42,0.85) !important; }
