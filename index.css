@@ -220,14 +220,28 @@ body {
 
 /* ── Backgrounds ───────────────────────────────────────────── */
 .dark .bg-white          { background-color: #1e293b !important; }
-.dark .bg-white\/50      { background-color: rgba(30,41,59,0.5) !important; }
-.dark .bg-white\/80      { background-color: rgba(30,41,59,0.8) !important; }
-.dark .bg-white\/90      { background-color: rgba(30,41,59,0.9) !important; }
-.dark .bg-slate-50       { background-color: #1e293b !important; }
-.dark .bg-slate-100      { background-color: #273549 !important; }
-.dark .bg-slate-50\/30   { background-color: rgba(30,41,59,0.3) !important; }
-.dark .bg-slate-50\/60   { background-color: rgba(30,41,59,0.6) !important; }
-.dark .bg-slate-100\/70  { background-color: rgba(39,53,73,0.7) !important; }
+.dark .bg-white\/10      { background-color: rgba(30,41,59,0.10) !important; }
+.dark .bg-white\/15      { background-color: rgba(30,41,59,0.15) !important; }
+.dark .bg-white\/20      { background-color: rgba(30,41,59,0.20) !important; }
+.dark .bg-white\/50      { background-color: rgba(30,41,59,0.50) !important; }
+.dark .bg-white\/60      { background-color: rgba(30,41,59,0.60) !important; }
+.dark .bg-white\/80      { background-color: rgba(30,41,59,0.80) !important; }
+.dark .bg-white\/90      { background-color: rgba(30,41,59,0.90) !important; }
+.dark .bg-white\/95      { background-color: rgba(30,41,59,0.95) !important; }
+.dark .bg-slate-50        { background-color: #1e293b !important; }
+.dark .bg-slate-100       { background-color: #273549 !important; }
+.dark .bg-slate-50\/30    { background-color: rgba(30,41,59,0.30) !important; }
+.dark .bg-slate-50\/40    { background-color: rgba(30,41,59,0.40) !important; }
+.dark .bg-slate-50\/50    { background-color: rgba(30,41,59,0.50) !important; }
+.dark .bg-slate-50\/60    { background-color: rgba(30,41,59,0.60) !important; }
+.dark .bg-slate-50\/80    { background-color: rgba(30,41,59,0.80) !important; }
+.dark .bg-slate-50\/95    { background-color: rgba(30,41,59,0.95) !important; }
+.dark .bg-slate-100\/70   { background-color: rgba(39,53,73,0.70) !important; }
+.dark .bg-slate-200\/50   { background-color: rgba(51,65,85,0.50) !important; }
+.dark .bg-slate-900\/10   { background-color: rgba(2,6,23,0.10) !important; }
+.dark .bg-slate-900\/40   { background-color: rgba(2,6,23,0.40) !important; }
+.dark .bg-slate-900\/50   { background-color: rgba(2,6,23,0.50) !important; }
+.dark .bg-slate-900\/60   { background-color: rgba(2,6,23,0.60) !important; }
 
 /* Custom hex backgrounds used in this app */
 .dark .bg-\[\#f8fafc\]  { background-color: #162032 !important; }
@@ -297,3 +311,9 @@ body {
 /* ── Custom scrollbar ─────────────────────────────────────── */
 .dark .custom-scrollbar::-webkit-scrollbar-thumb       { background: #334155; }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+
+/* ── Hexagon room cards (ClinicMap) ──────────────────────────────────────── */
+/* bg-white/95 is used on room hexagons — ensure text stays readable in dark  */
+.dark .hexagon.bg-white\/95 { background-color: rgba(30,41,59,0.95) !important; }
+.dark .hexagon span { color: #e2e8f0 !important; }
