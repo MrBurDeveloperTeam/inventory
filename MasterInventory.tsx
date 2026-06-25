@@ -681,27 +681,22 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   </td>
 
                                   <td className="px-3 py-4">
-                                    {rooms.length > 1 && onTransfer ? (
-                                      <select
-                                        value={item.roomId}
-                                        onChange={(e) => {
-                                          const toRoomId = e.target.value;
-                                          if (toRoomId && toRoomId !== item.roomId) {
-                                            onTransfer(item.roomId, toRoomId, item.id, item.quantity);
-                                          }
-                                        }}
-                                        className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate"
-                                        title={`Move from ${item.roomName}`}
-                                      >
-                                        {rooms.map(r => (
-                                          <option key={r.id} value={r.id}>{r.name}</option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
-                                        {item.roomName}
-                                      </span>
-                                    )}
+                                    <select
+                                      value={item.roomId}
+                                      disabled={rooms.length <= 1 || !onTransfer}
+                                      onChange={(e) => {
+                                        const toRoomId = e.target.value;
+                                        if (toRoomId && toRoomId !== item.roomId && onTransfer) {
+                                          onTransfer(item.roomId, toRoomId, item.id, item.quantity);
+                                        }
+                                      }}
+                                      className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate disabled:cursor-default disabled:opacity-80"
+                                      title={rooms.length <= 1 ? item.roomName : `Move from ${item.roomName}`}
+                                    >
+                                      {rooms.map(r => (
+                                        <option key={r.id} value={r.id}>{r.name}</option>
+                                      ))}
+                                    </select>
                                   </td>
 
                                 </tr>
@@ -1384,27 +1379,22 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   ${(item.qty * item.price).toFixed(2)}
                                 </td>
                                 <td className="px-3 py-4">
-                                  {rooms.length > 1 && onTransfer ? (
-                                    <select
-                                      value={item.roomId}
-                                      onChange={(e) => {
-                                        const toRoomId = e.target.value;
-                                        if (toRoomId && toRoomId !== item.roomId) {
-                                          onTransfer(item.roomId, toRoomId, item.id, item.qty);
-                                        }
-                                      }}
-                                      className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate"
-                                      title={`Move from ${item.roomName}`}
-                                    >
-                                      {rooms.map(r => (
-                                        <option key={r.id} value={r.id}>{r.name}</option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
-                                      {item.roomName}
-                                    </span>
-                                  )}
+                                  <select
+                                    value={item.roomId}
+                                    disabled={rooms.length <= 1 || !onTransfer}
+                                    onChange={(e) => {
+                                      const toRoomId = e.target.value;
+                                      if (toRoomId && toRoomId !== item.roomId && onTransfer) {
+                                        onTransfer(item.roomId, toRoomId, item.id, item.qty);
+                                      }
+                                    }}
+                                    className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate disabled:cursor-default disabled:opacity-80"
+                                    title={rooms.length <= 1 ? item.roomName : `Move from ${item.roomName}`}
+                                  >
+                                    {rooms.map(r => (
+                                      <option key={r.id} value={r.id}>{r.name}</option>
+                                    ))}
+                                  </select>
                                 </td>
                                 <td className="px-3 py-4 text-right text-slate-500 text-xs whitespace-nowrap">
                                   {item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('en-GB') : '-'}
@@ -1608,6 +1598,32 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <Calendar className="w-3.5 h-3.5" />
                   <p className="text-[12px] font-bold">{new Date(log.timestamp).toLocaleDateString('en-GB')}</p>
                 </div>
+                {log.action === 'delete' && log.beforeValue && onReceive && (() => {
+                  // Parse item name from: Deleted "ItemName"
+                  // Exclude room deletions: Deleted room "RoomName"
+                  const nameMatch = log.details?.match(/^Deleted "([^"]+)"$/);
+                  const itemName = nameMatch?.[1];
+                  const qty = Number(log.beforeValue) || 1;
+                  if (!itemName) return null;
+                  return (
+                    <button
+                      onClick={() => {
+                        onReceive(
+                          log.roomId,
+                          { name: itemName, category: 'other' as any, uom: 'pcs' as any },
+                          qty,
+                          0,
+                          new Date().toISOString().split('T')[0]
+                        );
+                      }}
+                      className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-nowrap"
+                      title={`Restore ${qty}x "${itemName}" to ${log.roomName}`}
+                    >
+                      <RefreshCcw className="w-3 h-3" />
+                      Restore
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           )) : (
