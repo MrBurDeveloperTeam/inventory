@@ -361,3 +361,12 @@ body {
 
 /* Chat input area */
 .dark .backdrop-blur-2xl { background-color: rgba(15,23,42,0.85) !important; }
+
+/* ── Remove shadows in dark mode (forms, cards, modals) ─────────────────── */
+.dark .shadow-lg,
+.dark .shadow-md,
+.dark .shadow-xl,
+.dark .shadow-2xl,
+.dark .shadow-sm {
+  box-shadow: none !important;
+}
