@@ -208,9 +208,17 @@ const App: React.FC = () => {
   const isDirty = useRef(false);
   const lastLoadRequestId = useRef(0);
   const metaSyncTimer = useRef<number | null>(null);
+  /** Ref always holding the latest TBA virtual room — survives loadInventory resets. */
+  const tbaRoomRef = useRef<Room | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
+
+  // Keep tbaRoomRef always up-to-date so loadInventory can read it synchronously
+  useEffect(() => {
+    const tba = rooms.find(r => r.id === TBA_ROOM_ID) ?? null;
+    tbaRoomRef.current = tba && tba.items.length > 0 ? tba : null;
+  }, [rooms]);
 
   // ─── Theme state — hybrid: cookie (instant) + Odoo (cross-device) ───────────
   const [theme, setThemeState] = useState<string>(() => readStoredTheme() || 'light');
@@ -1007,12 +1015,9 @@ useEffect(() => {
 
         // Preserve TBA virtual room — it only lives in local state and must
         // survive full reloads triggered by Realtime or other mutations.
-        setRooms(prev => {
-          const tbaRoom = prev.find(r => r.id === TBA_ROOM_ID);
-          return tbaRoom && tbaRoom.items.length > 0
-            ? [...hydratedRooms, tbaRoom]
-            : hydratedRooms;
-        });
+        // Use tbaRoomRef (always current) instead of prev to avoid stale closures.
+        const currentTba = tbaRoomRef.current;
+        setRooms(currentTba ? [...hydratedRooms, currentTba] : hydratedRooms);
       }
       setHistory(
         (historyData || []).map((h: any) => ({
@@ -1723,10 +1728,21 @@ const handleLogout = async () => {
         }
 
         // Optimistic update — add all items to the new room at once
-        setRooms(prev => prev.map(r => r.id === newRoomId
-          ? { ...r, items: restoredItems }
-          : r
-        ));
+        // AND remove them from the TBA virtual room (they are now assigned)
+        setRooms(prev => prev
+          .map(r => {
+            if (r.id === newRoomId) return { ...r, items: restoredItems };
+            if (r.id === TBA_ROOM_ID) {
+              // Remove items that match by name+brand (snapshot items don't have IDs yet)
+              const restoredNames = new Set(restoredItems.map(i => `${i.name}|${i.brand}`));
+              const remaining = r.items.filter(i => !restoredNames.has(`${i.name}|${i.brand}`));
+              return { ...r, items: remaining };
+            }
+            return r;
+          })
+          // Remove TBA room if it's now empty
+          .filter(r => !(r.id === TBA_ROOM_ID && r.items.length === 0))
+        );
 
         addActivity(newRoomId, roomName, 'receive',
           `Restored ${restoredItems.length} item${restoredItems.length !== 1 ? 's' : ''} to "${roomName}"`
