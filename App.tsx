@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory, UOM } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
 import Header from './Header';
@@ -1661,9 +1661,9 @@ const handleLogout = async () => {
         code: itemData.code || '',
         quantity: qty,
         price: price,
-        uom: itemData.uom || 'pcs',
+        uom: normalizeUom(itemData.uom) as any,
         vendor: itemData.vendor || '',
-        category: itemData.category || 'other',
+        category: normalizeCategory(itemData.category) as any,
         description: itemData.description || '',
         expiryDate: expiry || null,
         createdAt: new Date().toISOString(),
@@ -1731,9 +1731,9 @@ const handleLogout = async () => {
           code: itm.code,
           quantity: itm.quantity,
           price: itm.price,
-          uom: itm.uom,
+          uom: normalizeUom(itm.uom),
           vendor: itm.vendor,
-          category: itm.category,
+          category: normalizeCategory(itm.category),
           description: itm.description,
           expiry_date: itm.expiryDate
         });
@@ -1783,6 +1783,21 @@ const handleLogout = async () => {
     }
   };
 
+  const VALID_CATEGORIES = new Set(['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other']);
+  const VALID_UOMS = new Set(['pcs', 'box', 'unit', 'kit']);
+
+  const normalizeCategory = (cat?: string): string => {
+    if (!cat) return 'other';
+    const lower = cat.trim().toLowerCase();
+    return VALID_CATEGORIES.has(lower) ? lower : 'other';
+  };
+
+  const normalizeUom = (uom?: string): string => {
+    if (!uom) return 'pcs';
+    const lower = uom.trim().toLowerCase();
+    return VALID_UOMS.has(lower) ? lower : 'pcs';
+  };
+
   /**
    * receiveStockBatch — persists multiple items atomically.
    *
@@ -1830,9 +1845,9 @@ const handleLogout = async () => {
           code: itemData.code || '',
           quantity: qty,
           price,
-          uom: itemData.uom || 'pcs',
+          uom: normalizeUom(itemData.uom) as UOM,
           vendor: itemData.vendor || '',
-          category: itemData.category || 'other',
+          category: normalizeCategory(itemData.category) as any,
           description: itemData.description || '',
           expiryDate: expiry || null,
           createdAt: new Date().toISOString(),
@@ -1893,9 +1908,9 @@ const handleLogout = async () => {
           code: itm.code,
           quantity: itm.quantity,
           price: itm.price,
-          uom: itm.uom,
+          uom: normalizeUom(itm.uom),
           vendor: itm.vendor,
-          category: itm.category,
+          category: normalizeCategory(itm.category),
           description: itm.description,
           expiry_date: itm.expiryDate,
         });
