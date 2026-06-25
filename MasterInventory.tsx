@@ -1576,14 +1576,16 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     {log.details}
                   </p>
 
-                  {log.beforeValue !== undefined && log.afterValue !== undefined && (
+                  {log.beforeValue !== undefined && log.afterValue !== undefined &&
+                   !log.details?.startsWith('Deleted room') &&
+                   !log.beforeValue?.startsWith('[') &&
+                   !log.beforeValue?.startsWith('{') && (
                     <div className="flex items-center gap-3 mt-1">
                       <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-slate-100 px-3 py-1.5 rounded-xl shadow-sm">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Delta</span>
                         <span className="text-[12px] font-bold text-slate-400 line-through decoration-slate-300">{log.beforeValue}</span>
                         <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
-                        <span className={`text-[12px] font-black ${Number(log.afterValue) > Number(log.beforeValue) ? 'text-emerald-600' : 'text-rose-600'
-                          }`}>
+                        <span className={`text-[12px] font-black ${Number(log.afterValue) > Number(log.beforeValue) ? 'text-emerald-600' : 'text-rose-600'}`}>
                           {log.afterValue}
                         </span>
                       </div>

@@ -1541,32 +1541,111 @@ const handleLogout = async () => {
     }
   };
 
-  const updateRoomName = async (id: string, name: string) => {
-    lastLocalMutation.current = Date.now();
-    // 1. Optimistic Update
-    let oldName = '';
-    setRooms(prev => prev.map(r => {
-      if (r.id === id) {
-        oldName = r.name;
-        return { ...r, name };
-      }
-      return r;
-    }));
-    if (oldName && oldName !== name) {
-      addActivity(id, name, 'edit', `Renamed room "${oldName}" to "${name}"`, { beforeValue: oldName, afterValue: name });
-    }
+  /**
+   * restoreRoom — recreates a deleted room and re-adds all its items atomically.
+   * Keeps isDirty=true throughout so Realtime reloads don't overwrite mid-restore.
+   */
+  const restoreRoom = async (roomName: string, itemSnapshot?: string) => {
+    if (!currentInventoryOwnerId) return;
 
-    // 2. Direct Persistence
-    if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
-      const { error } = await supabase.from('inventory_rooms').update({ name, user_id: currentInventoryOwnerId }).eq('id', id);
-      if (error) {
-        console.error('Failed to update room name in DB:', error);
-        setSyncStatus('error');
-      } else {
-        setSyncStatus('synced');
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+
+    try {
+      // 1. Create the room in Supabase directly (bypass addRoom to keep isDirty locked)
+      const newRoomId = generateId();
+      const x = 20 + Math.random() * 40;
+      const y = 20 + Math.random() * 40;
+
+      const { error: roomErr } = await supabase.from('inventory_rooms').insert({
+        id: newRoomId,
+        user_id: currentInventoryOwnerId,
+        name: roomName,
+        pos_x: x,
+        pos_y: y,
+      });
+      if (roomErr) throw roomErr;
+
+      // Optimistic update — add room to local state
+      const restoredRoom: Room = { id: newRoomId, name: roomName, x, y, items: [] };
+      setRooms(prev => [...prev, restoredRoom]);
+      addActivity(newRoomId, roomName, 'add', `Restored room "${roomName}"`);
+
+      // 2. Re-add items if snapshot exists
+      if (itemSnapshot) {
+        const items = JSON.parse(itemSnapshot) as Array<{
+          name: string; brand: string; code: string; quantity: number;
+          price: number; uom: string; vendor: string; category: string;
+          description: string; expiryDate: string | null;
+        }>;
+
+        const today = new Date().toISOString().split('T')[0];
+        let restoredItems: Item[] = [];
+
+        for (const item of items) {
+          const newItem: Item = {
+            id: generateId(),
+            name: item.name,
+            brand: item.brand || '',
+            code: item.code || '',
+            quantity: item.quantity,
+            price: item.price,
+            uom: normalizeUom(item.uom),
+            vendor: item.vendor || '',
+            category: normalizeCategory(item.category) as any,
+            description: item.description || '',
+            expiryDate: item.expiryDate || null,
+            createdAt: new Date().toISOString(),
+            batches: [{ id: generateId(), qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }],
+          };
+          restoredItems.push(newItem);
+
+          // Persist item to Supabase
+          const { error: itemErr } = await supabase.from('inventory_items').upsert({
+            id: newItem.id,
+            room_id: newRoomId,
+            user_id: currentInventoryOwnerId,
+            name: newItem.name,
+            brand: newItem.brand,
+            code: newItem.code,
+            quantity: newItem.quantity,
+            price: newItem.price,
+            uom: newItem.uom,
+            vendor: newItem.vendor,
+            category: newItem.category,
+            description: newItem.description,
+            expiry_date: newItem.expiryDate,
+          });
+          if (itemErr) throw itemErr;
+
+          await supabase.from('inventory_item_batches').upsert({
+            id: newItem.batches![0].id,
+            item_id: newItem.id,
+            qty: newItem.quantity,
+            unit_price: newItem.price,
+            expiry_date: newItem.expiryDate,
+          });
+        }
+
+        // Optimistic update — add all items to the new room at once
+        setRooms(prev => prev.map(r => r.id === newRoomId
+          ? { ...r, items: restoredItems }
+          : r
+        ));
+
+        addActivity(newRoomId, roomName, 'receive',
+          `Restored ${restoredItems.length} item${restoredItems.length !== 1 ? 's' : ''} to "${roomName}"`
+        );
       }
+
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('restoreRoom failed:', err);
+      setSyncStatus('error');
+    } finally {
+      isDirty.current = false;
       syncInFlight.current = false;
     }
   };
@@ -1612,6 +1691,26 @@ const handleLogout = async () => {
         after_value: options?.afterValue || null
       });
       if (error) console.error('Failed to persist activity log:', error);
+      syncInFlight.current = false;
+    }
+  };
+
+  const updateRoomName = async (id: string, name: string) => {
+    lastLocalMutation.current = Date.now();
+    let oldName = '';
+    setRooms(prev => prev.map(r => {
+      if (r.id === id) { oldName = r.name; return { ...r, name }; }
+      return r;
+    }));
+    if (oldName && oldName !== name) {
+      addActivity(id, name, 'edit', `Renamed room "${oldName}" to "${name}"`, { beforeValue: oldName, afterValue: name });
+    }
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      syncInFlight.current = true;
+      const { error } = await supabase.from('inventory_rooms').update({ name, user_id: currentInventoryOwnerId }).eq('id', id);
+      if (error) { console.error('Failed to update room name in DB:', error); setSyncStatus('error'); }
+      else { setSyncStatus('synced'); }
       syncInFlight.current = false;
     }
   };
@@ -2845,36 +2944,7 @@ const handleLogout = async () => {
                 onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
-                onRestoreRoom={async (roomName, itemSnapshot) => {
-                  const x = 20 + Math.random() * 40;
-                  const y = 20 + Math.random() * 40;
-                  const newRoomId = await addRoom(x, y, roomName);
-                  if (newRoomId && itemSnapshot) {
-                    try {
-                      const items = JSON.parse(itemSnapshot);
-                      for (const item of items) {
-                        await receiveStock(
-                          newRoomId,
-                          {
-                            name: item.name,
-                            brand: item.brand,
-                            code: item.code,
-                            uom: item.uom,
-                            vendor: item.vendor,
-                            category: item.category,
-                            description: item.description,
-                          },
-                          item.quantity,
-                          item.price,
-                          new Date().toISOString().split('T')[0],
-                          item.expiryDate || undefined
-                        );
-                      }
-                    } catch (e) {
-                      console.error('Failed to restore room items:', e);
-                    }
-                  }
-                }}
+                onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 readOnly={!canEditItems || isLoadingMain}
               />
             </>
