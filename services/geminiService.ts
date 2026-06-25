@@ -8,7 +8,7 @@ import { ExtractedItem } from "../types";
 // }
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
-const modelId = "gemini-3-flash-preview";
+const modelId = "gemini-2.5-flash";
 
 const generateId = () => {
   try {
