@@ -1412,7 +1412,7 @@ const handleLogout = async () => {
     }
   };
 
-  const addRoom = async (x: number, y: number, forceName?: string) => {
+  const addRoom = async (x: number, y: number, forceName?: string): Promise<string | null> => {
     console.log('addRoom initiated:', { x, y });
     lastLocalMutation.current = Date.now();
 
@@ -1461,6 +1461,7 @@ const handleLogout = async () => {
       isDirty.current = false;
       syncInFlight.current = false;
     }
+    return newRoomId;
   };
 
   const deleteRoom = async (id: string) => {
@@ -1468,10 +1469,29 @@ const handleLogout = async () => {
     const room = rooms.find(r => r.id === id);
     lastLocalMutation.current = Date.now();
 
+    // Snapshot items before deletion so they can be restored later
+    const itemSnapshot = room?.items?.length
+      ? JSON.stringify(room.items.map(i => ({
+          name: i.name,
+          brand: i.brand,
+          code: i.code,
+          quantity: i.quantity,
+          price: i.price,
+          uom: i.uom,
+          vendor: i.vendor,
+          category: i.category,
+          description: i.description,
+          expiryDate: i.expiryDate,
+        })))
+      : undefined;
+
     // 1. Optimistic Update
     setRooms(prev => prev.filter(r => r.id !== id));
     if (room) {
-      addActivity(id, room.name, 'delete', `Deleted room "${room.name}"`);
+      addActivity(id, room.name, 'delete', `Deleted room "${room.name}"`, {
+        beforeValue: itemSnapshot,   // JSON snapshot of items
+        afterValue: String(room.items?.length ?? 0),  // item count for display
+      });
     }
     isDirty.current = true;
 
@@ -2825,7 +2845,36 @@ const handleLogout = async () => {
                 onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
-                onRestoreRoom={(roomName) => addRoom(20 + Math.random() * 40, 20 + Math.random() * 40, roomName)}
+                onRestoreRoom={async (roomName, itemSnapshot) => {
+                  const x = 20 + Math.random() * 40;
+                  const y = 20 + Math.random() * 40;
+                  const newRoomId = await addRoom(x, y, roomName);
+                  if (newRoomId && itemSnapshot) {
+                    try {
+                      const items = JSON.parse(itemSnapshot);
+                      for (const item of items) {
+                        await receiveStock(
+                          newRoomId,
+                          {
+                            name: item.name,
+                            brand: item.brand,
+                            code: item.code,
+                            uom: item.uom,
+                            vendor: item.vendor,
+                            category: item.category,
+                            description: item.description,
+                          },
+                          item.quantity,
+                          item.price,
+                          new Date().toISOString().split('T')[0],
+                          item.expiryDate || undefined
+                        );
+                      }
+                    } catch (e) {
+                      console.error('Failed to restore room items:', e);
+                    }
+                  }
+                }}
                 readOnly={!canEditItems || isLoadingMain}
               />
             </>

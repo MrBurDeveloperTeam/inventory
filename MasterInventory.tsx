@@ -43,7 +43,7 @@ interface MasterInventoryProps {
   onDeleteItem?: (roomId: string, itemId: string) => void;
   onUpdateItem?: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
   onUpdateBatch?: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
-  onRestoreRoom?: (roomName: string) => void;
+  onRestoreRoom?: (roomName: string, itemSnapshot?: string) => void;
   readOnly?: boolean;
 }
 
@@ -1631,14 +1631,15 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
                   if (roomMatch && onRestoreRoom) {
                     const roomName = roomMatch[1];
+                    const itemCount = Number(log.afterValue) || 0;
                     return (
                       <button
-                        onClick={() => onRestoreRoom(roomName)}
+                        onClick={() => onRestoreRoom(roomName, log.beforeValue)}
                         className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-all duration-200 whitespace-nowrap"
-                        title={`Recreate room "${roomName}"`}
+                        title={`Recreate "${roomName}" with ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
                       >
                         <RefreshCcw className="w-3 h-3" />
-                        Restore Room
+                        Restore Room {itemCount > 0 ? `+ ${itemCount} items` : ''}
                       </button>
                     );
                   }
