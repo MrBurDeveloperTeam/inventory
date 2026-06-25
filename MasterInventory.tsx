@@ -1598,12 +1598,12 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <Calendar className="w-3.5 h-3.5" />
                   <p className="text-[12px] font-bold">{new Date(log.timestamp).toLocaleDateString('en-GB')}</p>
                 </div>
-                {log.action === 'delete' && log.beforeValue && onReceive && (() => {
+                {log.action === 'delete' && log.beforeValue !== undefined && onReceive && (() => {
                   // Parse item name from: Deleted "ItemName"
                   // Exclude room deletions: Deleted room "RoomName"
                   const nameMatch = log.details?.match(/^Deleted "([^"]+)"$/);
                   const itemName = nameMatch?.[1];
-                  const qty = Number(log.beforeValue) || 1;
+                  const qty = Math.max(Number(log.beforeValue) || 1, 1);
                   if (!itemName) return null;
                   return (
                     <button
