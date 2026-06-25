@@ -28,7 +28,7 @@ import {
   Layers,
   MapPin
 } from 'lucide-react';
-import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { CATEGORIES, UOMS } from './constants';
 import ClinicAnalytics from './ClinicAnalytics';
 
@@ -44,6 +44,7 @@ interface MasterInventoryProps {
   onUpdateItem?: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
   onUpdateBatch?: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
   onRestoreRoom?: (roomName: string, itemSnapshot?: string) => void;
+  onAssignTbaItem?: (itemId: string, toRoomId: string) => void;
   readOnly?: boolean;
 }
 
@@ -59,6 +60,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   onUpdateItem,
   onUpdateBatch,
   onRestoreRoom,
+  onAssignTbaItem,
   readOnly = false
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
@@ -89,24 +91,33 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const [hasExpiry, setHasExpiry] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ roomId: string; itemId: string; name: string; batchIndex?: number; qty?: number; expiryDate?: string } | null>(null);
 
-  // Flattened items for the master list
+  // TBA items — from the virtual unassigned room, shown separately
+  const tbaItems = useMemo(() =>
+    (rooms.find(r => r.id === TBA_ROOM_ID)?.items ?? [])
+      .map(item => ({ ...item, roomName: TBA_ROOM_NAME, roomId: TBA_ROOM_ID })),
+    [rooms]
+  );
+
+  // Flattened items for the master list (excludes TBA virtual room)
   const allItems = useMemo(() => {
-    return rooms.flatMap(room =>
-      room.items.map(item => ({ ...item, roomName: room.name, roomId: room.id }))
-    ).filter(item =>
-      (item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)) &&
-      (inventoryCategory === 'all' || item.category === inventoryCategory) &&
-      (inventoryVendor === 'all' || item.vendor === inventoryVendor) &&
-      (inventoryLocation === 'all' || String(item.roomId) === inventoryLocation)
-    ).sort((a, b) => {
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : Date.now();
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : Date.now();
-      return dateA - dateB;
-    });
+    return rooms
+      .filter(room => room.id !== TBA_ROOM_ID)
+      .flatMap(room =>
+        room.items.map(item => ({ ...item, roomName: room.name, roomId: room.id }))
+      ).filter(item =>
+        (item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (item.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)) &&
+        (inventoryCategory === 'all' || item.category === inventoryCategory) &&
+        (inventoryVendor === 'all' || item.vendor === inventoryVendor) &&
+        (inventoryLocation === 'all' || String(item.roomId) === inventoryLocation)
+      ).sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : Date.now();
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : Date.now();
+        return dateA - dateB;
+      });
   }, [rooms, searchTerm, inventoryCategory, inventoryVendor, inventoryLocation]);
 
   // Filtered History
@@ -525,6 +536,67 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   />
                 </div>
               </div>
+
+              {/* ── TBA Section — items whose room was deleted ─────────────────── */}
+              {tbaItems.length > 0 && (
+                <div className="border-2 border-amber-300 rounded-2xl overflow-hidden bg-amber-50/40">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-amber-100/80 border-b border-amber-200">
+                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-amber-800 font-black text-xs uppercase tracking-widest">
+                      Unassigned Items (TBA) — {tbaItems.length} item{tbaItems.length !== 1 ? 's' : ''} need a room
+                    </span>
+                  </div>
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-amber-50 text-amber-700 font-black uppercase tracking-widest text-[9px] border-b border-amber-200">
+                      <tr>
+                        <th className="px-3 py-3 w-[200px]">Product</th>
+                        <th className="px-3 py-3 w-[80px]">Code</th>
+                        <th className="px-3 py-3 w-[60px]">Qty</th>
+                        <th className="px-3 py-3 w-[60px]">UOM</th>
+                        <th className="px-3 py-3 w-[80px]">Price</th>
+                        <th className="px-3 py-3 w-[140px]">Vendor</th>
+                        <th className="px-3 py-3">Assign to Room</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100">
+                      {tbaItems.map(item => (
+                        <tr key={item.id} className="bg-white/60 hover:bg-amber-50/60 transition-colors">
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wider shrink-0">TBA</span>
+                              <span className="font-semibold text-slate-800 truncate" title={item.name}>{item.name}</span>
+                            </div>
+                            {item.brand && <p className="text-slate-400 text-[10px] mt-0.5 pl-8">{item.brand}</p>}
+                          </td>
+                          <td className="px-3 py-3 text-slate-500 font-mono text-[10px]">{item.code || '—'}</td>
+                          <td className="px-3 py-3 font-bold text-slate-700">{item.quantity}</td>
+                          <td className="px-3 py-3 text-slate-500">{item.uom}</td>
+                          <td className="px-3 py-3 text-slate-700">${item.price.toFixed(2)}</td>
+                          <td className="px-3 py-3 text-slate-500 truncate" title={item.vendor}>{item.vendor || '—'}</td>
+                          <td className="px-3 py-3">
+                            {onAssignTbaItem && rooms.filter(r => r.id !== TBA_ROOM_ID).length > 0 ? (
+                              <select
+                                defaultValue=""
+                                onChange={e => {
+                                  if (e.target.value) onAssignTbaItem(item.id, e.target.value);
+                                }}
+                                className="text-[11px] font-semibold border border-amber-300 rounded-lg px-2 py-1.5 bg-white text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 hover:border-amber-400 transition-colors"
+                              >
+                                <option value="" disabled>Select a room…</option>
+                                {rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => (
+                                  <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-amber-600 text-[10px] font-semibold italic">No rooms — add a room first</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="hidden md:block border border-slate-200 rounded-2xl overflow-hidden shadow-sm custom-scrollbar">
                 <table className="w-full text-left border-collapse text-xs">

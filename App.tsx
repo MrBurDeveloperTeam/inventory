@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory, UOM } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory, UOM, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
 import Header from './Header';
@@ -1469,61 +1469,79 @@ const handleLogout = async () => {
     const room = rooms.find(r => r.id === id);
     lastLocalMutation.current = Date.now();
 
-    // Snapshot items before deletion so they can be restored later
-    const itemSnapshot = room?.items?.length
-      ? JSON.stringify(room.items.map(i => ({
-          name: i.name,
-          brand: i.brand,
-          code: i.code,
-          quantity: i.quantity,
-          price: i.price,
-          uom: i.uom,
-          vendor: i.vendor,
-          category: i.category,
-          description: i.description,
-          expiryDate: i.expiryDate,
+    const orphanedItems = room?.items ?? [];
+
+    // Snapshot items for activity log (restore feature)
+    const itemSnapshot = orphanedItems.length
+      ? JSON.stringify(orphanedItems.map(i => ({
+          name: i.name, brand: i.brand, code: i.code,
+          quantity: i.quantity, price: i.price, uom: i.uom,
+          vendor: i.vendor, category: i.category,
+          description: i.description, expiryDate: i.expiryDate,
         })))
       : undefined;
 
-    // 1. Optimistic Update
-    setRooms(prev => prev.filter(r => r.id !== id));
+    // 1. Optimistic update:
+    //    - Remove the deleted room
+    //    - Move its items into the TBA virtual room (or create it)
+    setRooms(prev => {
+      const withoutRoom = prev.filter(r => r.id !== id);
+      if (!orphanedItems.length) return withoutRoom;
+
+      const tbaRoom = withoutRoom.find(r => r.id === TBA_ROOM_ID);
+      const markedItems = orphanedItems.map(i => ({ ...i, tba: true }));
+
+      if (tbaRoom) {
+        // Merge into existing TBA room
+        return withoutRoom.map(r =>
+          r.id === TBA_ROOM_ID
+            ? { ...r, items: [...r.items, ...markedItems] }
+            : r
+        );
+      } else {
+        // Create the TBA virtual room
+        return [...withoutRoom, {
+          id: TBA_ROOM_ID,
+          name: TBA_ROOM_NAME,
+          x: -1, y: -1,   // not shown on clinic map
+          items: markedItems,
+        }];
+      }
+    });
+
     if (room) {
       addActivity(id, room.name, 'delete', `Deleted room "${room.name}"`, {
-        beforeValue: itemSnapshot,   // JSON snapshot of items
-        afterValue: String(room.items?.length ?? 0),  // item count for display
+        beforeValue: itemSnapshot,
+        afterValue: String(orphanedItems.length),
       });
     }
     isDirty.current = true;
 
-    // 2. Direct Persistence
+    // 2. Direct Persistence:
+    //    - Update orphaned items' room_id to NULL in Supabase (preserve items)
+    //    - Then delete the room
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
-        // Since we might not have server-side CASCADE, we perform a manual cascade delete logic.
-        // Identify all items in this room
-        const { data: itemsToDelete } = await supabase
-          .from('inventory_items')
-          .select('id')
-          .eq('room_id', id);
+        if (orphanedItems.length) {
+          const itemIds = orphanedItems.map(i => i.id);
 
-        if (itemsToDelete && itemsToDelete.length > 0) {
-          const itemIds = itemsToDelete.map(i => i.id);
-
-          // Delete batches for those items first
-          await supabase
-            .from('inventory_item_batches')
-            .delete()
-            .in('item_id', itemIds);
-
-          // Delete the items
-          await supabase
+          // Nullify room_id so items survive the room deletion
+          // (requires room_id to be nullable in DB — see note below)
+          const { error: nullifyErr } = await supabase
             .from('inventory_items')
-            .delete()
+            .update({ room_id: null })
             .in('id', itemIds);
+
+          if (nullifyErr) {
+            // If room_id is NOT NULL in the DB, fall back to keeping items in local state only
+            // They'll be re-persisted when the user assigns them to a new room
+            console.warn('Could not nullify room_id (may be NOT NULL constraint) — items kept in local TBA state:', nullifyErr.message);
+          }
         }
 
-        // Finally, delete the room
+        // Delete the room (cascade will only delete items still pointing to it)
         const { error } = await supabase
           .from('inventory_rooms')
           .delete()
@@ -1532,7 +1550,74 @@ const handleLogout = async () => {
         if (error) throw error;
         setSyncStatus('synced');
       } catch (err) {
-        console.error('Failed to delete room with manual cascade:', err);
+        console.error('Failed to delete room:', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+        syncInFlight.current = false;
+      }
+    }
+  };
+
+  /**
+   * Assign a TBA (unassigned) item to a real room.
+   * Moves it out of the virtual TBA room and persists room_id to Supabase.
+   */
+  const assignTbaItemToRoom = async (itemId: string, toRoomId: string) => {
+    const tbaRoom = rooms.find(r => r.id === TBA_ROOM_ID);
+    const item = tbaRoom?.items.find(i => i.id === itemId);
+    const targetRoom = rooms.find(r => r.id === toRoomId);
+    if (!item || !targetRoom) return;
+
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+
+    // Optimistic update — move item from TBA to target room
+    setRooms(prev => prev
+      .map(r => {
+        if (r.id === TBA_ROOM_ID) {
+          const remaining = r.items.filter(i => i.id !== itemId);
+          return { ...r, items: remaining };
+        }
+        if (r.id === toRoomId) {
+          return { ...r, items: [...r.items, { ...item, tba: false }] };
+        }
+        return r;
+      })
+      // Remove TBA room if it's now empty
+      .filter(r => !(r.id === TBA_ROOM_ID && r.items.length === 0))
+    );
+
+    addActivity(toRoomId, targetRoom.name, 'transfer_in',
+      `Assigned "${item.name}" from TBA to "${targetRoom.name}"`
+    );
+
+    // Persist
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      syncInFlight.current = true;
+      try {
+        const { error } = await supabase
+          .from('inventory_items')
+          .upsert({
+            id: item.id,
+            room_id: toRoomId,
+            user_id: currentInventoryOwnerId,
+            name: item.name,
+            brand: item.brand,
+            code: item.code,
+            quantity: item.quantity,
+            price: item.price,
+            uom: normalizeUom(item.uom),
+            vendor: item.vendor,
+            category: normalizeCategory(item.category),
+            description: item.description,
+            expiry_date: item.expiryDate,
+          });
+        if (error) throw error;
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error('assignTbaItemToRoom: failed to persist', err);
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
@@ -2945,6 +3030,7 @@ const handleLogout = async () => {
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
+                onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
                 readOnly={!canEditItems || isLoadingMain}
               />
             </>
