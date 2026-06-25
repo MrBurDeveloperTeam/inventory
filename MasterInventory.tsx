@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import {
   Search,
@@ -682,9 +681,27 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   </td>
 
                                   <td className="px-3 py-4">
-                                    <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
-                                      {item.roomName}
-                                    </span>
+                                    {rooms.length > 1 && onTransfer ? (
+                                      <select
+                                        value={item.roomId}
+                                        onChange={(e) => {
+                                          const toRoomId = e.target.value;
+                                          if (toRoomId && toRoomId !== item.roomId) {
+                                            onTransfer(item.roomId, toRoomId, item.id, item.quantity);
+                                          }
+                                        }}
+                                        className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate"
+                                        title={`Move from ${item.roomName}`}
+                                      >
+                                        {rooms.map(r => (
+                                          <option key={r.id} value={r.id}>{r.name}</option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
+                                        {item.roomName}
+                                      </span>
+                                    )}
                                   </td>
 
                                 </tr>
@@ -1367,9 +1384,27 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   ${(item.qty * item.price).toFixed(2)}
                                 </td>
                                 <td className="px-3 py-4">
-                                  <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
-                                    {item.roomName}
-                                  </span>
+                                  {rooms.length > 1 && onTransfer ? (
+                                    <select
+                                      value={item.roomId}
+                                      onChange={(e) => {
+                                        const toRoomId = e.target.value;
+                                        if (toRoomId && toRoomId !== item.roomId) {
+                                          onTransfer(item.roomId, toRoomId, item.id, item.qty);
+                                        }
+                                      }}
+                                      className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate"
+                                      title={`Move from ${item.roomName}`}
+                                    >
+                                      {rooms.map(r => (
+                                        <option key={r.id} value={r.id}>{r.name}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
+                                      {item.roomName}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-4 text-right text-slate-500 text-xs whitespace-nowrap">
                                   {item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('en-GB') : '-'}
