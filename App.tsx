@@ -1783,6 +1783,147 @@ const handleLogout = async () => {
     }
   };
 
+  /**
+   * receiveStockBatch — persists multiple items atomically.
+   *
+   * Unlike calling receiveStock() N times in a forEach (which creates N
+   * concurrent async operations each independently clearing isDirty),
+   * this function keeps isDirty = true until ALL items are upserted,
+   * preventing the Realtime subscription from triggering loadInventory
+   * mid-batch and overwriting items that haven't been saved yet.
+   */
+  const receiveStockBatch = async (
+    roomId: string,
+    items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>
+  ) => {
+    if (!items.length) return;
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) { isDirty.current = false; syncInFlight.current = false; return; }
+
+    const roomNameForLog = room.name;
+    const affectedItems: Item[] = [];
+    let currentItems = [...room.items];
+
+    // Build the full new state for each item sequentially (so merges are correct)
+    for (const { itemData, qty, price, purchaseDate, expiry } of items) {
+      if (!itemData.name) continue;
+
+      const existingItem = currentItems.find(i =>
+        i.name.toLowerCase() === itemData.name!.toLowerCase() &&
+        (itemData.brand ? i.brand.toLowerCase() === itemData.brand.toLowerCase() : true)
+      );
+
+      let newItem: Item;
+      if (existingItem) {
+        newItem = mergeBatchAdd(existingItem, qty, price, expiry);
+        currentItems = currentItems.map(i => i.id === existingItem.id ? newItem : i);
+      } else {
+        newItem = {
+          id: generateId(),
+          name: itemData.name || '',
+          brand: itemData.brand || '',
+          code: itemData.code || '',
+          quantity: qty,
+          price,
+          uom: itemData.uom || 'pcs',
+          vendor: itemData.vendor || '',
+          category: itemData.category || 'other',
+          description: itemData.description || '',
+          expiryDate: expiry || null,
+          createdAt: new Date().toISOString(),
+          batches: [{ id: generateId(), qty, unitPrice: price, expiryDate: expiry || null }],
+        };
+        currentItems = [...currentItems, newItem];
+      }
+      affectedItems.push(newItem);
+
+      // Activity log
+      addActivity(
+        roomId, roomNameForLog, 'receive',
+        `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" @ $${price.toFixed(2)}`,
+        { beforeValue: String(existingItem?.quantity ?? 0), afterValue: String(newItem.quantity) }
+      );
+
+      // History
+      const historyEntry: PurchaseHistory = {
+        id: generateId(),
+        timestamp: purchaseDate
+          ? new Date(`${purchaseDate}T${new Date().toTimeString().split(' ')[0]}`).toISOString()
+          : new Date().toISOString(),
+        productName: itemData.name || '',
+        brand: itemData.brand || '',
+        code: itemData.code || '',
+        vendor: itemData.vendor || '',
+        qty,
+        unitPrice: price,
+        totalPrice: qty * price,
+        location: roomNameForLog,
+        category: itemData.category || 'other',
+        roomId,
+        uom: itemData.uom || existingItem?.uom || 'pcs',
+        expiryDate: expiry,
+        description: itemData.description || existingItem?.description || '',
+      };
+      setHistory(h => [historyEntry, ...h]);
+    }
+
+    // Optimistic update — apply all at once
+    setRooms(prev => prev.map(r => r.id === roomId ? { ...r, items: currentItems } : r));
+
+    if (!currentInventoryOwnerId) {
+      isDirty.current = false;
+      syncInFlight.current = false;
+      return;
+    }
+
+    try {
+      // Persist ALL items before clearing isDirty
+      for (const itm of affectedItems) {
+        const { error: itemErr } = await supabase.from('inventory_items').upsert({
+          id: itm.id,
+          room_id: roomId,
+          user_id: currentInventoryOwnerId,
+          name: itm.name,
+          brand: itm.brand,
+          code: itm.code,
+          quantity: itm.quantity,
+          price: itm.price,
+          uom: itm.uom,
+          vendor: itm.vendor,
+          category: itm.category,
+          description: itm.description,
+          expiry_date: itm.expiryDate,
+        });
+        if (itemErr) throw itemErr;
+
+        if (itm.batches) {
+          for (const b of itm.batches) {
+            await supabase.from('inventory_item_batches').upsert({
+              id: b.id,
+              item_id: itm.id,
+              qty: b.qty,
+              unit_price: b.unitPrice,
+              expiry_date: b.expiryDate,
+            });
+          }
+        }
+      }
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('receiveStockBatch: failed to persist items', err);
+      setSyncStatus('error');
+    } finally {
+      // Only NOW is it safe to clear isDirty — all items are in Supabase
+      isDirty.current = false;
+      syncInFlight.current = false;
+    }
+  };
+
   const removeStock = async (roomId: string, itemName: string, brand: string | undefined, qty: number, targetExpiry?: string) => {
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
@@ -2693,6 +2834,7 @@ const handleLogout = async () => {
           onClose={() => setActiveRoomId(null)}
           onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateRoomName(id, name); }}
           onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
+          onReceiveBatch={(rid, items) => receiveStockBatch(rid, items)}
           onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
           onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}

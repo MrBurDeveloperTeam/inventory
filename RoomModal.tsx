@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import {
   X,
@@ -39,6 +38,7 @@ interface RoomModalProps {
   onClose: () => void;
   onUpdateName: (id: string, name: string) => void;
   onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
+  onReceiveBatch?: (roomId: string, items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>) => void;
   onUpdateQty: (roomId: string, itemId: string, delta: number) => void;
   onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
   onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
@@ -48,7 +48,7 @@ interface RoomModalProps {
   readOnly?: boolean;
 }
 
-const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem, onUpdateItem, onUpdateBatch, readOnly = false }) => {
+const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onReceiveBatch, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem, onUpdateItem, onUpdateBatch, readOnly = false }) => {
   const [isReceiving, setIsReceiving] = useState(false);
   const [receiveMode, setReceiveMode] = useState<'existing' | 'new' | 'edit'>('existing');
   const [selectedItemIdx, setSelectedItemIdx] = useState<string>('');
@@ -1048,9 +1048,33 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                   <div className="flex flex-col sm:flex-row-reverse items-center justify-center gap-3 pt-2">
                     <button
                       onClick={() => {
-                        // Bulk Add
-                        ocrResult.forEach(item => {
-                          if (item.name) {
+                        const validItems = ocrResult.filter(item => item.name);
+                        if (validItems.length === 0) return;
+
+                        if (onReceiveBatch) {
+                          // Single batched call — isDirty stays true until ALL items are persisted
+                          onReceiveBatch(
+                            room.id,
+                            validItems.map(item => ({
+                              itemData: {
+                                name: item.name,
+                                brand: item.brand || '',
+                                category: item.category || 'consumables',
+                                uom: item.uom || 'box',
+                                code: item.code || '',
+                                vendor: item.vendor || '',
+                                description: item.description || '',
+                                expiryDate: item.expiryDate || undefined,
+                              },
+                              qty: item.quantity || 1,
+                              price: item.price || 0,
+                              purchaseDate: item.purchaseDate || new Date().toISOString().split('T')[0],
+                              expiry: item.expiryDate || undefined,
+                            }))
+                          );
+                        } else {
+                          // Fallback: individual calls (legacy path)
+                          validItems.forEach(item => {
                             onReceive(
                               room.id,
                               {
@@ -1061,15 +1085,15 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                 code: item.code || '',
                                 vendor: item.vendor || '',
                                 description: item.description || '',
-                                expiryDate: item.expiryDate || undefined
+                                expiryDate: item.expiryDate || undefined,
                               },
                               item.quantity || 1,
                               item.price || 0,
-                              item.purchaseDate || new Date().toISOString().split('T')[0], // Purchase Date
+                              item.purchaseDate || new Date().toISOString().split('T')[0],
                               item.expiryDate || undefined
                             );
-                          }
-                        });
+                          });
+                        }
                         setOcrStep('upload');
                         setIsOCRActive(false);
                       }}
