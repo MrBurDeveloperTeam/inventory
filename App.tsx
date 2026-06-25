@@ -1004,7 +1004,15 @@ useEffect(() => {
         }
         console.log(`Inventory loaded successfully for ${currentInventoryOwnerId}. Found ${hydratedRooms.length} rooms.`);
         isHydrated.current = true;
-        setRooms(hydratedRooms);
+
+        // Preserve TBA virtual room — it only lives in local state and must
+        // survive full reloads triggered by Realtime or other mutations.
+        setRooms(prev => {
+          const tbaRoom = prev.find(r => r.id === TBA_ROOM_ID);
+          return tbaRoom && tbaRoom.items.length > 0
+            ? [...hydratedRooms, tbaRoom]
+            : hydratedRooms;
+        });
       }
       setHistory(
         (historyData || []).map((h: any) => ({
