@@ -43,6 +43,7 @@ interface MasterInventoryProps {
   onDeleteItem?: (roomId: string, itemId: string) => void;
   onUpdateItem?: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
   onUpdateBatch?: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
+  onRestoreRoom?: (roomName: string) => void;
   readOnly?: boolean;
 }
 
@@ -57,6 +58,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   onDeleteItem,
   onUpdateItem,
   onUpdateBatch,
+  onRestoreRoom,
   readOnly = false
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
@@ -1598,31 +1600,50 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <Calendar className="w-3.5 h-3.5" />
                   <p className="text-[12px] font-bold">{new Date(log.timestamp).toLocaleDateString('en-GB')}</p>
                 </div>
-                {log.action === 'delete' && log.beforeValue !== undefined && onReceive && (() => {
-                  // Parse item name from: Deleted "ItemName"
-                  // Exclude room deletions: Deleted room "RoomName"
-                  const nameMatch = log.details?.match(/^Deleted "([^"]+)"$/);
-                  const itemName = nameMatch?.[1];
-                  const qty = Math.max(Number(log.beforeValue) || 1, 1);
-                  if (!itemName) return null;
-                  return (
-                    <button
-                      onClick={() => {
-                        onReceive(
-                          log.roomId,
-                          { name: itemName, category: 'other' as any, uom: 'pcs' as any },
-                          qty,
-                          0,
-                          new Date().toISOString().split('T')[0]
-                        );
-                      }}
-                      className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-nowrap"
-                      title={`Restore ${qty}x "${itemName}" to ${log.roomName}`}
-                    >
-                      <RefreshCcw className="w-3 h-3" />
-                      Restore
-                    </button>
-                  );
+                {log.action === 'delete' && (() => {
+                  // Item deletion: Deleted "ItemName"
+                  const itemMatch = log.details?.match(/^Deleted "([^"]+)"$/);
+                  // Room deletion: Deleted room "RoomName"
+                  const roomMatch = log.details?.match(/^Deleted room "([^"]+)"$/);
+
+                  if (itemMatch && onReceive) {
+                    const itemName = itemMatch[1];
+                    const qty = Math.max(Number(log.beforeValue) || 1, 1);
+                    return (
+                      <button
+                        onClick={() => {
+                          onReceive(
+                            log.roomId,
+                            { name: itemName, category: 'other' as any, uom: 'pcs' as any },
+                            qty,
+                            0,
+                            new Date().toISOString().split('T')[0]
+                          );
+                        }}
+                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-nowrap"
+                        title={`Restore ${qty}x "${itemName}" to ${log.roomName}`}
+                      >
+                        <RefreshCcw className="w-3 h-3" />
+                        Restore Item
+                      </button>
+                    );
+                  }
+
+                  if (roomMatch && onRestoreRoom) {
+                    const roomName = roomMatch[1];
+                    return (
+                      <button
+                        onClick={() => onRestoreRoom(roomName)}
+                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-all duration-200 whitespace-nowrap"
+                        title={`Recreate room "${roomName}"`}
+                      >
+                        <RefreshCcw className="w-3 h-3" />
+                        Restore Room
+                      </button>
+                    );
+                  }
+
+                  return null;
                 })()}
               </div>
             </div>

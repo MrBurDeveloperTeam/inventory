@@ -1412,7 +1412,7 @@ const handleLogout = async () => {
     }
   };
 
-  const addRoom = async (x: number, y: number) => {
+  const addRoom = async (x: number, y: number, forceName?: string) => {
     console.log('addRoom initiated:', { x, y });
     lastLocalMutation.current = Date.now();
 
@@ -1429,7 +1429,7 @@ const handleLogout = async () => {
     const newRoomId = generateId();
     const newRoom: Room = {
       id: newRoomId,
-      name: `Room ${nextNumber}`,
+      name: forceName || `Room ${nextNumber}`,
       x,
       y,
       items: [],
@@ -1661,7 +1661,7 @@ const handleLogout = async () => {
         code: itemData.code || '',
         quantity: qty,
         price: price,
-        uom: normalizeUom(itemData.uom) as any,
+        uom: normalizeUom(itemData.uom),
         vendor: itemData.vendor || '',
         category: normalizeCategory(itemData.category) as any,
         description: itemData.description || '',
@@ -1792,10 +1792,10 @@ const handleLogout = async () => {
     return VALID_CATEGORIES.has(lower) ? lower : 'other';
   };
 
-  const normalizeUom = (uom?: string): string => {
+  const normalizeUom = (uom?: string): UOM => {
     if (!uom) return 'pcs';
     const lower = uom.trim().toLowerCase();
-    return VALID_UOMS.has(lower) ? lower : 'pcs';
+    return (VALID_UOMS.has(lower) ? lower : 'pcs') as UOM;
   };
 
   /**
@@ -1845,7 +1845,7 @@ const handleLogout = async () => {
           code: itemData.code || '',
           quantity: qty,
           price,
-          uom: normalizeUom(itemData.uom) as UOM,
+          uom: normalizeUom(itemData.uom),
           vendor: itemData.vendor || '',
           category: normalizeCategory(itemData.category) as any,
           description: itemData.description || '',
@@ -2318,9 +2318,9 @@ const handleLogout = async () => {
           name: updatedItem.name,
           brand: updatedItem.brand,
           code: updatedItem.code,
-          uom: updatedItem.uom,
+          uom: normalizeUom(updatedItem.uom),
           vendor: updatedItem.vendor,
-          category: updatedItem.category,
+          category: normalizeCategory(updatedItem.category),
           description: updatedItem.description,
           expiry_date: updatedItem.expiryDate,
           quantity: updatedItem.quantity,
@@ -2621,8 +2621,8 @@ const handleLogout = async () => {
           room_id: toRoomId,
           name: finalMovedItem.name,
           brand: finalMovedItem.brand,
-          category: finalMovedItem.category,
-          uom: finalMovedItem.uom,
+          category: normalizeCategory(finalMovedItem.category),
+          uom: normalizeUom(finalMovedItem.uom),
           quantity: finalMovedItem.quantity,
           price: finalMovedItem.price,
           expiry_date: finalMovedItem.expiryDate,
@@ -2825,6 +2825,7 @@ const handleLogout = async () => {
                 onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
+                onRestoreRoom={(roomName) => addRoom(20 + Math.random() * 40, 20 + Math.random() * 40, roomName)}
                 readOnly={!canEditItems || isLoadingMain}
               />
             </>
