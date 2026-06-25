@@ -1487,6 +1487,7 @@ const handleLogout = async () => {
     // Snapshot items for activity log (restore feature)
     const itemSnapshot = orphanedItems.length
       ? JSON.stringify(orphanedItems.map(i => ({
+          id: i.id,          // preserve original ID for exact TBA cleanup matching
           name: i.name, brand: i.brand, code: i.code,
           quantity: i.quantity, price: i.price, uom: i.uom,
           vendor: i.vendor, category: i.category,
@@ -1674,7 +1675,7 @@ const handleLogout = async () => {
       // 2. Re-add items if snapshot exists
       if (itemSnapshot) {
         const items = JSON.parse(itemSnapshot) as Array<{
-          name: string; brand: string; code: string; quantity: number;
+          id?: string; name: string; brand: string; code: string; quantity: number;
           price: number; uom: string; vendor: string; category: string;
           description: string; expiryDate: string | null;
         }>;
@@ -1733,9 +1734,14 @@ const handleLogout = async () => {
           .map(r => {
             if (r.id === newRoomId) return { ...r, items: restoredItems };
             if (r.id === TBA_ROOM_ID) {
-              // Remove items that match by name+brand (snapshot items don't have IDs yet)
-              const restoredNames = new Set(restoredItems.map(i => `${i.name}|${i.brand}`));
-              const remaining = r.items.filter(i => !restoredNames.has(`${i.name}|${i.brand}`));
+              // Remove exactly the items that belong to this restored room,
+              // matched by their original snapshot id (set during deleteRoom).
+              // Falls back to name|brand only for old snapshots that predate the id field.
+              const snapshotIds = new Set(items.map(i => i.id).filter(Boolean));
+              const snapshotNameBrand = new Set(items.map(i => `${i.name}|${i.brand}`));
+              const remaining = snapshotIds.size > 0
+                ? r.items.filter(i => !snapshotIds.has(i.id))
+                : r.items.filter(i => !snapshotNameBrand.has(`${i.name}|${i.brand}`));
               return { ...r, items: remaining };
             }
             return r;
