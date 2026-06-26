@@ -91,7 +91,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const [expiry, setExpiry] = useState('');
   const [hasExpiry, setHasExpiry] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ roomId: string; itemId: string; name: string; batchIndex?: number; qty?: number; expiryDate?: string } | null>(null);
-  const [editingQtyKey, setEditingQtyKey] = useState<string | null>(null);
+  const [isQtyEditMode, setIsQtyEditMode] = useState(false);
 
   // TBA items — from the virtual unassigned room, shown separately
   const tbaItems = useMemo(() =>
@@ -438,7 +438,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="md:hidden">History</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'history' ? 'bg-[#9b59b6] scale-x-100' : 'bg-transparent scale-x-0'}`} />
           </button>
-          {/* <button
+          <button
             onClick={() => setActiveTab('analytics')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'analytics' ? 'md:bg-indigo-600 md:text-white md:shadow-md text-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -446,7 +446,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="hidden md:inline">Usage Stats</span>
             <span className="md:hidden">Stats</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'analytics' ? 'bg-indigo-600 scale-x-100' : 'bg-transparent scale-x-0'}`} />
-          </button> */}
+          </button>
           <button
             onClick={() => setActiveTab('expiring')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'expiring' ? 'md:bg-[#f39c12] md:text-white md:shadow-md text-[#f39c12]' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -607,7 +607,20 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       <th className="px-3 py-5 w-[80px]">Brand</th>
                       <th className="px-3 py-5 w-[240px]">Product</th>
                       <th className="px-3 py-5 w-[70px]">Code</th>
-                      <th className="px-3 py-5 w-[50px] text-center">Qty</th>
+                      <th className="px-3 py-5 w-[50px] text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span>Qty</span>
+                          {!readOnly && onUpdateQty && (
+                            <button
+                              onClick={() => setIsQtyEditMode(v => !v)}
+                              className={`w-4 h-4 flex items-center justify-center rounded transition-colors ${isQtyEditMode ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}
+                              title={isQtyEditMode ? 'Lock quantities' : 'Edit quantities'}
+                            >
+                              {isQtyEditMode ? <Check className="w-3 h-3" /> : <Edit3 className="w-3 h-3" />}
+                            </button>
+                          )}
+                        </div>
+                      </th>
                       <th className="px-3 py-5 w-[50px]">UOM</th>
                       <th className="px-3 py-5 w-[70px]">Price</th>
                       <th className="px-3 py-5 w-[80px]">Total</th>
@@ -669,8 +682,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
                                   <td className="px-3 py-4">
                                     <div className="flex items-center justify-center gap-1.5">
-                                      {(!readOnly && onUpdateQty && editingQtyKey === `${item.roomId}-${item.id}`) ? (
-                                        // Edit mode — show +/- controls
+                                      {(!readOnly && onUpdateQty && isQtyEditMode) ? (
                                         <>
                                           <button
                                             onClick={() => item.quantity > 1 && onUpdateQty(item.roomId, item.id, -1)}
@@ -690,30 +702,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                           >
                                             <Plus className="w-3 h-3" />
                                           </button>
-                                          <button
-                                            onClick={() => setEditingQtyKey(null)}
-                                            className="w-5 h-5 flex items-center justify-center rounded text-emerald-600 hover:bg-emerald-50 transition-colors ml-0.5"
-                                            aria-label="Done editing"
-                                            title="Done"
-                                          >
-                                            <Check className="w-3 h-3" />
-                                          </button>
                                         </>
                                       ) : (
-                                        // View mode — qty + pencil icon
-                                        <>
-                                          <span className="font-bold text-slate-800 text-center text-xs">{item.quantity}</span>
-                                          {!readOnly && onUpdateQty && (
-                                            <button
-                                              onClick={() => setEditingQtyKey(`${item.roomId}-${item.id}`)}
-                                              className="w-5 h-5 flex items-center justify-center rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-                                              aria-label="Edit quantity"
-                                              title="Edit quantity"
-                                            >
-                                              <Edit3 className="w-3 h-3" />
-                                            </button>
-                                          )}
-                                        </>
+                                        <span className="font-bold text-slate-800 text-center text-xs">{item.quantity}</span>
                                       )}
                                     </div>
                                   </td>
