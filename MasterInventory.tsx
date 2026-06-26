@@ -454,7 +454,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="md:hidden">History</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'history' ? 'bg-[#9b59b6] scale-x-100' : 'bg-transparent scale-x-0'}`} />
           </button>
-          {/* <button
+          <button
             onClick={() => setActiveTab('analytics')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'analytics' ? 'md:bg-indigo-600 md:text-white md:shadow-md text-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -462,7 +462,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="hidden md:inline">Usage Stats</span>
             <span className="md:hidden">Stats</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'analytics' ? 'bg-indigo-600 scale-x-100' : 'bg-transparent scale-x-0'}`} />
-          </button> */}
+          </button>
           <button
             onClick={() => setActiveTab('expiring')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'expiring' ? 'md:bg-[#f39c12] md:text-white md:shadow-md text-[#f39c12]' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -488,9 +488,25 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         {
           activeTab === 'all' && (
             <div className="flex flex-col gap-6 animate-in fade-in duration-300">
-              <div className="flex items-center gap-3">
-                <div className="bg-emerald-100 p-3 rounded-2xl text-[#4d9678]"><ClipboardList className="w-6 h-6" /></div>
-                <h4 className="text-[#4d9678] font-bold text-xl tracking-tight">All Inventory</h4>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="bg-emerald-100 p-3 rounded-2xl text-[#4d9678]"><ClipboardList className="w-6 h-6" /></div>
+                  <h4 className="text-[#4d9678] font-bold text-xl tracking-tight">All Inventory</h4>
+                </div>
+                {!readOnly && onUpdateQty && (
+                  <button
+                    onClick={() => setIsQtyEditMode(v => !v)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                      isQtyEditMode
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                    title={isQtyEditMode ? 'Lock quantities' : 'Edit quantities'}
+                  >
+                    {isQtyEditMode ? <Check className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+                    {isQtyEditMode ? 'Done Editing' : 'Edit Qty'}
+                  </button>
+                )}
               </div>
               {/* FILTER AREA */}
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-sm animate-in slide-in-from-top-2 duration-500">
@@ -623,20 +639,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       <th className="px-3 py-5 w-[80px]">Brand</th>
                       <th className="px-3 py-5 w-[240px]">Product</th>
                       <th className="px-3 py-5 w-[70px]">Code</th>
-                      <th className="px-3 py-5 w-[50px] text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span>Qty</span>
-                          {!readOnly && onUpdateQty && (
-                            <button
-                              onClick={() => setIsQtyEditMode(v => !v)}
-                              className={`w-4 h-4 flex items-center justify-center rounded transition-colors ${isQtyEditMode ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}
-                              title={isQtyEditMode ? 'Lock quantities' : 'Edit quantities'}
-                            >
-                              {isQtyEditMode ? <Check className="w-3 h-3" /> : <Edit3 className="w-3 h-3" />}
-                            </button>
-                          )}
-                        </div>
-                      </th>
+                      <th className="px-3 py-5 w-[50px] text-center">Qty</th>
                       <th className="px-3 py-5 w-[50px]">UOM</th>
                       <th className="px-3 py-5 w-[70px]">Price</th>
                       <th className="px-3 py-5 w-[80px]">Total</th>
