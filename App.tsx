@@ -2001,8 +2001,7 @@ const handleLogout = async () => {
           location: historyEntry.location,
           category: historyEntry.category,
           uom: historyEntry.uom,
-          expiry_date: historyEntry.expiryDate,
-          description: historyEntry.description
+          expiry_date: historyEntry.expiryDate || null,
         });
         if (historyErr) throw historyErr;
 
@@ -2183,7 +2182,6 @@ const handleLogout = async () => {
           category: normalizeCategory(h.category),
           uom: normalizeUom(h.uom as string),
           expiry_date: h.expiryDate || null,
-          description: h.description || '',
         });
         if (histErr) console.error('receiveStockBatch: failed to persist history entry', histErr);
       }
