@@ -454,7 +454,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="md:hidden">History</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'history' ? 'bg-[#9b59b6] scale-x-100' : 'bg-transparent scale-x-0'}`} />
           </button>
-          {/* <button
+          <button
             onClick={() => setActiveTab('analytics')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'analytics' ? 'md:bg-indigo-600 md:text-white md:shadow-md text-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -462,7 +462,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="hidden md:inline">Usage Stats</span>
             <span className="md:hidden">Stats</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'analytics' ? 'bg-indigo-600 scale-x-100' : 'bg-transparent scale-x-0'}`} />
-          </button> */}
+          </button>
           <button
             onClick={() => setActiveTab('expiring')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'expiring' ? 'md:bg-[#f39c12] md:text-white md:shadow-md text-[#f39c12]' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -1733,7 +1733,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
                   if (itemMatch && onReceive) {
                     const itemName = itemMatch[1];
-                    const qty = Math.max(Number(log.beforeValue) || 1, 1);
+                    const parsedQty = Number(log.beforeValue);
+                    const qty = isNaN(parsedQty) ? 1 : parsedQty;
                     return (
                       <button
                         onClick={() => {
