@@ -26,7 +26,8 @@ import {
   Tag,
   Truck,
   Layers,
-  MapPin
+  MapPin,
+  Check,
 } from 'lucide-react';
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { CATEGORIES, UOMS } from './constants';
@@ -90,6 +91,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const [expiry, setExpiry] = useState('');
   const [hasExpiry, setHasExpiry] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ roomId: string; itemId: string; name: string; batchIndex?: number; qty?: number; expiryDate?: string } | null>(null);
+  const [editingQtyKey, setEditingQtyKey] = useState<string | null>(null);
 
   // TBA items — from the virtual unassigned room, shown separately
   const tbaItems = useMemo(() =>
@@ -666,8 +668,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   </td>
 
                                   <td className="px-3 py-4">
-                                    <div className="flex items-center justify-center gap-2">
-                                      {(!readOnly && batches.length === 1 && onUpdateQty) ? (
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      {(!readOnly && onUpdateQty && editingQtyKey === `${item.roomId}-${item.id}`) ? (
+                                        // Edit mode — show +/- controls
                                         <>
                                           <button
                                             onClick={() => item.quantity > 1 && onUpdateQty(item.roomId, item.id, -1)}
@@ -677,11 +680,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                           >
                                             <Minus className="w-3 h-3" />
                                           </button>
-
                                           <span className="min-w-[24px] text-center font-bold text-slate-800 text-xs">
                                             {item.quantity}
                                           </span>
-
                                           <button
                                             onClick={() => onUpdateQty(item.roomId, item.id, 1)}
                                             className="w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full hover:bg-slate-100 text-slate-400 hover:text-emerald-500 transition-colors"
@@ -689,9 +690,30 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                           >
                                             <Plus className="w-3 h-3" />
                                           </button>
+                                          <button
+                                            onClick={() => setEditingQtyKey(null)}
+                                            className="w-5 h-5 flex items-center justify-center rounded text-emerald-600 hover:bg-emerald-50 transition-colors ml-0.5"
+                                            aria-label="Done editing"
+                                            title="Done"
+                                          >
+                                            <Check className="w-3 h-3" />
+                                          </button>
                                         </>
                                       ) : (
-                                        <span className="font-bold text-slate-800 text-center">{item.quantity}</span>
+                                        // View mode — qty + pencil icon
+                                        <>
+                                          <span className="font-bold text-slate-800 text-center text-xs">{item.quantity}</span>
+                                          {!readOnly && onUpdateQty && (
+                                            <button
+                                              onClick={() => setEditingQtyKey(`${item.roomId}-${item.id}`)}
+                                              className="w-5 h-5 flex items-center justify-center rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                                              aria-label="Edit quantity"
+                                              title="Edit quantity"
+                                            >
+                                              <Edit3 className="w-3 h-3" />
+                                            </button>
+                                          )}
+                                        </>
                                       )}
                                     </div>
                                   </td>
