@@ -2056,6 +2056,7 @@ const handleLogout = async () => {
 
     const roomNameForLog = room.name;
     const affectedItems: Item[] = [];
+    const historyEntries: PurchaseHistory[] = [];
     let currentItems = [...room.items];
 
     // Build the full new state for each item sequentially (so merges are correct)
@@ -2119,6 +2120,7 @@ const handleLogout = async () => {
         description: itemData.description || existingItem?.description || '',
       };
       setHistory(h => [historyEntry, ...h]);
+      historyEntries.push(historyEntry);
     }
 
     // Optimistic update — apply all at once
@@ -2162,6 +2164,30 @@ const handleLogout = async () => {
           }
         }
       }
+
+      // Persist all history entries to Supabase
+      for (const h of historyEntries) {
+        const { error: histErr } = await supabase.from('inventory_purchase_history').insert({
+          id: h.id,
+          user_id: currentInventoryOwnerId,
+          room_id: h.roomId,
+          occurred_at: h.timestamp,
+          product_name: h.productName,
+          brand: h.brand,
+          code: h.code,
+          vendor: h.vendor,
+          qty: h.qty,
+          unit_price: h.unitPrice,
+          total_price: h.totalPrice,
+          location: h.location,
+          category: normalizeCategory(h.category),
+          uom: normalizeUom(h.uom as string),
+          expiry_date: h.expiryDate || null,
+          description: h.description || '',
+        });
+        if (histErr) console.error('receiveStockBatch: failed to persist history entry', histErr);
+      }
+
       setSyncStatus('synced');
     } catch (err) {
       console.error('receiveStockBatch: failed to persist items', err);
