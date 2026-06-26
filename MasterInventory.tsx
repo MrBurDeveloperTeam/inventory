@@ -94,6 +94,22 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const [isQtyEditMode, setIsQtyEditMode] = useState(false);
 
   // TBA items — from the virtual unassigned room, shown separately
+  // Max qty per item = total ever received from purchase history (name+code key)
+  // Used to cap the + button so qty never exceeds what was originally purchased.
+  const maxQtyMap = useMemo(() => {
+    const map = new Map<string, number>();
+    history.forEach(h => {
+      const key = `${h.productName}|${h.code || ''}`;
+      map.set(key, (map.get(key) || 0) + h.qty);
+    });
+    return map;
+  }, [history]);
+
+  const getMaxQty = (item: { name: string; code: string }) => {
+    const key = `${item.name}|${item.code || ''}`;
+    return maxQtyMap.get(key) ?? Infinity; // Infinity = no history found, allow free editing
+  };
+
   const tbaItems = useMemo(() =>
     (rooms.find(r => r.id === TBA_ROOM_ID)?.items ?? [])
       .map(item => ({ ...item, roomName: TBA_ROOM_NAME, roomId: TBA_ROOM_ID })),
@@ -696,9 +712,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                             {item.quantity}
                                           </span>
                                           <button
-                                            onClick={() => onUpdateQty(item.roomId, item.id, 1)}
-                                            className="w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full hover:bg-slate-100 text-slate-400 hover:text-emerald-500 transition-colors"
+                                            onClick={() => {
+                                              const max = getMaxQty(item);
+                                              if (item.quantity < max) onUpdateQty(item.roomId, item.id, 1);
+                                            }}
+                                            disabled={item.quantity >= getMaxQty(item)}
+                                            className={`w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full transition-colors ${item.quantity >= getMaxQty(item) ? 'text-slate-200 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100 text-slate-400 hover:text-emerald-500'}`}
                                             aria-label="Increase quantity"
+                                            title={item.quantity >= getMaxQty(item) ? `Max quantity reached (${getMaxQty(item)} purchased)` : `Increase quantity (max: ${getMaxQty(item)})`}
                                           >
                                             <Plus className="w-3 h-3" />
                                           </button>
