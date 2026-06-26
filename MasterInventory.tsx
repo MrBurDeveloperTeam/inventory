@@ -169,7 +169,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     return Array.from(vendors);
   }, [rooms]);
 
-  const inventoryLocations = useMemo(() => rooms.map(r => ({ id: r.id, name: r.name })), [rooms]);
+  const inventoryLocations = useMemo(() => rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => ({ id: r.id, name: r.name })), [rooms]);
 
   const [openBatchRows, setOpenBatchRows] = useState<Record<string, boolean>>({});
   const toggleBatchRow = (key: string) => {
@@ -767,7 +767,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                       className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate disabled:cursor-default disabled:opacity-80"
                                       title={rooms.length <= 1 ? item.roomName : `Move from ${item.roomName}`}
                                     >
-                                      {rooms.map(r => (
+                                      {rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => (
                                         <option key={r.id} value={r.id}>{r.name}</option>
                                       ))}
                                     </select>
@@ -1049,7 +1049,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Add to Location *</label>
                     <select value={selectedRoomId} onChange={e => setSelectedRoomId(e.target.value)} className="px-4 py-3 rounded-xl border border-slate-200 font-normal bg-white text-slate-800 text-sm focus:ring-2 focus:ring-[#3498db] outline-none shadow-sm" required>
                       <option value="">Select room...</option>
-                      {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      {rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -1386,7 +1386,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         {/* VIEW: CLINIC ANALYTICS */}
         {
           activeTab === 'analytics' && (
-            <ClinicAnalytics history={history} inventory={rooms.flatMap(r => r.items)} />
+            <ClinicAnalytics history={history} inventory={rooms.filter(r => r.id !== TBA_ROOM_ID).flatMap(r => r.items)} />
           )
         }
 
@@ -1465,7 +1465,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                     className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate disabled:cursor-default disabled:opacity-80"
                                     title={rooms.length <= 1 ? item.roomName : `Move from ${item.roomName}`}
                                   >
-                                    {rooms.map(r => (
+                                    {rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => (
                                       <option key={r.id} value={r.id}>{r.name}</option>
                                     ))}
                                   </select>
