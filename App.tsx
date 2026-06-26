@@ -1823,7 +1823,7 @@ const handleLogout = async () => {
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
-      const { error } = await supabase.from('inventory_rooms').update({ name, user_id: currentInventoryOwnerId }).eq('id', id);
+      const { error } = await supabase.from('inventory_rooms').update({ name }).eq('id', id);
       if (error) { console.error('Failed to update room name in DB:', error); setSyncStatus('error'); }
       else { setSyncStatus('synced'); }
       syncInFlight.current = false;
@@ -2379,7 +2379,6 @@ const handleLogout = async () => {
           quantity: itm.quantity,
           price: itm.price,
           expiry_date: itm.expiryDate,
-          user_id: currentInventoryOwnerId
         }).eq('id', itm.id);
 
         if (error) throw error;
@@ -2485,7 +2484,6 @@ const handleLogout = async () => {
           quantity: itm.quantity,
           price: itm.price,
           expiry_date: itm.expiryDate,
-          user_id: currentInventoryOwnerId
         }).eq('id', itm.id);
 
         if (itemUpdateError) throw itemUpdateError;
@@ -2583,7 +2581,6 @@ const handleLogout = async () => {
           expiry_date: updatedItem.expiryDate,
           quantity: updatedItem.quantity,
           price: updatedItem.price,
-          user_id: currentInventoryOwnerId
         }).eq('id', itemId);
         if (error) throw error;
 
@@ -2670,7 +2667,6 @@ const handleLogout = async () => {
           quantity: updatedItem.quantity,
           price: updatedItem.price,
           expiry_date: updatedItem.expiryDate,
-          user_id: currentInventoryOwnerId
         }).eq('id', itemId);
         if (itemErr) throw itemErr;
 
@@ -2856,7 +2852,6 @@ const handleLogout = async () => {
             quantity: updatedFromItem.quantity,
             price: updatedFromItem.price,
             expiry_date: updatedFromItem.expiryDate,
-            user_id: currentInventoryOwnerId
           }).eq('id', updatedFromItem.id);
 
           // Update batches for source
