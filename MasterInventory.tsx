@@ -1706,6 +1706,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   if (roomMatch && onRestoreRoom) {
                     const roomName = roomMatch[1];
                     const itemCount = Number(log.afterValue) || 0;
+                    // Don't show restore button if a room with this name already exists
+                    const alreadyExists = rooms.some(r => r.name === roomName && r.id !== TBA_ROOM_ID);
+                    if (alreadyExists) return null;
                     return (
                       <button
                         onClick={() => onRestoreRoom(roomName, log.beforeValue)}
