@@ -266,9 +266,9 @@ body {
 .dark .divide-slate-50 > * + * { border-color: #273549 !important; }
 
 /* ── Text colors ───────────────────────────────────────────── */
-.dark .text-slate-900 { color: #f1f5f9 !important; }
-.dark .text-slate-800 { color: #e2e8f0 !important; }
-.dark .text-slate-700 { color: #cbd5e1 !important; }
+.dark .text-slate-900:not(.pet-interface *) { color: #f1f5f9 !important; }
+.dark .text-slate-800:not(.pet-interface *) { color: #e2e8f0 !important; }
+.dark .text-slate-700:not(.pet-interface *) { color: #cbd5e1 !important; }
 .dark .text-slate-600 { color: #94a3b8 !important; }
 .dark .text-slate-500 { color: #64748b !important; }
 .dark .text-slate-400 { color: #94a3b8 !important; }
