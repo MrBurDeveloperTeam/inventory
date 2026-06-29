@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
 ::-webkit-scrollbar { 
 	width: 16px;
 }
@@ -11,13 +12,8 @@
 	background-color: #8295d5;
 }
 
-@font-face { 
-	font-family: 'Quadrit'; 
-	src: url('../css/Quadrit.ttf'); 
-}
-
 * { 
-	font-family: Quadrit, sans-serif;
+	font-family: 'Fredoka', system-ui, sans-serif;
 	font-size: 20px;
 	color: #fff;
 }
@@ -50,7 +46,7 @@ body {
 #score h2, #score span, #highscore h2, #highscore span { 
 	display: block;
 	text-transform: uppercase;
-	font-weight: normal;
+	font-weight: 800;
 	letter-spacing: 2px;
 	font-size: 16px;
 	height: 21px;
@@ -59,7 +55,8 @@ body {
 	text-align: right;
 	padding-right: 15px;
 }
-#score span, #highscore span { 
+#score span, #highscore span {letter-spacing: 0.14em;
+     
 	padding-right: 0px;
 }
 #highscore span { 
@@ -75,7 +72,7 @@ body {
 	width: 210px;
 	height: 30px;
 	text-transform: uppercase;
-	font-weight: normal;
+	font-weight: 800;
 	letter-spacing: 2px;
 	font-size: 20px;
 	color: #fff200;
@@ -90,7 +87,7 @@ span.combo, span.fruits {
 	letter-spacing: 1.5px;
 	font-size: 14px;
 	color: #89dfff;
-	font-weight: normal;
+	font-weight: 800;
 }
 
 #panel, #home { 

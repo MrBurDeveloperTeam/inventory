@@ -20,6 +20,12 @@ import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
 import { getCreditBalance } from './services/get_credit_balance';
 import { jwtDecode } from 'jwt-decode';
+import {
+  ARCHIVED_LOCATION_LABEL,
+  isPurchaseHistoryForItem,
+  markItemPurchaseHistoryArchived,
+  markRoomPurchaseHistoryArchived
+} from './src/utils/roomDeletion';
 
 type ManagedInventory = {
   userId: string;
@@ -190,6 +196,8 @@ const App: React.FC = () => {
   const [isLocked, setIsLocked] = useState(false);
   const [isAddMode, setIsAddMode] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
+  const [pendingRoomDeleteId, setPendingRoomDeleteId] = useState<string | null>(null);
+  const [deleteRoomTransferTargetId, setDeleteRoomTransferTargetId] = useState('');
   const [catPosition, setCatPosition] = useState<CatPosition>({ x: 20, y: 20 });
   const isHydrated = useRef(false);
   const syncInFlight = useRef(false);
@@ -715,7 +723,7 @@ useEffect(() => {
           vendor: h.vendor || '',
           qty: Number(h.qty) || 0,
           unitPrice: Number(h.unit_price) || 0,
-          totalPrice: Number(h.total_price) || 0,
+          totalPrice: h.total_price !== undefined && h.total_price !== null ? Number(h.total_price) : (Number(h.qty) || 0) * (Number(h.unit_price) || 0),
           location: h.location || '',
           category: h.category || 'other',
           roomId: h.room_id || '',
@@ -1171,7 +1179,7 @@ useEffect(() => {
           if (Date.now() - lastLocalMutation.current < 800) return;
           console.log('Realtime History Change:', payload.eventType);
 
-          if (payload.eventType === 'INSERT') {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             if (payload.new.user_id !== currentInventoryOwnerId) return;
             const h = payload.new;
             const newEntry: PurchaseHistory = {
@@ -1188,10 +1196,13 @@ useEffect(() => {
               category: h.category || 'other',
               roomId: h.room_id || '',
               uom: h.uom || 'pcs',
-              expiryDate: h.expiry_date || null
+              expiryDate: h.expiry_date || null,
+              description: h.description || ''
             };
             setHistory(prev => {
-              if (prev.find(x => x.id === newEntry.id)) return prev;
+              if (prev.find(x => x.id === newEntry.id)) {
+                return prev.map(x => x.id === newEntry.id ? newEntry : x);
+              }
               return [newEntry, ...prev].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             });
           } else if (payload.eventType === 'DELETE') {
@@ -1398,16 +1409,39 @@ const handleLogout = async () => {
     }
   };
 
-  const deleteRoom = async (id: string) => {
+  const requestDeleteRoom = (id: string) => {
+    const room = rooms.find(r => r.id === id);
+    if (!room) return;
+    setPendingRoomDeleteId(id);
+    setDeleteRoomTransferTargetId(rooms.find(r => r.id !== id)?.id || '');
+  };
+
+  const deleteRoom = async (id: string, itemAction: 'delete' | 'transfer', targetRoomId?: string) => {
     console.log('deleteRoom initiated:', id);
     const room = rooms.find(r => r.id === id);
+    const targetRoom = targetRoomId ? rooms.find(r => r.id === targetRoomId) : undefined;
+    if (!room) return;
+    if (itemAction === 'transfer' && (!targetRoom || targetRoom.id === id)) return;
     lastLocalMutation.current = Date.now();
 
     // 1. Optimistic Update
-    setRooms(prev => prev.filter(r => r.id !== id));
-    if (room) {
-      addActivity(id, room.name, 'delete', `Deleted room "${room.name}"`);
-    }
+    setRooms(prev => prev
+      .filter(r => r.id !== id)
+      .map(r => {
+        if (itemAction !== 'transfer' || r.id !== targetRoomId) return r;
+        return { ...r, items: [...r.items, ...room.items] };
+      }));
+    setHistory(prev => itemAction === 'delete'
+      ? markRoomPurchaseHistoryArchived(prev, id)
+      : prev.map(h => h.roomId === id && targetRoom ? { ...h, roomId: targetRoom.id, location: targetRoom.name } : h));
+    addActivity(
+      id,
+      room.name,
+      'delete',
+      itemAction === 'transfer' && targetRoom
+        ? `Deleted room "${room.name}" and transferred items to "${targetRoom.name}"`
+        : `Deleted room "${room.name}" and archived its items`
+    );
     isDirty.current = true;
 
     // 2. Direct Persistence
@@ -1415,27 +1449,47 @@ const handleLogout = async () => {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
-        // Since we might not have server-side CASCADE, we perform a manual cascade delete logic.
-        // Identify all items in this room
-        const { data: itemsToDelete } = await supabase
-          .from('inventory_items')
-          .select('id')
-          .eq('room_id', id);
-
-        if (itemsToDelete && itemsToDelete.length > 0) {
-          const itemIds = itemsToDelete.map(i => i.id);
-
-          // Delete batches for those items first
-          await supabase
-            .from('inventory_item_batches')
-            .delete()
-            .in('item_id', itemIds);
-
-          // Delete the items
+        if (itemAction === 'transfer' && targetRoom) {
           await supabase
             .from('inventory_items')
-            .delete()
-            .in('id', itemIds);
+            .update({ room_id: targetRoom.id, user_id: currentInventoryOwnerId })
+            .eq('user_id', currentInventoryOwnerId)
+            .eq('room_id', id);
+
+          await supabase
+            .from('inventory_purchase_history')
+            .update({ room_id: targetRoom.id, location: targetRoom.name })
+            .eq('user_id', currentInventoryOwnerId)
+            .eq('room_id', id);
+        } else {
+          await supabase
+            .from('inventory_purchase_history')
+            .update({ room_id: null, location: ARCHIVED_LOCATION_LABEL })
+            .eq('user_id', currentInventoryOwnerId)
+            .eq('room_id', id);
+
+          // Since we might not have server-side CASCADE, we perform a manual cascade delete logic.
+          // Identify all items in this room
+          const { data: itemsToDelete } = await supabase
+            .from('inventory_items')
+            .select('id')
+            .eq('room_id', id);
+
+          if (itemsToDelete && itemsToDelete.length > 0) {
+            const itemIds = itemsToDelete.map(i => i.id);
+
+            // Delete batches for those items first
+            await supabase
+              .from('inventory_item_batches')
+              .delete()
+              .in('item_id', itemIds);
+
+            // Delete the items
+            await supabase
+              .from('inventory_items')
+              .delete()
+              .in('id', itemIds);
+          }
         }
 
         // Finally, delete the room
@@ -2214,6 +2268,11 @@ const handleLogout = async () => {
     let roomName = '';
     let itemName = '';
     let beforeQty = '0';
+    const room = rooms.find(r => r.id === roomId);
+    const itemToDelete = room?.items.find(i => i.id === itemId) || null;
+    const archivedHistoryIds = itemToDelete
+      ? history.filter(h => isPurchaseHistoryForItem(h, roomId, itemToDelete)).map(h => h.id)
+      : [];
 
     setRooms(prev => prev.map(r => {
       if (r.id !== roomId) return r;
@@ -2225,6 +2284,9 @@ const handleLogout = async () => {
       }
       return { ...r, items: r.items.filter(i => i.id !== itemId) };
     }));
+    if (itemToDelete) {
+      setHistory(prev => markItemPurchaseHistoryArchived(prev, roomId, itemToDelete));
+    }
 
     if (itemName) {
       addActivity(roomId, roomName, 'delete', `Deleted "${itemName}"`, { beforeValue: beforeQty, afterValue: '0' });
@@ -2234,6 +2296,15 @@ const handleLogout = async () => {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
+        if (archivedHistoryIds.length > 0) {
+          const { error: historyErr } = await supabase
+            .from('inventory_purchase_history')
+            .update({ room_id: null, location: ARCHIVED_LOCATION_LABEL })
+            .eq('user_id', currentInventoryOwnerId)
+            .in('id', archivedHistoryIds);
+          if (historyErr) throw historyErr;
+        }
+
         const { error } = await supabase.from('inventory_items').delete().eq('id', itemId);
         if (error) throw error;
         setSyncStatus('synced');
@@ -2433,6 +2504,8 @@ const handleLogout = async () => {
   }
 
   const activeRoom = useMemo(() => rooms.find(r => r.id === activeRoomId), [rooms, activeRoomId]);
+  const pendingRoomDelete = useMemo(() => rooms.find(r => r.id === pendingRoomDeleteId), [rooms, pendingRoomDeleteId]);
+  const roomDeleteTransferTargets = useMemo(() => rooms.filter(r => r.id !== pendingRoomDeleteId), [rooms, pendingRoomDeleteId]);
 
   const userInitials = useMemo(() => {
     console.log('user',user)
@@ -2533,7 +2606,7 @@ const handleLogout = async () => {
                 onSetAddMode={setIsAddMode}
                 onSetDeleteMode={setIsDeleteMode}
                 onAddRoom={addRoom}
-                onDeleteRoom={deleteRoom}
+                onDeleteRoom={requestDeleteRoom}
                 onSelectRoom={setActiveRoomId}
                 onDragEnd={canManageStructure ? updateRoomPosition : undefined}
                 onUpdateRooms={canManageStructure ? (newRooms) => {
@@ -2634,6 +2707,82 @@ const handleLogout = async () => {
           onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
           readOnly={!canEditItems}
         />
+      )}
+
+      {pendingRoomDelete && (
+        <div
+          data-cat-ignore="true"
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/45 backdrop-blur-sm p-4"
+        >
+          <div
+            data-cat-ignore="true"
+            className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden"
+          >
+            <div className="p-6 border-b border-slate-100">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-rose-500 mb-2">Delete room</p>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                Delete "{pendingRoomDelete.name}"?
+              </h3>
+              <p className="mt-2 text-sm font-medium text-slate-500 leading-6">
+                This room contains {pendingRoomDelete.items.length} SKU. Choose what should happen to the items before the room is removed from the clinic map.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <button
+                onClick={() => {
+                  deleteRoom(pendingRoomDelete.id, 'delete');
+                  setPendingRoomDeleteId(null);
+                }}
+                className="w-full text-left rounded-2xl border border-rose-100 bg-rose-50/60 p-4 hover:bg-rose-50 transition-colors"
+              >
+                <span className="block text-sm font-black text-rose-600">Delete items with room</span>
+                <span className="mt-1 block text-xs font-medium text-slate-500 leading-5">
+                  Items will be removed from inventory. Purchase history for this room will show Archived in the Location column.
+                </span>
+              </button>
+
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <label className="block text-sm font-black text-slate-700 mb-2">Transfer items to another room</label>
+                <select
+                  data-cat-ignore="true"
+                  value={deleteRoomTransferTargetId}
+                  onChange={e => setDeleteRoomTransferTargetId(e.target.value)}
+                  disabled={roomDeleteTransferTargets.length === 0}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 outline-none disabled:bg-slate-50 disabled:text-slate-300"
+                >
+                  {roomDeleteTransferTargets.length === 0 ? (
+                    <option value="">No other room available</option>
+                  ) : (
+                    roomDeleteTransferTargets.map(room => (
+                      <option key={room.id} value={room.id}>{room.name}</option>
+                    ))
+                  )}
+                </select>
+                <button
+                  onClick={() => {
+                    if (!deleteRoomTransferTargetId) return;
+                    deleteRoom(pendingRoomDelete.id, 'transfer', deleteRoomTransferTargetId);
+                    setPendingRoomDeleteId(null);
+                  }}
+                  disabled={!deleteRoomTransferTargetId || roomDeleteTransferTargets.length === 0}
+                  className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400"
+                >
+                  Transfer and delete room
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
+              <button
+                onClick={() => setPendingRoomDeleteId(null)}
+                className="rounded-xl px-4 py-2 text-sm font-black text-slate-500 hover:bg-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <CollaboratorModal

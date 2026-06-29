@@ -73,4 +73,4 @@ export interface BedItem {
   levelReq?: number;
 }
 
-export type ToolType = 'soap' | 'soap2' | 'shower';
+export type ToolType = 'soap' | 'shower';

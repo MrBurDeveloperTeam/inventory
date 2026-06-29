@@ -622,7 +622,16 @@ export default function CatMascot({ onCatClick, disabled = false }) {
 
     const handleGlobalClick = (e) => {
       const target = e.target;
-      if (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('[data-cat]')) return;
+      if (
+        target.closest('button') ||
+        target.closest('a') ||
+        target.closest('input') ||
+        target.closest('select') ||
+        target.closest('option') ||
+        target.closest('textarea') ||
+        target.closest('[data-cat]') ||
+        target.closest('[data-cat-ignore]')
+      ) return;
 
       const targetX_px = e.clientX;
       const targetY_px = e.clientY;

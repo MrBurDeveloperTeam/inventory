@@ -60,7 +60,7 @@ const AnimatedCounter: React.FC<{ value: number }> = ({ value }) => {
         return () => cancelAnimationFrame(frameRef.current);
     }, [value]);
 
-    return <span>{displayValue.toLocaleString()}</span>;
+    return <span>{String(displayValue)}</span>;
 };
 
 interface GamePageProps {
@@ -118,7 +118,7 @@ export const GamePage: React.FC<GamePageProps> = ({ gameId, onClose }) => {
     const config = GAME_CONFIG[gameId];
 
     return (
-        <div className="fixed inset-0 z-50 bg-black">
+        <div className="fixed inset-0 z-50 bg-black" style={{ fontFamily: "'Fredoka', sans-serif" }}>
             {/* Container - Full Screen */}
             <div className="relative w-full h-full animate-in zoom-in-95 fade-in duration-300">
 
@@ -129,14 +129,14 @@ export const GamePage: React.FC<GamePageProps> = ({ gameId, onClose }) => {
                         {sessionCoins > 0 && (
                             <div className="flex items-center gap-1.5 bg-yellow-500/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-yellow-500/20 shadow-sm text-yellow-400 animate-in fade-in slide-in-from-top-2 duration-300">
                                 <span className="text-[10px] font-black uppercase tracking-wider opacity-70">Coins</span>
-                                <span className="font-mono font-bold text-sm">+{sessionCoins}</span>
+                                <span className="font-black text-sm tracking-widest">+{sessionCoins}</span>
                             </div>
                         )}
 
                         {/* Accumulated Score Indicator (Persistent Wallet) */}
                         <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2.5 rounded-full border border-white/10 shadow-lg text-white transition-all duration-500 ring-1 ring-white/5">
                             <span className="text-xl">💰</span>
-                            <span className="font-mono font-bold text-lg tracking-tight min-w-[3ch] text-right">
+                            <span className="font-black text-lg tracking-widest min-w-[3ch] text-right">
                                 <AnimatedCounter value={stats.coins || 0} />
                             </span>
                         </div>

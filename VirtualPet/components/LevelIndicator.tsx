@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { PetStats } from '../types';
 
@@ -9,22 +8,15 @@ interface LevelIndicatorProps {
 const LevelIndicator: React.FC<LevelIndicatorProps> = ({ stats }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  // The main body shape
   const bodyPath = "M 40 30 Q 70 70 100 65 Q 130 70 160 30 Q 190 80 180 150 Q 170 195 100 190 Q 30 195 20 150 Q 10 80 40 30 Z";
 
-  // Whiskers
   const whiskersPath = `
     M 45 115 L 5 105
     M 45 135 L 5 145
     M 155 115 L 195 105
     M 155 135 L 195 145
   `;
-  
-  // Calculate fill position based on shape bounds
-  // Shape top is roughly y=30, bottom is roughly y=195.
-  // Height range is 165px.
-  // 0% XP should be at y=195.
-  // 100% XP should be at y=30.
+
   const fillHeightRange = 165;
   const fillBottomY = 195;
   const xpPercent = Math.min(100, Math.max(0, stats.xp)) / 100;
@@ -32,9 +24,9 @@ const LevelIndicator: React.FC<LevelIndicatorProps> = ({ stats }) => {
 
   return (
     <div className="absolute top-3 right-6 z-40 flex flex-col items-end animate-in fade-in slide-in-from-right-4 duration-700">
-        <button 
+        <button
             onClick={() => setIsOpen(!isOpen)}
-            className="relative w-20 h-20 shrink-0 group transition-transform hover:scale-105 active:scale-95 duration-200 outline-none cursor-pointer" 
+            className="relative w-20 h-20 shrink-0 group transition-transform hover:scale-105 active:scale-95 duration-200 outline-none cursor-pointer"
             title={`Level ${stats.level}`}
         >
             <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible drop-shadow-xl">
@@ -43,15 +35,13 @@ const LevelIndicator: React.FC<LevelIndicatorProps> = ({ stats }) => {
                         <path d={bodyPath} />
                     </clipPath>
                     <linearGradient id="fill-gradient-lvl" x1="0" x2="0" y1="0" y2="1">
-                          <stop offset="0%" stopColor="#fbbf24" /> {/* amber-400 */}
-                          <stop offset="100%" stopColor="#f59e0b" /> {/* amber-500 */}
+                          <stop offset="0%" stopColor="#fbbf24" />
+                          <stop offset="100%" stopColor="#f59e0b" />
                     </linearGradient>
                 </defs>
 
-                {/* Base Background (Glassy) with white border */}
                 <path d={bodyPath} className="fill-white/30 backdrop-blur-md stroke-white/60 stroke-[4]" />
 
-                {/* Progress Fill - Masked by Shape */}
                 <g clipPath="url(#body-mask-lvl)">
                     <rect
                         x="0"
@@ -63,20 +53,14 @@ const LevelIndicator: React.FC<LevelIndicatorProps> = ({ stats }) => {
                     />
                 </g>
 
-                {/* Existing faint Outline Ring */}
                 <path d={bodyPath} className="fill-none stroke-slate-500/10 stroke-[4px]" />
-
-                {/* Black Outline */}
                 <path d={bodyPath} className="fill-none stroke-black stroke-[4px] pointer-events-none" />
-
-                {/* Whiskers */}
                 <path
                   d={whiskersPath}
                   className="fill-none stroke-slate-600/60 stroke-[3px]"
                   strokeLinecap="round"
                 />
 
-                {/* Level Number */}
                 <text
                     x="100"
                     y="110"
@@ -88,7 +72,6 @@ const LevelIndicator: React.FC<LevelIndicatorProps> = ({ stats }) => {
                     {stats.level}
                 </text>
 
-                {/* 'LVL' Label */}
                 <text
                     x="100"
                     y="150"
@@ -102,23 +85,20 @@ const LevelIndicator: React.FC<LevelIndicatorProps> = ({ stats }) => {
             </svg>
         </button>
 
-        {/* Popover Menu */}
         {isOpen && (
             <div className="absolute top-24 right-0 bg-white/90 backdrop-blur-xl rounded-2xl p-5 shadow-2xl w-64 border border-white/50 animate-in fade-in zoom-in-95 origin-top-right">
-                <div className="text-center mb-4">
+                <div className="text-center">
                     <h3 className="text-xl font-bold text-slate-800">Level {stats.level}</h3>
                     <div className="text-sm font-semibold text-slate-500 mt-1">
                         {Math.floor(stats.xp)} / 100 XP
                     </div>
-                    {/* Progress Bar */}
                     <div className="w-full h-3 bg-slate-200 rounded-full mt-2 overflow-hidden shadow-inner">
-                        <div 
+                        <div
                             className="h-full bg-amber-400 transition-all duration-500"
                             style={{ width: `${Math.min(100, Math.max(0, stats.xp))}%` }}
                         />
                     </div>
                 </div>
-
             </div>
         )}
     </div>
