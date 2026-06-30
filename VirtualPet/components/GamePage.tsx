@@ -104,9 +104,10 @@ export const GamePage: React.FC<GamePageProps> = ({ gameId, onClose }) => {
 
     // Prevent scroll when game is open
     useEffect(() => {
+        const previousOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
         return () => {
-            document.body.style.overflow = '';
+            document.body.style.overflow = previousOverflow;
         };
     }, []);
 

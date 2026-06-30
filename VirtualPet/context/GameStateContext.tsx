@@ -64,7 +64,13 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode; currencyCo
     const [currentRoom, setCurrentRoom] = useState<RoomType>(RoomType.KITCHEN);
     const [inventory, setInventory] = useState<Record<string, number>>(INITIAL_INVENTORY);
     const [soapInventory, setSoapInventory] = useState<SoapInventory>({ soap: 0, soap2: 0 });
-    const [isSleeping, setIsSleeping] = useState(false);
+    const [isSleeping, setIsSleeping] = useState(() => {
+        try {
+            return localStorage.getItem(PET_SLEEPING_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    });
     const [isEating, setIsEating] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [activeBallId, setActiveBallId] = useState<string>('ball_red');

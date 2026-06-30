@@ -42,7 +42,7 @@ export const FoodMenu: React.FC<FoodMenuProps> = ({ onDragStart, inventory, onOp
                 <div
                     ref={scrollRef}
                     onWheel={handleWheel}
-                    className="no-scrollbar flex h-22 min-w-0 flex-1 snap-x items-center gap-4 overflow-x-auto px-4 pt-3"
+                    className="flex h-22 min-w-0 flex-1 snap-x items-center gap-4 overflow-x-auto overflow-y-hidden px-4 pt-3 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full"
                 >
                     {availableItems.length === 0 && (
                         <button
