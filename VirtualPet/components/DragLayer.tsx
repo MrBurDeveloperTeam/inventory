@@ -11,9 +11,8 @@ interface DragLayerProps {
 }
 
 const TOOL_ICONS: Record<ToolType, { src: string; alt: string }> = {
-    soap: { src: '/pets/soap.png', alt: 'Soap' },
-    soap2: { src: '/pets/soap2.png', alt: 'Premium Soap' },
-    shower: { src: '/pets/shower.png', alt: 'Shower' },
+    soap: { src: '/images/soap.png', alt: 'Soap' },
+    shower: { src: '/images/shower.png', alt: 'Shower' },
 };
 
 const SHOWER_DROPLETS = [

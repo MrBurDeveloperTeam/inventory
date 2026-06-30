@@ -32,6 +32,7 @@ import {
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { CATEGORIES, UOMS } from './constants';
 import ClinicAnalytics from './ClinicAnalytics';
+import { getPurchaseHistoryLocation, isArchivedPurchaseHistory } from './src/utils/roomDeletion';
 
 interface MasterInventoryProps {
   rooms: Room[];
@@ -1296,7 +1297,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                         </tr>
                         {items.map(h => {
                           const currentRoom = rooms.find(r => r.id === h.roomId);
-                          const displayLocation = currentRoom ? currentRoom.name : h.location;
+                          const displayLocation = getPurchaseHistoryLocation(h, currentRoom?.name);
+                          const isArchivedLocation = isArchivedPurchaseHistory(h);
                           const expiryDate = h.expiryDate ? new Date(h.expiryDate) : null;
                           const now = new Date();
                           const soonThreshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -1333,7 +1335,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                 ) : '-'}
                               </td>
                               <td className="px-3 py-4">
-                                <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
+                                <span className={`font-bold text-[10px] whitespace-nowrap border px-2 py-0.5 rounded-lg ${isArchivedLocation ? 'text-slate-500 border-slate-200 bg-slate-100/70' : 'text-emerald-600 border-emerald-100 bg-emerald-50/30'}`}>
                                   {displayLocation}
                                 </span>
                               </td>
@@ -1357,7 +1359,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     </div>
                     {items.map(h => {
                       const currentRoom = rooms.find(r => r.id === h.roomId);
-                      const displayLocation = currentRoom ? currentRoom.name : h.location;
+                      const displayLocation = getPurchaseHistoryLocation(h, currentRoom?.name);
+                      const isArchivedLocation = isArchivedPurchaseHistory(h);
                       const expiryDate = h.expiryDate ? new Date(h.expiryDate) : null;
                       const now = new Date();
                       const soonThreshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -1416,7 +1419,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                             </div>
                             <div>
                               <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Location</span>
-                              <span className="font-medium text-emerald-600 truncate block">{displayLocation}</span>
+                              <span className={`font-medium truncate block ${isArchivedLocation ? 'text-slate-500' : 'text-emerald-600'}`}>{displayLocation}</span>
                             </div>
                           </div>
                         </div>

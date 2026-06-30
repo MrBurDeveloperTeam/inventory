@@ -322,7 +322,7 @@ function updateLeaderboardUI() {
     displayScores.forEach(score => {
         const row = document.createElement('div');
         row.className = 'leaderboard-row';
-        row.innerHTML = `<span class="score-val">${score.toLocaleString()}</span>`;
+        row.innerHTML = `<span class="score-val">${String(score)}</span>`;
         list.appendChild(row);
     });
 }

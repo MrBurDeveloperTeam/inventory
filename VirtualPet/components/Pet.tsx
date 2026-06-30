@@ -31,7 +31,7 @@ interface PetProps {
   onClick: () => void;
 }
 
-const DEFAULT_SPRITESHEET_URL = '/pets/mallow-spritesheet.webp';
+const DEFAULT_SPRITESHEET_URL = '/images/mallow-spritesheet.webp';
 const FRAME_WIDTH = 192;
 const FRAME_HEIGHT = 208;
 const SHEET_COLUMNS = 8;
@@ -360,8 +360,8 @@ const Pet = forwardRef<HTMLDivElement, PetProps>(({
         }
 
         .mallow-chew-mouth {
-          width: 30px;
-          height: 24px;
+          width: 28px;
+          height: 22px;
           border-radius: 999px;
           background: #3b160b;
           box-shadow: inset 0 -5px 0 rgba(255, 160, 160, 0.7), 0 1px 2px rgba(0, 0, 0, 0.18);

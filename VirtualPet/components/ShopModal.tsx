@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Apple,
   ArrowLeft,
-  Bath,
   BedDouble,
   Candy,
   Coffee,
@@ -13,7 +12,6 @@ import {
   Lock,
   ShoppingBag,
   Smile,
-  Sparkles,
   Utensils,
   X,
   Zap,
@@ -29,13 +27,11 @@ interface ShopModalProps {
   onClose: () => void;
   items: FoodItem[];
   inventory: Record<string, number>;
-  soapInventory: Record<'soap' | 'soap2', number>;
   activeBedId: string | null;
   activeBallId: string;
   coins: number;
   currentLevel: number;
   onBuy: (item: FoodItem) => void;
-  onBuySoap: (item: FoodItem) => void;
   onBuyBed: (bed: FoodItem) => void;
   onSelectBed: (id: string) => void;
   onBuyToy: (item: FoodItem) => void;
@@ -50,7 +46,6 @@ const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string
   Drinks: { bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-700', accent: 'bg-sky-100' },
   Sweets: { bg: 'bg-pink-50', border: 'border-pink-200', text: 'text-pink-700', accent: 'bg-pink-100' },
   Toys: { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700', accent: 'bg-slate-100' },
-  Soap: { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-700', accent: 'bg-cyan-100' },
   Beds: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', accent: 'bg-indigo-100' },
   Default: { bg: 'bg-stone-50', border: 'border-stone-200', text: 'text-stone-700', accent: 'bg-stone-100' },
 };
@@ -62,12 +57,11 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Drinks: CupSoda,
   Sweets: Candy,
   Toys: Gamepad2,
-  Soap: Bath,
   Beds: BedDouble,
   Default: ShoppingBag,
 };
 
-const CATEGORY_ORDER = ['Healthy', 'Breakfast', 'Meals', 'Drinks', 'Sweets', 'Soap', 'Toys', 'Beds'];
+const CATEGORY_ORDER = ['Healthy', 'Breakfast', 'Meals', 'Drinks', 'Sweets', 'Toys', 'Beds'];
 
 const SHOP_BUTTONS = {
   buy: 'bg-orange-500 text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600 active:scale-95',
@@ -111,13 +105,11 @@ const ShopModal: React.FC<ShopModalProps> = ({
   onClose,
   items,
   inventory,
-  soapInventory,
   activeBedId,
   activeBallId,
   coins,
   currentLevel,
   onBuy,
-  onBuySoap,
   onBuyBed,
   onSelectBed,
   onBuyToy,
@@ -134,6 +126,7 @@ const ShopModal: React.FC<ShopModalProps> = ({
 
   const categories = useMemo(() => {
     const available = new Set(items.map(item => item.category));
+    available.delete('Soap');
     return [
       ...CATEGORY_ORDER.filter(category => available.has(category)),
       ...Array.from(available).filter(category => !CATEGORY_ORDER.includes(category)),
@@ -141,11 +134,10 @@ const ShopModal: React.FC<ShopModalProps> = ({
   }, [items]);
 
   const filteredItems = useMemo(() => {
-    if (!selectedCategory || selectedCategory === 'Soap' || selectedCategory === 'Beds') return [];
+    if (!selectedCategory || selectedCategory === 'Beds') return [];
     return items.filter(item => item.category === selectedCategory);
   }, [items, selectedCategory]);
 
-  const soapItems = useMemo(() => items.filter((item) => item.category === 'Soap'), [items]);
   const bedItems = useMemo(() => items.filter((item) => item.category === 'Beds'), [items]);
 
   useEffect(() => {
@@ -185,7 +177,7 @@ const ShopModal: React.FC<ShopModalProps> = ({
                   {selectedCategory || 'Shop'}
                 </h2>
                 <p className="text-sm font-bold text-orange-950/70">
-                  {selectedCategory ? `${selectedCategory === 'Soap' ? soapItems.length : selectedCategory === 'Beds' ? bedItems.length : filteredItems.length} items available` : 'Pick a shelf, then buy supplies'}
+                  {selectedCategory ? `${selectedCategory === 'Beds' ? bedItems.length : filteredItems.length} items available` : 'Pick a shelf, then buy supplies'}
                 </p>
               </div>
             </div>
@@ -217,9 +209,9 @@ const ShopModal: React.FC<ShopModalProps> = ({
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
               {categories.map((cat) => {
                 const style = CATEGORY_STYLES[cat] || CATEGORY_STYLES.Default;
-                const categoryItems = cat === 'Soap' || cat === 'Beds' ? [] : items.filter(item => item.category === cat);
+                const categoryItems = cat === 'Beds' ? [] : items.filter(item => item.category === cat);
                 const Icon = CATEGORY_ICONS[cat] || CATEGORY_ICONS.Default;
-                const itemCount = cat === 'Soap' ? soapItems.length : cat === 'Beds' ? bedItems.length : categoryItems.length;
+                const itemCount = cat === 'Beds' ? bedItems.length : categoryItems.length;
                 return (
                   <button
                     key={cat}
@@ -319,56 +311,7 @@ const ShopModal: React.FC<ShopModalProps> = ({
               })}
             </div>
           )}
-
-          {!isLoading && selectedCategory === 'Soap' && (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {soapItems.map((item) => {
-                const tool = item.id as 'soap' | 'soap2';
-                const ownedCount = soapInventory[tool] || 0;
-                const actualPrice = item.price * currencyRate;
-                const canAfford = coins >= actualPrice;
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`relative flex min-h-56 flex-col rounded-[26px] border ${selectedStyle.border} bg-white p-4 text-center shadow-lg shadow-orange-900/5 transition-all hover:-translate-y-1 hover:shadow-xl`}
-                  >
-                    {ownedCount > 0 && (
-                      <div className="absolute right-3 top-3 z-10 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-black text-white shadow">
-                        x{ownedCount}
-                      </div>
-                    )}
-
-                    <div className="mt-2 flex justify-center">
-                      <img src={item.imageSrc} alt="" draggable={false} className="h-20 w-20 object-contain drop-shadow-md" />
-                    </div>
-                    <div className="mt-3 truncate text-base font-black text-slate-700">{item.label}</div>
-
-                    <div className="my-3 flex min-h-8 flex-wrap items-center justify-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-1 text-xs font-black text-cyan-700">
-                        <Sparkles className="h-3.5 w-3.5" strokeWidth={3} />
-                        +{item.hygiene || 0}%
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => canAfford && onBuySoap(item)}
-                      disabled={!canAfford}
-                      className={`mt-auto rounded-2xl px-3 py-2.5 text-sm font-black transition-all ${
-                        canAfford
-                          ? SHOP_BUTTONS.buy
-                          : SHOP_BUTTONS.disabled
-                      }`}
-                    >
-                      {currencyCode} {formatPrice(item.price)}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {!isLoading && selectedCategory && selectedCategory !== 'Soap' && selectedCategory !== 'Beds' && (
+          {!isLoading && selectedCategory && selectedCategory !== 'Beds' && (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {filteredItems.map((item) => {
                 const toy = findToyByShopItem(item);

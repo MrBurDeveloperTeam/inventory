@@ -87,7 +87,7 @@ const BottomControls: React.FC<BottomControlsProps> = ({
             if (!showFoodMenu) {
                 onToggleFoodMenu();
             }
-        } else {
+        } else if (!showFoodMenu) {
             onToggleFoodMenu();
         }
     };
@@ -99,7 +99,7 @@ const BottomControls: React.FC<BottomControlsProps> = ({
             if (!showBathroomMenu) {
                 onToggleBathroomMenu();
             }
-        } else {
+        } else if (!showBathroomMenu) {
             onToggleBathroomMenu();
         }
     };
