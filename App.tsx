@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory, UOM, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
 import Header from './Header';
@@ -13,6 +12,16 @@ import CollaboratorModal from './CollaboratorModal';
 import { VirtualPetContainer } from './VirtualPet/VirtualPetContainer';
 import CatMascot from './components/CatMascot';
 import MolarAIFloat from './components/MolarAIFloat';
+import {
+  readStoredTheme,
+  writeThemeCookie,
+  writeStoredTheme,
+  applyThemeToDocument,
+  syncThemeFromOdoo,
+  pushThemeToOdoo,
+  readThemeCookie,
+  parseTheme,
+} from './src/utils/themeSync';
 import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { api } from './services/api';
@@ -207,9 +216,72 @@ const App: React.FC = () => {
   const isDirty = useRef(false);
   const lastLoadRequestId = useRef(0);
   const metaSyncTimer = useRef<number | null>(null);
+  /** Ref always holding the latest TBA virtual room — survives loadInventory resets. */
+  const tbaRoomRef = useRef<Room | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
+
+  // Keep tbaRoomRef always up-to-date so loadInventory can read it synchronously
+  useEffect(() => {
+    const tba = rooms.find(r => r.id === TBA_ROOM_ID) ?? null;
+    tbaRoomRef.current = tba && tba.items.length > 0 ? tba : null;
+  }, [rooms]);
+
+  // ─── Theme state — hybrid: cookie (instant) + Odoo (cross-device) ───────────
+  const [theme, setThemeState] = useState<string>(() => readStoredTheme() || 'light');
+
+  // Apply theme to DOM whenever it changes
+  useEffect(() => {
+    applyThemeToDocument(theme);
+  }, [theme]);
+
+  // Sync from Odoo on mount (cross-device)
+  useEffect(() => {
+    syncThemeFromOdoo((odooTheme) => {
+      setThemeState(odooTheme);
+    });
+  }, []);
+
+  // 1s cookie poll — catches gallery/appointment changing theme on same browser
+  useEffect(() => {
+    let lastCookie = readThemeCookie();
+    const interval = window.setInterval(() => {
+      const current = readThemeCookie();
+      if (current && current !== lastCookie) {
+        lastCookie = current;
+        setThemeState(current);
+      }
+    }, 1000);
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== 'theme') return;
+      const next = parseTheme(e.newValue);
+      if (next) setThemeState(next);
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  // Sync Odoo on auth completion
+  useEffect(() => {
+    if (isAuthenticated) {
+      syncThemeFromOdoo((odooTheme) => setThemeState(odooTheme));
+    }
+  }, [isAuthenticated]);
+
+  const handleSetTheme = (newTheme: string) => {
+    const valid = new Set(['light', 'dark', 'system']);
+    const t = valid.has(newTheme) ? newTheme : 'light';
+    setThemeState(t);
+    writeThemeCookie(t);
+    writeStoredTheme(t);
+    pushThemeToOdoo(t); // fire and forget
+  };
 
   // Virtual Pet State
   const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
@@ -257,6 +329,7 @@ useEffect(() => {
         // If the API expects an integer ID, we need to find where that comes from.
         // For now, let's keep it safe and avoid NaN.
         const partnerId = parseInt(userId); 
+        console.log(`Bootstrap complete for user ${userId} with partner ID ${partnerId}`);
         if (!isNaN(partnerId)) {
           await getCreditBalance(partnerId).catch(err => console.error("Credit fetch failed:", err));
         }
@@ -947,7 +1020,12 @@ useEffect(() => {
         }
         console.log(`Inventory loaded successfully for ${currentInventoryOwnerId}. Found ${hydratedRooms.length} rooms.`);
         isHydrated.current = true;
-        setRooms(hydratedRooms);
+
+        // Preserve TBA virtual room — it only lives in local state and must
+        // survive full reloads triggered by Realtime or other mutations.
+        // Use tbaRoomRef (always current) instead of prev to avoid stale closures.
+        const currentTba = tbaRoomRef.current;
+        setRooms(currentTba ? [...hydratedRooms, currentTba] : hydratedRooms);
       }
       setHistory(
         (historyData || []).map((h: any) => ({
@@ -1358,7 +1436,7 @@ const handleLogout = async () => {
     }
   };
 
-  const addRoom = async (x: number, y: number) => {
+  const addRoom = async (x: number, y: number, forceName?: string): Promise<string | null> => {
     console.log('addRoom initiated:', { x, y });
     lastLocalMutation.current = Date.now();
 
@@ -1375,7 +1453,7 @@ const handleLogout = async () => {
     const newRoomId = generateId();
     const newRoom: Room = {
       id: newRoomId,
-      name: `Room ${nextNumber}`,
+      name: forceName || `Room ${nextNumber}`,
       x,
       y,
       items: [],
@@ -1407,6 +1485,7 @@ const handleLogout = async () => {
       isDirty.current = false;
       syncInFlight.current = false;
     }
+    return newRoomId;
   };
 
   const requestDeleteRoom = (id: string) => {
@@ -1444,7 +1523,9 @@ const handleLogout = async () => {
     );
     isDirty.current = true;
 
-    // 2. Direct Persistence
+    // 2. Direct Persistence:
+    //    - Update orphaned items' room_id to NULL in Supabase (preserve items)
+    //    - Then delete the room
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
@@ -1492,7 +1573,7 @@ const handleLogout = async () => {
           }
         }
 
-        // Finally, delete the room
+        // Delete the room (cascade will only delete items still pointing to it)
         const { error } = await supabase
           .from('inventory_rooms')
           .delete()
@@ -1501,7 +1582,7 @@ const handleLogout = async () => {
         if (error) throw error;
         setSyncStatus('synced');
       } catch (err) {
-        console.error('Failed to delete room with manual cascade:', err);
+        console.error('Failed to delete room:', err);
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
@@ -1510,32 +1591,194 @@ const handleLogout = async () => {
     }
   };
 
-  const updateRoomName = async (id: string, name: string) => {
-    lastLocalMutation.current = Date.now();
-    // 1. Optimistic Update
-    let oldName = '';
-    setRooms(prev => prev.map(r => {
-      if (r.id === id) {
-        oldName = r.name;
-        return { ...r, name };
-      }
-      return r;
-    }));
-    if (oldName && oldName !== name) {
-      addActivity(id, name, 'edit', `Renamed room "${oldName}" to "${name}"`, { beforeValue: oldName, afterValue: name });
-    }
+  /**
+   * Assign a TBA (unassigned) item to a real room.
+   * Moves it out of the virtual TBA room and persists room_id to Supabase.
+   */
+  const assignTbaItemToRoom = async (itemId: string, toRoomId: string) => {
+    const tbaRoom = rooms.find(r => r.id === TBA_ROOM_ID);
+    const item = tbaRoom?.items.find(i => i.id === itemId);
+    const targetRoom = rooms.find(r => r.id === toRoomId);
+    if (!item || !targetRoom) return;
 
-    // 2. Direct Persistence
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+
+    // Optimistic update — move item from TBA to target room
+    setRooms(prev => prev
+      .map(r => {
+        if (r.id === TBA_ROOM_ID) {
+          const remaining = r.items.filter(i => i.id !== itemId);
+          return { ...r, items: remaining };
+        }
+        if (r.id === toRoomId) {
+          return { ...r, items: [...r.items, { ...item, tba: false }] };
+        }
+        return r;
+      })
+      // Remove TBA room if it's now empty
+      .filter(r => !(r.id === TBA_ROOM_ID && r.items.length === 0))
+    );
+
+    addActivity(toRoomId, targetRoom.name, 'transfer_in',
+      `Assigned "${item.name}" from TBA to "${targetRoom.name}"`
+    );
+
+    // Persist
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
-      const { error } = await supabase.from('inventory_rooms').update({ name, user_id: currentInventoryOwnerId }).eq('id', id);
-      if (error) {
-        console.error('Failed to update room name in DB:', error);
-        setSyncStatus('error');
-      } else {
+      try {
+        const { error } = await supabase
+          .from('inventory_items')
+          .upsert({
+            id: item.id,
+            room_id: toRoomId,
+            user_id: currentInventoryOwnerId,
+            name: item.name,
+            brand: item.brand,
+            code: item.code,
+            quantity: item.quantity,
+            price: item.price,
+            uom: normalizeUom(item.uom),
+            vendor: item.vendor,
+            category: normalizeCategory(item.category),
+            description: item.description,
+            expiry_date: item.expiryDate,
+          });
+        if (error) throw error;
         setSyncStatus('synced');
+      } catch (err) {
+        console.error('assignTbaItemToRoom: failed to persist', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+        syncInFlight.current = false;
       }
+    }
+  };
+
+  /**
+   * restoreRoom — recreates a deleted room and re-adds all its items atomically.
+   * Keeps isDirty=true throughout so Realtime reloads don't overwrite mid-restore.
+   */
+  const restoreRoom = async (roomName: string, itemSnapshot?: string) => {
+    if (!currentInventoryOwnerId) return;
+
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+
+    try {
+      // 1. Create the room in Supabase directly (bypass addRoom to keep isDirty locked)
+      const newRoomId = generateId();
+      const x = 20 + Math.random() * 40;
+      const y = 20 + Math.random() * 40;
+
+      const { error: roomErr } = await supabase.from('inventory_rooms').insert({
+        id: newRoomId,
+        user_id: currentInventoryOwnerId,
+        name: roomName,
+        pos_x: x,
+        pos_y: y,
+      });
+      if (roomErr) throw roomErr;
+
+      // Optimistic update — add room to local state
+      const restoredRoom: Room = { id: newRoomId, name: roomName, x, y, items: [] };
+      setRooms(prev => [...prev, restoredRoom]);
+      addActivity(newRoomId, roomName, 'add', `Restored room "${roomName}"`);
+
+      // 2. Re-add items if snapshot exists
+      if (itemSnapshot) {
+        const items = JSON.parse(itemSnapshot) as Array<{
+          id?: string; name: string; brand: string; code: string; quantity: number;
+          price: number; uom: string; vendor: string; category: string;
+          description: string; expiryDate: string | null;
+        }>;
+
+        const today = new Date().toISOString().split('T')[0];
+        let restoredItems: Item[] = [];
+
+        for (const item of items) {
+          const newItem: Item = {
+            id: generateId(),
+            name: item.name,
+            brand: item.brand || '',
+            code: item.code || '',
+            quantity: item.quantity,
+            price: item.price,
+            uom: normalizeUom(item.uom),
+            vendor: item.vendor || '',
+            category: normalizeCategory(item.category) as any,
+            description: item.description || '',
+            expiryDate: item.expiryDate || null,
+            createdAt: new Date().toISOString(),
+            batches: [{ id: generateId(), qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }],
+          };
+          restoredItems.push(newItem);
+
+          // Persist item to Supabase
+          const { error: itemErr } = await supabase.from('inventory_items').upsert({
+            id: newItem.id,
+            room_id: newRoomId,
+            user_id: currentInventoryOwnerId,
+            name: newItem.name,
+            brand: newItem.brand,
+            code: newItem.code,
+            quantity: newItem.quantity,
+            price: newItem.price,
+            uom: newItem.uom,
+            vendor: newItem.vendor,
+            category: newItem.category,
+            description: newItem.description,
+            expiry_date: newItem.expiryDate,
+          });
+          if (itemErr) throw itemErr;
+
+          await supabase.from('inventory_item_batches').upsert({
+            id: newItem.batches![0].id,
+            item_id: newItem.id,
+            qty: newItem.quantity,
+            unit_price: newItem.price,
+            expiry_date: newItem.expiryDate,
+          });
+        }
+
+        // Optimistic update — add all items to the new room at once
+        // AND remove them from the TBA virtual room (they are now assigned)
+        setRooms(prev => prev
+          .map(r => {
+            if (r.id === newRoomId) return { ...r, items: restoredItems };
+            if (r.id === TBA_ROOM_ID) {
+              // Remove exactly the items that belong to this restored room,
+              // matched by their original snapshot id (set during deleteRoom).
+              // Falls back to name|brand only for old snapshots that predate the id field.
+              const snapshotIds = new Set(items.map(i => i.id).filter(Boolean));
+              const snapshotNameBrand = new Set(items.map(i => `${i.name}|${i.brand}`));
+              const remaining = snapshotIds.size > 0
+                ? r.items.filter(i => !snapshotIds.has(i.id))
+                : r.items.filter(i => !snapshotNameBrand.has(`${i.name}|${i.brand}`));
+              return { ...r, items: remaining };
+            }
+            return r;
+          })
+          // Remove TBA room if it's now empty
+          .filter(r => !(r.id === TBA_ROOM_ID && r.items.length === 0))
+        );
+
+        addActivity(newRoomId, roomName, 'receive',
+          `Restored ${restoredItems.length} item${restoredItems.length !== 1 ? 's' : ''} to "${roomName}"`
+        );
+      }
+
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('restoreRoom failed:', err);
+      setSyncStatus('error');
+    } finally {
+      isDirty.current = false;
       syncInFlight.current = false;
     }
   };
@@ -1581,6 +1824,26 @@ const handleLogout = async () => {
         after_value: options?.afterValue || null
       });
       if (error) console.error('Failed to persist activity log:', error);
+      syncInFlight.current = false;
+    }
+  };
+
+  const updateRoomName = async (id: string, name: string) => {
+    lastLocalMutation.current = Date.now();
+    let oldName = '';
+    setRooms(prev => prev.map(r => {
+      if (r.id === id) { oldName = r.name; return { ...r, name }; }
+      return r;
+    }));
+    if (oldName && oldName !== name) {
+      addActivity(id, name, 'edit', `Renamed room "${oldName}" to "${name}"`, { beforeValue: oldName, afterValue: name });
+    }
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      syncInFlight.current = true;
+      const { error } = await supabase.from('inventory_rooms').update({ name }).eq('id', id);
+      if (error) { console.error('Failed to update room name in DB:', error); setSyncStatus('error'); }
+      else { setSyncStatus('synced'); }
       syncInFlight.current = false;
     }
   };
@@ -1650,9 +1913,9 @@ const handleLogout = async () => {
         code: itemData.code || '',
         quantity: qty,
         price: price,
-        uom: itemData.uom || 'pcs',
+        uom: normalizeUom(itemData.uom),
         vendor: itemData.vendor || '',
-        category: itemData.category || 'other',
+        category: normalizeCategory(itemData.category) as any,
         description: itemData.description || '',
         expiryDate: expiry || null,
         createdAt: new Date().toISOString(),
@@ -1720,9 +1983,9 @@ const handleLogout = async () => {
           code: itm.code,
           quantity: itm.quantity,
           price: itm.price,
-          uom: itm.uom,
+          uom: normalizeUom(itm.uom),
           vendor: itm.vendor,
-          category: itm.category,
+          category: normalizeCategory(itm.category),
           description: itm.description,
           expiry_date: itm.expiryDate
         });
@@ -1756,8 +2019,7 @@ const handleLogout = async () => {
           location: historyEntry.location,
           category: historyEntry.category,
           uom: historyEntry.uom,
-          expiry_date: historyEntry.expiryDate,
-          description: historyEntry.description
+          expiry_date: historyEntry.expiryDate || null,
         });
         if (historyErr) throw historyErr;
 
@@ -1769,6 +2031,187 @@ const handleLogout = async () => {
         isDirty.current = false;
         syncInFlight.current = false;
       }
+    }
+  };
+
+  const VALID_CATEGORIES = new Set(['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other']);
+  const VALID_UOMS = new Set(['pcs', 'box', 'unit', 'kit']);
+
+  const normalizeCategory = (cat?: string): string => {
+    if (!cat) return 'other';
+    const lower = cat.trim().toLowerCase();
+    return VALID_CATEGORIES.has(lower) ? lower : 'other';
+  };
+
+  const normalizeUom = (uom?: string): UOM => {
+    if (!uom) return 'pcs';
+    const lower = uom.trim().toLowerCase();
+    return (VALID_UOMS.has(lower) ? lower : 'pcs') as UOM;
+  };
+
+  /**
+   * receiveStockBatch — persists multiple items atomically.
+   *
+   * Unlike calling receiveStock() N times in a forEach (which creates N
+   * concurrent async operations each independently clearing isDirty),
+   * this function keeps isDirty = true until ALL items are upserted,
+   * preventing the Realtime subscription from triggering loadInventory
+   * mid-batch and overwriting items that haven't been saved yet.
+   */
+  const receiveStockBatch = async (
+    roomId: string,
+    items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>
+  ) => {
+    if (!items.length) return;
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) { isDirty.current = false; syncInFlight.current = false; return; }
+
+    const roomNameForLog = room.name;
+    const affectedItems: Item[] = [];
+    const historyEntries: PurchaseHistory[] = [];
+    let currentItems = [...room.items];
+
+    // Build the full new state for each item sequentially (so merges are correct)
+    for (const { itemData, qty, price, purchaseDate, expiry } of items) {
+      if (!itemData.name) continue;
+
+      const existingItem = currentItems.find(i =>
+        i.name.toLowerCase() === itemData.name!.toLowerCase() &&
+        (itemData.brand ? i.brand.toLowerCase() === itemData.brand.toLowerCase() : true)
+      );
+
+      let newItem: Item;
+      if (existingItem) {
+        newItem = mergeBatchAdd(existingItem, qty, price, expiry);
+        currentItems = currentItems.map(i => i.id === existingItem.id ? newItem : i);
+      } else {
+        newItem = {
+          id: generateId(),
+          name: itemData.name || '',
+          brand: itemData.brand || '',
+          code: itemData.code || '',
+          quantity: qty,
+          price,
+          uom: normalizeUom(itemData.uom),
+          vendor: itemData.vendor || '',
+          category: normalizeCategory(itemData.category) as any,
+          description: itemData.description || '',
+          expiryDate: expiry || null,
+          createdAt: new Date().toISOString(),
+          batches: [{ id: generateId(), qty, unitPrice: price, expiryDate: expiry || null }],
+        };
+        currentItems = [...currentItems, newItem];
+      }
+      affectedItems.push(newItem);
+
+      // Activity log
+      addActivity(
+        roomId, roomNameForLog, 'receive',
+        `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" @ $${price.toFixed(2)}`,
+        { beforeValue: String(existingItem?.quantity ?? 0), afterValue: String(newItem.quantity) }
+      );
+
+      // History
+      const historyEntry: PurchaseHistory = {
+        id: generateId(),
+        timestamp: purchaseDate
+          ? new Date(`${purchaseDate}T${new Date().toTimeString().split(' ')[0]}`).toISOString()
+          : new Date().toISOString(),
+        productName: itemData.name || '',
+        brand: itemData.brand || '',
+        code: itemData.code || '',
+        vendor: itemData.vendor || '',
+        qty,
+        unitPrice: price,
+        totalPrice: qty * price,
+        location: roomNameForLog,
+        category: itemData.category || 'other',
+        roomId,
+        uom: itemData.uom || existingItem?.uom || 'pcs',
+        expiryDate: expiry,
+        description: itemData.description || existingItem?.description || '',
+      };
+      setHistory(h => [historyEntry, ...h]);
+      historyEntries.push(historyEntry);
+    }
+
+    // Optimistic update — apply all at once
+    setRooms(prev => prev.map(r => r.id === roomId ? { ...r, items: currentItems } : r));
+
+    if (!currentInventoryOwnerId) {
+      isDirty.current = false;
+      syncInFlight.current = false;
+      return;
+    }
+
+    try {
+      // Persist ALL items before clearing isDirty
+      for (const itm of affectedItems) {
+        const { error: itemErr } = await supabase.from('inventory_items').upsert({
+          id: itm.id,
+          room_id: roomId,
+          user_id: currentInventoryOwnerId,
+          name: itm.name,
+          brand: itm.brand,
+          code: itm.code,
+          quantity: itm.quantity,
+          price: itm.price,
+          uom: normalizeUom(itm.uom),
+          vendor: itm.vendor,
+          category: normalizeCategory(itm.category),
+          description: itm.description,
+          expiry_date: itm.expiryDate,
+        });
+        if (itemErr) throw itemErr;
+
+        if (itm.batches) {
+          for (const b of itm.batches) {
+            await supabase.from('inventory_item_batches').upsert({
+              id: b.id,
+              item_id: itm.id,
+              qty: b.qty,
+              unit_price: b.unitPrice,
+              expiry_date: b.expiryDate,
+            });
+          }
+        }
+      }
+
+      // Persist all history entries to Supabase
+      for (const h of historyEntries) {
+        const { error: histErr } = await supabase.from('inventory_purchase_history').insert({
+          id: h.id,
+          user_id: currentInventoryOwnerId,
+          room_id: h.roomId,
+          occurred_at: h.timestamp,
+          product_name: h.productName,
+          brand: h.brand,
+          code: h.code,
+          vendor: h.vendor,
+          qty: h.qty,
+          unit_price: h.unitPrice,
+          total_price: h.totalPrice,
+          location: h.location,
+          category: normalizeCategory(h.category),
+          uom: normalizeUom(h.uom as string),
+          expiry_date: h.expiryDate || null,
+        });
+        if (histErr) console.error('receiveStockBatch: failed to persist history entry', histErr);
+      }
+
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('receiveStockBatch: failed to persist items', err);
+      setSyncStatus('error');
+    } finally {
+      // Only NOW is it safe to clear isDirty — all items are in Supabase
+      isDirty.current = false;
+      syncInFlight.current = false;
     }
   };
 
@@ -1954,7 +2397,6 @@ const handleLogout = async () => {
           quantity: itm.quantity,
           price: itm.price,
           expiry_date: itm.expiryDate,
-          user_id: currentInventoryOwnerId
         }).eq('id', itm.id);
 
         if (error) throw error;
@@ -2060,7 +2502,6 @@ const handleLogout = async () => {
           quantity: itm.quantity,
           price: itm.price,
           expiry_date: itm.expiryDate,
-          user_id: currentInventoryOwnerId
         }).eq('id', itm.id);
 
         if (itemUpdateError) throw itemUpdateError;
@@ -2151,14 +2592,13 @@ const handleLogout = async () => {
           name: updatedItem.name,
           brand: updatedItem.brand,
           code: updatedItem.code,
-          uom: updatedItem.uom,
+          uom: normalizeUom(updatedItem.uom),
           vendor: updatedItem.vendor,
-          category: updatedItem.category,
+          category: normalizeCategory(updatedItem.category),
           description: updatedItem.description,
           expiry_date: updatedItem.expiryDate,
           quantity: updatedItem.quantity,
           price: updatedItem.price,
-          user_id: currentInventoryOwnerId
         }).eq('id', itemId);
         if (error) throw error;
 
@@ -2245,7 +2685,6 @@ const handleLogout = async () => {
           quantity: updatedItem.quantity,
           price: updatedItem.price,
           expiry_date: updatedItem.expiryDate,
-          user_id: currentInventoryOwnerId
         }).eq('id', itemId);
         if (itemErr) throw itemErr;
 
@@ -2448,7 +2887,6 @@ const handleLogout = async () => {
             quantity: updatedFromItem.quantity,
             price: updatedFromItem.price,
             expiry_date: updatedFromItem.expiryDate,
-            user_id: currentInventoryOwnerId
           }).eq('id', updatedFromItem.id);
 
           // Update batches for source
@@ -2471,8 +2909,8 @@ const handleLogout = async () => {
           room_id: toRoomId,
           name: finalMovedItem.name,
           brand: finalMovedItem.brand,
-          category: finalMovedItem.category,
-          uom: finalMovedItem.uom,
+          category: normalizeCategory(finalMovedItem.category),
+          uom: normalizeUom(finalMovedItem.uom),
           quantity: finalMovedItem.quantity,
           price: finalMovedItem.price,
           expiry_date: finalMovedItem.expiryDate,
@@ -2560,7 +2998,7 @@ const handleLogout = async () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col select-none bg-slate-50">
+    <div className={`min-h-screen flex flex-col select-none ${theme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       <Header
         onProfileClick={() => setCurrentView('profile')}
         onDashboardClick={() => navigatetoSnabbb()}
@@ -2573,6 +3011,8 @@ const handleLogout = async () => {
         availableInventories={availableInventories}
         currentInventoryId={currentInventoryOwnerId}
         onSwitchInventory={setCurrentInventoryOwnerId}
+        theme={theme}
+        onSetTheme={handleSetTheme}
       />
 
       <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-8 px-0 md:px-16 lg:px-32 py-8">
@@ -2675,6 +3115,8 @@ const handleLogout = async () => {
                 onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
+                onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
+                onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
                 readOnly={!canEditItems || isLoadingMain}
               />
             </>
@@ -2699,6 +3141,7 @@ const handleLogout = async () => {
           onClose={() => setActiveRoomId(null)}
           onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateRoomName(id, name); }}
           onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
+          onReceiveBatch={(rid, items) => receiveStockBatch(rid, items)}
           onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
           onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}

@@ -167,7 +167,7 @@ export const MolarChat = React.memo(({
             <div className="fixed inset-0 bg-slate-900/10 backdrop-blur-[2px] z-[9998] md:hidden" onClick={onClose} />
 
             {/* Main Capsule Container */}
-            <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 w-[90vw] md:w-[385px] h-[70vh] md:h-[600px] max-h-[85vh] flex flex-col font-sans z-[9999] animate-in slide-in-from-bottom-[5%] duration-500 ease-out-back overflow-hidden rounded-[1.5rem] shadow-2xl shadow-slate-200/50 border border-white/40 bg-white/80 backdrop-blur-2xl ring-1 ring-slate-900/5">
+            <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 w-[90vw] md:w-[385px] h-[70vh] md:h-[600px] max-h-[85vh] flex flex-col font-sans z-[9999] animate-in slide-in-from-bottom-[5%] duration-500 ease-out-back overflow-hidden rounded-[1.5rem] shadow-2xl shadow-slate-200/50 border border-white/40 bg-white/80 dark:bg-slate-900/95 dark:border-slate-700/60 backdrop-blur-2xl ring-1 ring-slate-900/5">
 
                 {/* Background Ambience */}
                 <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -176,11 +176,11 @@ export const MolarChat = React.memo(({
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.2] mix-blend-overlay"></div>
                 </div>
 
-                <div className="flex items-center justify-between px-5 py-2 relative z-10 border-b border-slate-200 bg-white">
+                <div className="flex items-center justify-between px-5 py-2 relative z-10 border-b border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700">
                     {/* Logo/Title */}
                     <div className="flex items-center">
                         <span className="text-[22px] font-extrabold tracking-normal" style={{ color: '#2A9D8F' }}>SN</span>
-                        <span className="text-[22px] font-extrabold tracking-normal text-black">AI</span>
+                        <span className="text-[22px] font-extrabold tracking-normal text-black dark:text-white">AI</span>
                     </div>
 
                     {/* Header Actions */}
@@ -234,7 +234,7 @@ export const MolarChat = React.memo(({
                                     <button
                                         key={`${prompt.text}-${index}`}
                                         onClick={() => setChatInput(prompt.text)}
-                                        className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all shadow-sm hover:shadow-md text-left"
+                                        className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all shadow-sm hover:shadow-md text-left"
                                     >
                                         <div className="w-8 h-8 rounded-xl bg-emerald-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-emerald-50">
                                             <DynamicIcon name={prompt.icon_name} className="w-4 h-4 text-emerald-600" />

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   BarChart3,
@@ -436,14 +435,27 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
   }, [inventory, inventoryDimension, inventoryBreakdownPeriod]);
 
   const currentBreakdown = useMemo(() => {
+    // When viewing by category, use live inventory data (same source as bar chart)
+    // so both charts stay in sync when qty changes.
+    // Other breakdown types (vendor, product, reorder) still use purchase history.
+    if (breakdownType === 'category') {
+      const totalValue = inventoryBreakdownData.reduce((sum, cat) => sum + cat.value, 0);
+      return inventoryBreakdownData.map(cat => ({
+        ...cat,
+        amount: cat.value,
+        count: 0,
+        totalSpent: cat.value,
+        percentage: totalValue > 0 ? (cat.value / totalValue) * 100 : 0,
+        icon: (CATEGORIES.find(c => c.id === cat.id) as any)?.icon || null,
+      }));
+    }
     switch (breakdownType) {
-      case 'category': return usageStats.categoryBreakdown;
       case 'vendor': return usageStats.vendorBreakdown;
       case 'product': return usageStats.productBreakdown;
       case 'reorder': return usageStats.reorderBreakdown;
       default: return usageStats.categoryBreakdown;
     }
-  }, [breakdownType, usageStats]);
+  }, [breakdownType, usageStats, inventoryBreakdownData]);
 
   const breakdownOptions = [
     { value: 'category', label: 'By Category', icon: <PieChart className="w-4 h-4" /> },
@@ -482,7 +494,9 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
 
   const isQuantityReport = breakdownType === 'product';
   const isReorderReport = breakdownType === 'reorder';
-  const totalValue = isReorderReport ? usageStats.totalReorders : (isQuantityReport ? usageStats.totalQuantity : usageStats.totalExpense);
+  const totalValue = breakdownType === 'category'
+    ? inventoryBreakdownData.reduce((sum, cat) => sum + cat.value, 0)
+    : (isReorderReport ? usageStats.totalReorders : (isQuantityReport ? usageStats.totalQuantity : usageStats.totalExpense));
 
   const handleDistributionMouseMove = (e: React.MouseEvent) => {
     if (!containerRef.current) return;
@@ -1567,9 +1581,6 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
               {renderSpendingChart()}
             </div>
           </div>
-
-
-
         </div>
       </div>
     </div>

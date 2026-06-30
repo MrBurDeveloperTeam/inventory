@@ -8,6 +8,13 @@
     <link rel="icon" type="image/png" href="/images/InventoryIcon.png">
     <link rel="apple-touch-icon" href="/images/InventoryIcon.png">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Enable class-based dark mode for Tailwind CDN
+      tailwind.config = {
+        darkMode: 'class',
+        theme: { extend: {} },
+      };
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -57,6 +64,60 @@
     </style>
 
     <link rel="stylesheet" href="/index.css">
+
+    <!--
+      Theme bootstrap — runs synchronously before React paints.
+      Priority:
+        1. window.__SNABBB_THEME__ — injected server-side by _worker.js
+        2. snabbb-theme cookie     — set by gallery, cross-subdomain
+        3. localStorage['theme']   — this app's own last-used value
+        4. 'light' fallback
+    -->
+    <script>
+      (function () {
+        var VALID = { light: true, dark: true, system: true };
+
+        function readCookie(name) {
+          var m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+          return m ? decodeURIComponent(m[1]) : null;
+        }
+
+        function safeGet(k) {
+          try { return window.localStorage.getItem(k); } catch (e) { return null; }
+        }
+
+        function parse(raw) {
+          if (!raw) return null;
+          var s = String(raw).trim();
+          if (s.charAt(0) === '{') {
+            try {
+              var p = JSON.parse(s);
+              s = (p && p.state && p.state.theme) || (p && p.theme) || s;
+            } catch (e) {}
+          }
+          s = s.trim().toLowerCase();
+          return VALID[s] ? s : null;
+        }
+
+        function resolve(t) {
+          if (t === 'system')
+            return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark' : 'light';
+          return t === 'dark' ? 'dark' : 'light';
+        }
+
+        var theme = parse(window.__SNABBB_THEME__)
+                 || parse(readCookie('snabbb-theme'))
+                 || parse(safeGet('theme'))
+                 || 'light';
+
+        var resolved = resolve(theme);
+        document.documentElement.setAttribute('data-theme', resolved);
+        document.documentElement.dataset.themePreference = theme;
+        document.documentElement.classList.toggle('dark', resolved === 'dark');
+        document.documentElement.style.colorScheme = resolved;
+      })();
+    </script>
 </head>
 
 <body class="bg-slate-50 text-slate-900">

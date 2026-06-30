@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import {
   Search,
@@ -27,9 +26,10 @@ import {
   Tag,
   Truck,
   Layers,
-  MapPin
+  MapPin,
+  Check,
 } from 'lucide-react';
-import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { CATEGORIES, UOMS } from './constants';
 import ClinicAnalytics from './ClinicAnalytics';
 import { getPurchaseHistoryLocation, isArchivedPurchaseHistory } from './src/utils/roomDeletion';
@@ -45,6 +45,8 @@ interface MasterInventoryProps {
   onDeleteItem?: (roomId: string, itemId: string) => void;
   onUpdateItem?: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
   onUpdateBatch?: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
+  onRestoreRoom?: (roomName: string, itemSnapshot?: string) => void;
+  onAssignTbaItem?: (itemId: string, toRoomId: string) => void;
   readOnly?: boolean;
 }
 
@@ -59,6 +61,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   onDeleteItem,
   onUpdateItem,
   onUpdateBatch,
+  onRestoreRoom,
+  onAssignTbaItem,
   readOnly = false
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
@@ -88,25 +92,51 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const [expiry, setExpiry] = useState('');
   const [hasExpiry, setHasExpiry] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ roomId: string; itemId: string; name: string; batchIndex?: number; qty?: number; expiryDate?: string } | null>(null);
+  const [isQtyEditMode, setIsQtyEditMode] = useState(false);
 
-  // Flattened items for the master list
-  const allItems = useMemo(() => {
-    return rooms.flatMap(room =>
-      room.items.map(item => ({ ...item, roomName: room.name, roomId: room.id }))
-    ).filter(item =>
-      (item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)) &&
-      (inventoryCategory === 'all' || item.category === inventoryCategory) &&
-      (inventoryVendor === 'all' || item.vendor === inventoryVendor) &&
-      (inventoryLocation === 'all' || String(item.roomId) === inventoryLocation)
-    ).sort((a, b) => {
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : Date.now();
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : Date.now();
-      return dateA - dateB;
+  // TBA items — from the virtual unassigned room, shown separately
+  // Max qty per item = total ever received from purchase history (name+code key)
+  // Used to cap the + button so qty never exceeds what was originally purchased.
+  const maxQtyMap = useMemo(() => {
+    const map = new Map<string, number>();
+    history.forEach(h => {
+      const key = `${h.productName}|${h.code || ''}`;
+      map.set(key, (map.get(key) || 0) + h.qty);
     });
+    return map;
+  }, [history]);
+
+  const getMaxQty = (item: { name: string; code: string }) => {
+    const key = `${item.name}|${item.code || ''}`;
+    return maxQtyMap.get(key) ?? Infinity; // Infinity = no history found, allow free editing
+  };
+
+  const tbaItems = useMemo(() =>
+    (rooms.find(r => r.id === TBA_ROOM_ID)?.items ?? [])
+      .map(item => ({ ...item, roomName: TBA_ROOM_NAME, roomId: TBA_ROOM_ID })),
+    [rooms]
+  );
+
+  // Flattened items for the master list (excludes TBA virtual room)
+  const allItems = useMemo(() => {
+    return rooms
+      .filter(room => room.id !== TBA_ROOM_ID)
+      .flatMap(room =>
+        room.items.map(item => ({ ...item, roomName: room.name, roomId: room.id }))
+      ).filter(item =>
+        (item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (item.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)) &&
+        (inventoryCategory === 'all' || item.category === inventoryCategory) &&
+        (inventoryVendor === 'all' || item.vendor === inventoryVendor) &&
+        (inventoryLocation === 'all' || String(item.roomId) === inventoryLocation)
+      ).sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : Date.now();
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : Date.now();
+        return dateA - dateB;
+      });
   }, [rooms, searchTerm, inventoryCategory, inventoryVendor, inventoryLocation]);
 
   // Filtered History
@@ -158,7 +188,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     return Array.from(vendors);
   }, [rooms]);
 
-  const inventoryLocations = useMemo(() => rooms.map(r => ({ id: r.id, name: r.name })), [rooms]);
+  const inventoryLocations = useMemo(() => rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => ({ id: r.id, name: r.name })), [rooms]);
 
   const [openBatchRows, setOpenBatchRows] = useState<Record<string, boolean>>({});
   const toggleBatchRow = (key: string) => {
@@ -425,7 +455,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="md:hidden">History</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'history' ? 'bg-[#9b59b6] scale-x-100' : 'bg-transparent scale-x-0'}`} />
           </button>
-          <button
+          {/* <button
             onClick={() => setActiveTab('analytics')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'analytics' ? 'md:bg-indigo-600 md:text-white md:shadow-md text-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -433,7 +463,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="hidden md:inline">Usage Stats</span>
             <span className="md:hidden">Stats</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'analytics' ? 'bg-indigo-600 scale-x-100' : 'bg-transparent scale-x-0'}`} />
-          </button>
+          </button> */}
           <button
             onClick={() => setActiveTab('expiring')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'expiring' ? 'md:bg-[#f39c12] md:text-white md:shadow-md text-[#f39c12]' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -459,9 +489,25 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         {
           activeTab === 'all' && (
             <div className="flex flex-col gap-6 animate-in fade-in duration-300">
-              <div className="flex items-center gap-3">
-                <div className="bg-emerald-100 p-3 rounded-2xl text-[#4d9678]"><ClipboardList className="w-6 h-6" /></div>
-                <h4 className="text-[#4d9678] font-bold text-xl tracking-tight">All Inventory</h4>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="bg-emerald-100 p-3 rounded-2xl text-[#4d9678]"><ClipboardList className="w-6 h-6" /></div>
+                  <h4 className="text-[#4d9678] font-bold text-xl tracking-tight">All Inventory</h4>
+                </div>
+                {!readOnly && onUpdateQty && (
+                  <button
+                    onClick={() => setIsQtyEditMode(v => !v)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                      isQtyEditMode
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                    title={isQtyEditMode ? 'Lock quantities' : 'Edit quantities'}
+                  >
+                    {isQtyEditMode ? <Check className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+                    {isQtyEditMode ? 'Done Editing' : 'Edit Qty'}
+                  </button>
+                )}
               </div>
               {/* FILTER AREA */}
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-sm animate-in slide-in-from-top-2 duration-500">
@@ -526,6 +572,67 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 </div>
               </div>
 
+              {/* ── TBA Section — items whose room was deleted ─────────────────── */}
+              {tbaItems.length > 0 && (
+                <div className="border-2 border-amber-300 rounded-2xl overflow-hidden bg-amber-50/40">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-amber-100/80 border-b border-amber-200">
+                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-amber-800 font-black text-xs uppercase tracking-widest">
+                      Unassigned Items (TBA) — {tbaItems.length} item{tbaItems.length !== 1 ? 's' : ''} need a room
+                    </span>
+                  </div>
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-amber-50 text-amber-700 font-black uppercase tracking-widest text-[9px] border-b border-amber-200">
+                      <tr>
+                        <th className="px-3 py-3 w-[200px]">Product</th>
+                        <th className="px-3 py-3 w-[80px]">Code</th>
+                        <th className="px-3 py-3 w-[60px]">Qty</th>
+                        <th className="px-3 py-3 w-[60px]">UOM</th>
+                        <th className="px-3 py-3 w-[80px]">Price</th>
+                        <th className="px-3 py-3 w-[140px]">Vendor</th>
+                        <th className="px-3 py-3">Assign to Room</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100">
+                      {tbaItems.map(item => (
+                        <tr key={item.id} className="bg-white/60 hover:bg-amber-50/60 transition-colors">
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wider shrink-0">TBA</span>
+                              <span className="font-semibold text-slate-800 truncate" title={item.name}>{item.name}</span>
+                            </div>
+                            {item.brand && <p className="text-slate-400 text-[10px] mt-0.5 pl-8">{item.brand}</p>}
+                          </td>
+                          <td className="px-3 py-3 text-slate-500 font-mono text-[10px]">{item.code || '—'}</td>
+                          <td className="px-3 py-3 font-bold text-slate-700">{item.quantity}</td>
+                          <td className="px-3 py-3 text-slate-500">{item.uom}</td>
+                          <td className="px-3 py-3 text-slate-700">${item.price.toFixed(2)}</td>
+                          <td className="px-3 py-3 text-slate-500 truncate" title={item.vendor}>{item.vendor || '—'}</td>
+                          <td className="px-3 py-3">
+                            {onAssignTbaItem && rooms.filter(r => r.id !== TBA_ROOM_ID).length > 0 ? (
+                              <select
+                                defaultValue=""
+                                onChange={e => {
+                                  if (e.target.value) onAssignTbaItem(item.id, e.target.value);
+                                }}
+                                className="text-[11px] font-semibold border border-amber-300 rounded-lg px-2 py-1.5 bg-white text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 hover:border-amber-400 transition-colors"
+                              >
+                                <option value="" disabled>Select a room…</option>
+                                {rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => (
+                                  <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-amber-600 text-[10px] font-semibold italic">No rooms — add a room first</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               <div className="hidden md:block border border-slate-200 rounded-2xl overflow-hidden shadow-sm custom-scrollbar">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200 sticky top-0 z-10">
@@ -541,7 +648,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       <th className="px-3 py-5 w-[80px]">Category</th>
                       <th className="px-3 py-5 w-[80px]">Expires</th>
                       <th className="px-3 py-5 w-[80px]">Location</th>
-
+                      <th className="w-8"></th>
                     </tr>
                   </thead>
 
@@ -594,32 +701,35 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   </td>
 
                                   <td className="px-3 py-4">
-                                    <div className="flex items-center justify-center gap-2">
-                                      {(!readOnly && batches.length === 1 && onUpdateQty) ? (
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      {(!readOnly && onUpdateQty && isQtyEditMode) ? (
                                         <>
                                           <button
-                                            onClick={() => item.quantity > 1 && onUpdateQty(item.roomId, item.id, -1)}
-                                            disabled={item.quantity <= 1}
-                                            className={`w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full transition-colors ${item.quantity <= 1 ? 'text-slate-200 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100 text-slate-400 hover:text-rose-500'}`}
+                                            onClick={() => onUpdateQty(item.roomId, item.id, -1)}
+                                            disabled={item.quantity <= 0}
+                                            className={`w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full transition-colors ${item.quantity <= 0 ? 'text-slate-200 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100 text-slate-400 hover:text-rose-500'}`}
                                             aria-label="Decrease quantity"
                                           >
                                             <Minus className="w-3 h-3" />
                                           </button>
-
                                           <span className="min-w-[24px] text-center font-bold text-slate-800 text-xs">
                                             {item.quantity}
                                           </span>
-
                                           <button
-                                            onClick={() => onUpdateQty(item.roomId, item.id, 1)}
-                                            className="w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full hover:bg-slate-100 text-slate-400 hover:text-emerald-500 transition-colors"
+                                            onClick={() => {
+                                              const max = getMaxQty(item);
+                                              if (item.quantity < max) onUpdateQty(item.roomId, item.id, 1);
+                                            }}
+                                            disabled={item.quantity >= getMaxQty(item)}
+                                            className={`w-6 h-6 flex items-center justify-center border border-slate-200 rounded-full transition-colors ${item.quantity >= getMaxQty(item) ? 'text-slate-200 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100 text-slate-400 hover:text-emerald-500'}`}
                                             aria-label="Increase quantity"
+                                            title={item.quantity >= getMaxQty(item) ? `Max quantity reached (${getMaxQty(item)} purchased)` : `Increase quantity (max: ${getMaxQty(item)})`}
                                           >
                                             <Plus className="w-3 h-3" />
                                           </button>
                                         </>
                                       ) : (
-                                        <span className="font-bold text-slate-800 text-center">{item.quantity}</span>
+                                        <span className="font-bold text-slate-800 text-center text-xs">{item.quantity}</span>
                                       )}
                                     </div>
                                   </td>
@@ -683,9 +793,36 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   </td>
 
                                   <td className="px-3 py-4">
-                                    <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
-                                      {item.roomName}
-                                    </span>
+                                    <select
+                                      value={item.roomId}
+                                      disabled={rooms.length <= 1 || !onTransfer}
+                                      onChange={(e) => {
+                                        const toRoomId = e.target.value;
+                                        if (toRoomId && toRoomId !== item.roomId && onTransfer) {
+                                          onTransfer(item.roomId, toRoomId, item.id, item.quantity);
+                                        }
+                                      }}
+                                      className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate disabled:cursor-default disabled:opacity-80"
+                                      title={rooms.length <= 1 ? item.roomName : `Move from ${item.roomName}`}
+                                    >
+                                      {rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => (
+                                        <option key={r.id} value={r.id}>{r.name}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+
+                                  {/* Delete button — only visible in edit mode */}
+                                  <td className="px-2 py-4 w-8">
+                                    {isQtyEditMode && !readOnly && onDeleteItem && (
+                                      <button
+                                        onClick={() => setDeleteTarget({ roomId: item.roomId, itemId: item.id, name: item.name })}
+                                        className="w-6 h-6 flex items-center justify-center rounded-full text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                                        aria-label={`Delete ${item.name}`}
+                                        title={`Delete "${item.name}"`}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                   </td>
 
                                 </tr>
@@ -964,7 +1101,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Add to Location *</label>
                     <select value={selectedRoomId} onChange={e => setSelectedRoomId(e.target.value)} className="px-4 py-3 rounded-xl border border-slate-200 font-normal bg-white text-slate-800 text-sm focus:ring-2 focus:ring-[#3498db] outline-none shadow-sm" required>
                       <option value="">Select room...</option>
-                      {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      {rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -1303,7 +1440,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         {/* VIEW: CLINIC ANALYTICS */}
         {
           activeTab === 'analytics' && (
-            <ClinicAnalytics history={history} inventory={rooms.flatMap(r => r.items)} />
+            <ClinicAnalytics history={history} inventory={rooms.filter(r => r.id !== TBA_ROOM_ID).flatMap(r => r.items)} />
           )
         }
 
@@ -1370,9 +1507,22 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   ${(item.qty * item.price).toFixed(2)}
                                 </td>
                                 <td className="px-3 py-4">
-                                  <span className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30">
-                                    {item.roomName}
-                                  </span>
+                                  <select
+                                    value={item.roomId}
+                                    disabled={rooms.length <= 1 || !onTransfer}
+                                    onChange={(e) => {
+                                      const toRoomId = e.target.value;
+                                      if (toRoomId && toRoomId !== item.roomId && onTransfer) {
+                                        onTransfer(item.roomId, toRoomId, item.id, item.qty);
+                                      }
+                                    }}
+                                    className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate disabled:cursor-default disabled:opacity-80"
+                                    title={rooms.length <= 1 ? item.roomName : `Move from ${item.roomName}`}
+                                  >
+                                    {rooms.filter(r => r.id !== TBA_ROOM_ID).map(r => (
+                                      <option key={r.id} value={r.id}>{r.name}</option>
+                                    ))}
+                                  </select>
                                 </td>
                                 <td className="px-3 py-4 text-right text-slate-500 text-xs whitespace-nowrap">
                                   {item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('en-GB') : '-'}
@@ -1552,14 +1702,16 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     {log.details}
                   </p>
 
-                  {log.beforeValue !== undefined && log.afterValue !== undefined && (
+                  {log.beforeValue !== undefined && log.afterValue !== undefined &&
+                   !log.details?.startsWith('Deleted room') &&
+                   !log.beforeValue?.startsWith('[') &&
+                   !log.beforeValue?.startsWith('{') && (
                     <div className="flex items-center gap-3 mt-1">
                       <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-slate-100 px-3 py-1.5 rounded-xl shadow-sm">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Delta</span>
                         <span className="text-[12px] font-bold text-slate-400 line-through decoration-slate-300">{log.beforeValue}</span>
                         <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
-                        <span className={`text-[12px] font-black ${Number(log.afterValue) > Number(log.beforeValue) ? 'text-emerald-600' : 'text-rose-600'
-                          }`}>
+                        <span className={`text-[12px] font-black ${Number(log.afterValue) > Number(log.beforeValue) ? 'text-emerald-600' : 'text-rose-600'}`}>
                           {log.afterValue}
                         </span>
                       </div>
@@ -1576,6 +1728,56 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <Calendar className="w-3.5 h-3.5" />
                   <p className="text-[12px] font-bold">{new Date(log.timestamp).toLocaleDateString('en-GB')}</p>
                 </div>
+                {log.action === 'delete' && (() => {
+                  // Item deletion: Deleted "ItemName"
+                  const itemMatch = log.details?.match(/^Deleted "([^"]+)"$/);
+                  // Room deletion: Deleted room "RoomName"
+                  const roomMatch = log.details?.match(/^Deleted room "([^"]+)"$/);
+
+                  if (itemMatch && onReceive) {
+                    const itemName = itemMatch[1];
+                    const parsedQty = Number(log.beforeValue);
+                    const qty = isNaN(parsedQty) ? 1 : parsedQty;
+                    return (
+                      <button
+                        onClick={() => {
+                          onReceive(
+                            log.roomId,
+                            { name: itemName, category: 'other' as any, uom: 'pcs' as any },
+                            qty,
+                            0,
+                            new Date().toISOString().split('T')[0]
+                          );
+                        }}
+                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-nowrap"
+                        title={`Restore ${qty}x "${itemName}" to ${log.roomName}`}
+                      >
+                        <RefreshCcw className="w-3 h-3" />
+                        Restore Item
+                      </button>
+                    );
+                  }
+
+                  if (roomMatch && onRestoreRoom) {
+                    const roomName = roomMatch[1];
+                    const itemCount = Number(log.afterValue) || 0;
+                    // Don't show restore button if a room with this name already exists
+                    const alreadyExists = rooms.some(r => r.name === roomName && r.id !== TBA_ROOM_ID);
+                    if (alreadyExists) return null;
+                    return (
+                      <button
+                        onClick={() => onRestoreRoom(roomName, log.beforeValue)}
+                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-all duration-200 whitespace-nowrap"
+                        title={`Recreate "${roomName}" with ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
+                      >
+                        <RefreshCcw className="w-3 h-3" />
+                        Restore Room {itemCount > 0 ? `+ ${itemCount} items` : ''}
+                      </button>
+                    );
+                  }
+
+                  return null;
+                })()}
               </div>
             </div>
           )) : (

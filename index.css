@@ -199,3 +199,174 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #cbd5e1;
 }
+
+/* =============================================================
+   DARK MODE OVERRIDES
+   Applied when <html class="dark"> is set by themeSync.js.
+   Overrides Tailwind's default light palette so every component
+   responds to dark mode without needing individual dark: classes.
+   ============================================================= */
+
+.dark {
+  color-scheme: dark;
+}
+
+/* Base backgrounds */
+.dark body,
+.dark #root {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+/* ── Backgrounds ───────────────────────────────────────────── */
+.dark .bg-white          { background-color: #1e293b !important; }
+.dark .bg-white\/10      { background-color: rgba(30,41,59,0.10) !important; }
+.dark .bg-white\/15      { background-color: rgba(30,41,59,0.15) !important; }
+.dark .bg-white\/20      { background-color: rgba(30,41,59,0.20) !important; }
+.dark .bg-white\/50      { background-color: rgba(30,41,59,0.50) !important; }
+.dark .bg-white\/60      { background-color: rgba(30,41,59,0.60) !important; }
+.dark .bg-white\/80      { background-color: rgba(30,41,59,0.80) !important; }
+.dark .bg-white\/90      { background-color: rgba(30,41,59,0.90) !important; }
+.dark .bg-white\/95      { background-color: rgba(30,41,59,0.95) !important; }
+.dark .bg-slate-50        { background-color: #1e293b !important; }
+.dark .bg-slate-100       { background-color: #273549 !important; }
+.dark .bg-slate-50\/30    { background-color: rgba(30,41,59,0.30) !important; }
+.dark .bg-slate-50\/40    { background-color: rgba(30,41,59,0.40) !important; }
+.dark .bg-slate-50\/50    { background-color: rgba(30,41,59,0.50) !important; }
+.dark .bg-slate-50\/60    { background-color: rgba(30,41,59,0.60) !important; }
+.dark .bg-slate-50\/80    { background-color: rgba(30,41,59,0.80) !important; }
+.dark .bg-slate-50\/95    { background-color: rgba(30,41,59,0.95) !important; }
+.dark .bg-slate-100\/70   { background-color: rgba(39,53,73,0.70) !important; }
+.dark .bg-slate-200\/50   { background-color: rgba(51,65,85,0.50) !important; }
+.dark .bg-slate-900\/10   { background-color: rgba(2,6,23,0.10) !important; }
+.dark .bg-slate-900\/40   { background-color: rgba(2,6,23,0.40) !important; }
+.dark .bg-slate-900\/50   { background-color: rgba(2,6,23,0.50) !important; }
+.dark .bg-slate-900\/60   { background-color: rgba(2,6,23,0.60) !important; }
+
+/* Custom hex backgrounds used in this app */
+.dark .bg-\[\#f8fafc\]  { background-color: #162032 !important; }
+
+/* Blue batch rows */
+.dark .bg-blue-100\/50  { background-color: rgba(30,58,138,0.2) !important; }
+
+/* ── Table elements ────────────────────────────────────────── */
+.dark table             { background-color: #1e293b !important; color: #e2e8f0; }
+.dark thead             { background-color: #162032 !important; }
+.dark thead th          { color: #94a3b8 !important; border-color: #334155 !important; }
+.dark tbody             { background-color: #1e293b !important; }
+.dark tbody tr          { background-color: #1e293b !important; border-color: #273549 !important; }
+.dark tbody tr:hover    { background-color: #273549 !important; }
+.dark tbody td          { border-color: #273549 !important; }
+
+/* Category separator rows in the table */
+.dark .border-y.border-slate-200 { border-color: #334155 !important; }
+
+/* divide utilities for table rows */
+.dark .divide-y > * + *  { border-color: #273549 !important; }
+.dark .divide-slate-50 > * + * { border-color: #273549 !important; }
+
+/* ── Text colors ───────────────────────────────────────────── */
+.dark .text-slate-900:not(.pet-interface *) { color: #f1f5f9 !important; }
+.dark .text-slate-800:not(.pet-interface *) { color: #e2e8f0 !important; }
+.dark .text-slate-700:not(.pet-interface *) { color: #cbd5e1 !important; }
+.dark .text-slate-600 { color: #94a3b8 !important; }
+.dark .text-slate-500 { color: #64748b !important; }
+.dark .text-slate-400 { color: #94a3b8 !important; }
+
+/* ── Borders ───────────────────────────────────────────────── */
+.dark .border-slate-200 { border-color: #334155 !important; }
+.dark .border-slate-100 { border-color: #273549 !important; }
+
+/* ── Shadows ───────────────────────────────────────────────── */
+.dark .shadow-sm  { box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important; }
+.dark .shadow-xl  { box-shadow: 0 8px 30px rgba(0,0,0,0.5) !important; }
+.dark .shadow-2xl { box-shadow: 0 16px 48px rgba(0,0,0,0.6) !important; }
+
+/* ── Header ────────────────────────────────────────────────── */
+.dark header { background-color: #1e293b !important; border-color: #334155 !important; }
+
+/* ── Inputs / selects ─────────────────────────────────────── */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: #273549 !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: #64748b !important; }
+
+/* Transparent inputs (room name, inline table cells) keep no background */
+.dark input.bg-transparent,
+.dark textarea.bg-transparent {
+  background-color: transparent !important;
+  border-color: inherit !important;
+}
+
+/* ── Hover states ─────────────────────────────────────────── */
+.dark .hover\:bg-slate-50:hover  { background-color: #273549 !important; }
+.dark .hover\:bg-slate-100:hover { background-color: #2d3f56 !important; }
+.dark .hover\:bg-white:hover     { background-color: #273549 !important; }
+
+/* ── Backdrop / blur overlays ─────────────────────────────── */
+.dark .backdrop-blur-sm { background-color: rgba(15,23,42,0.6) !important; }
+
+/* ── Sticky table header ──────────────────────────────────── */
+.dark thead.sticky,
+.dark .sticky { background-color: #162032 !important; }
+
+/* ── Custom scrollbar ─────────────────────────────────────── */
+.dark .custom-scrollbar::-webkit-scrollbar-thumb       { background: #334155; }
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+
+/* ── Hexagon room cards (ClinicMap) ──────────────────────────────────────── */
+/* bg-white/95 is used on room hexagons — ensure text stays readable in dark  */
+.dark .hexagon.bg-white\/95 { background-color: rgba(30,41,59,0.95) !important; }
+.dark .hexagon span { color: #e2e8f0 !important; }
+
+/* ── Emerald badge (SKU count on room hexagons) ──────────────────────────── */
+.dark .bg-emerald-100    { background-color: #064e3b !important; }
+.dark .text-emerald-700  { color: #34d399 !important; }
+.dark .border-emerald-200 { border-color: #065f46 !important; }
+.dark .bg-emerald-50     { background-color: #022c22 !important; }
+.dark .text-emerald-600  { color: #34d399 !important; }
+.dark .border-emerald-100 { border-color: #064e3b !important; }
+.dark .border-emerald-100\/50 { border-color: rgba(6,78,59,0.5) !important; }
+
+/* ── Cat mascot dialog bubble ────────────────────────────────────────────── */
+/* The bubble uses bg-white (covered) but dialog text has inline style color */
+/* Target the dialog wrapper and force text color on all children            */
+.dark .cat-mascot-wrapper p { color: #e2e8f0 !important; }
+.dark .cat-mascot-wrapper span { color: #e2e8f0 !important; }
+
+/* ── MolarChat / SNAI chat modal ─────────────────────────────────────────── */
+.dark .text-black          { color: #f1f5f9 !important; }
+.dark .bg-white\/80        { background-color: rgba(30,41,59,0.92) !important; }
+.dark .bg-white\/60        { background-color: rgba(30,41,59,0.75) !important; }
+.dark .border-white\/40    { border-color: rgba(51,65,85,0.6) !important; }
+.dark .ring-slate-900\/5   { --tw-ring-color: rgba(51,65,85,0.3) !important; }
+.dark .shadow-slate-200\/50 { box-shadow: 0 16px 48px rgba(0,0,0,0.5) !important; }
+
+/* AI response bubbles */
+.dark .bg-slate-100\/70    { background-color: rgba(39,53,73,0.85) !important; }
+.dark .border-slate-200\/80 { border-color: rgba(51,65,85,0.6) !important; }
+
+/* Typing indicator bubble */
+.dark .bg-white\/80.border.border-slate-100 { background-color: rgba(30,41,59,0.9) !important; }
+
+/* Suggestion cards */
+.dark .hover\:bg-emerald-50\/30:hover { background-color: rgba(6,78,59,0.2) !important; }
+.dark .hover\:border-emerald-200:hover { border-color: #065f46 !important; }
+
+/* Chat input area */
+.dark .backdrop-blur-2xl { background-color: rgba(15,23,42,0.85) !important; }
+
+/* ── Remove shadows in dark mode (forms, cards, modals) ─────────────────── */
+.dark .shadow-lg,
+.dark .shadow-md,
+.dark .shadow-xl,
+.dark .shadow-2xl,
+.dark .shadow-sm {
+  box-shadow: none !important;
+}
