@@ -134,7 +134,9 @@ export default function CatMascot({ onCatClick, disabled = false }) {
   const [facingLeft, setFacingLeft] = useState(() => restoredMascotStateRef.current?.facingLeft ?? false);
   const [isMeowing, setIsMeowing] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [isPetSleeping, setIsPetSleeping] = useState(false);
+  const [isPetSleeping, setIsPetSleeping] = useState(() => {
+    try { return localStorage.getItem(PET_SLEEPING_KEY) === 'true'; } catch { return false; }
+  });
   const [selectedPetId, setSelectedPetId] = useState(() => normalizePetId(localStorage.getItem('pet_name')));
   const [walkDuration, setWalkDuration] = useState(0.8);
   const selectedPet = getPetOption(selectedPetId);
@@ -292,8 +294,13 @@ export default function CatMascot({ onCatClick, disabled = false }) {
 
     fetchStats();
     const interval = setInterval(fetchStats, 120000);
+    // Staggered retries: SSO exchange can take 0.5–4s; the first successful call wins
+    const r1 = setTimeout(fetchStats, 500);
+    const r2 = setTimeout(fetchStats, 2000);
+    const r3 = setTimeout(fetchStats, 5000);
     return () => {
       clearInterval(interval);
+      clearTimeout(r1); clearTimeout(r2); clearTimeout(r3);
       window.removeEventListener('virtual-pet-sleep-change', handlePetSleepChange);
       window.removeEventListener('virtual-pet-selection-change', handlePetSelectionChange);
       window.removeEventListener('storage', handleStorage);
