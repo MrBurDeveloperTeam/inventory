@@ -177,7 +177,8 @@ const Pet = forwardRef<HTMLDivElement, PetProps>(({
     : `0 -${sprite.row * FRAME_HEIGHT}px`;
   const isClickSprite = isClickReacting && !isSleeping && sleepFrame === null;
   const clickFrameDistance = FRAME_WIDTH * Math.max(0, sprite.frames - 1);
-  const spriteAnimation = sleepFrame !== null
+  // Keep the fixed mouth overlay aligned with the same sprite frame while eating.
+  const spriteAnimation = sleepFrame !== null || showOpenMouth
     ? 'none'
     : isClickSprite
       ? `mallow-vpet-click ${sprite.duration} steps(${sprite.frames - 1}, end) 1 forwards`
@@ -232,7 +233,7 @@ const Pet = forwardRef<HTMLDivElement, PetProps>(({
           <div className="pointer-events-none absolute inset-0" aria-hidden="true">
             <span
               className={[
-                'mallow-chew-mouth absolute -translate-x-1/2',
+                'mallow-chew-mouth absolute',
                 showChewingEffect ? 'mallow-chew-mouth-active' : 'mallow-chew-mouth-idle',
               ].join(' ')}
               style={{

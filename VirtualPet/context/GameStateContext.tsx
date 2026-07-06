@@ -18,6 +18,25 @@ const normalizeCurrencyCode = (currency?: string | null) => {
     return /^[A-Z]{3}$/.test(normalized) ? normalized : DEFAULT_CURRENCY_CODE;
 };
 
+const createStarterStats = (): PetStats => ({ ...INITIAL_STATS });
+const createStarterInventory = (): Record<string, number> => ({});
+
+const clearPetLocalStorage = () => {
+    [
+        'pet_stats',
+        'pet_name',
+        'pet_inventory',
+        'pet_last_saved_at',
+        'pet_active_ball',
+        ACTIVE_BED_KEY,
+        ACTIVE_BED_DEFAULT_MIGRATION_KEY,
+        PET_SLEEPING_KEY,
+        PET_SLEEPING_UPDATED_AT_KEY,
+        PET_ADOPTION_CONFIRMED_KEY,
+        'virtual_pet_bathroom_soap_inventory'
+    ].forEach((key) => localStorage.removeItem(key));
+};
+
 interface GameStateContextType {
     stats: PetStats;
     setStats: React.Dispatch<React.SetStateAction<PetStats>>;
@@ -222,6 +241,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode; currencyCo
             // Load from Supabase if logged in (overriding localStorage)
             if (currentUserId) {
                 try {
+                    let shouldLoadPetInventory = false;
                     const { data: petData, error: petErr } = await supabase
                         .from('inventory_pet')
                         .select('*')
@@ -229,10 +249,20 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode; currencyCo
                         .maybeSingle();
 
                     if (!petData && !petErr) {
+                        const starterStats = createStarterStats();
+                        const starterInventory = createStarterInventory();
+                        clearPetLocalStorage();
+                        setStats(starterStats);
+                        setInventory(starterInventory);
+                        setSoapInventory({ soap: 0, soap2: 0 });
+                        setActiveBallId('ball_red');
+                        setActiveBedId(null);
+                        setIsSleeping(false);
                         _setPetName(DEFAULT_PET_ID);
                         setHasAdoptedPet(false);
-                        localStorage.removeItem(PET_ADOPTION_CONFIRMED_KEY);
-                        localStorage.removeItem('pet_name');
+                        localStorage.setItem('pet_stats', JSON.stringify(starterStats));
+                        localStorage.setItem('pet_inventory', JSON.stringify(starterInventory));
+                        localStorage.setItem('pet_last_saved_at', new Date().toISOString());
                     }
 
                     if (petData && !petErr) {
@@ -280,32 +310,46 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode; currencyCo
                             setHasAdoptedPet(true);
                             localStorage.setItem('pet_name', adoptedPet);
                             localStorage.setItem(PET_ADOPTION_CONFIRMED_KEY, 'true');
+                            shouldLoadPetInventory = true;
+                            setIsSleeping(shouldUseLocalSleep ? savedSleeping === 'true' : !!petData.is_sleeping);
+                            if (petData.active_ball_id) setActiveBallId(petData.active_ball_id);
+                            setActiveBedId(petData.active_bed_id || null);
                         } else {
+                            const starterStats = createStarterStats();
+                            const starterInventory = createStarterInventory();
+                            clearPetLocalStorage();
+                            setStats(starterStats);
+                            setInventory(starterInventory);
+                            setSoapInventory({ soap: 0, soap2: 0 });
+                            setActiveBallId('ball_red');
+                            setActiveBedId(null);
                             _setPetName(DEFAULT_PET_ID);
                             setHasAdoptedPet(false);
-                            localStorage.removeItem(PET_ADOPTION_CONFIRMED_KEY);
-                            localStorage.removeItem('pet_name');
+                            localStorage.setItem('pet_stats', JSON.stringify(starterStats));
+                            localStorage.setItem('pet_inventory', JSON.stringify(starterInventory));
+                            localStorage.setItem('pet_last_saved_at', new Date().toISOString());
                         }
-                        setIsSleeping(shouldUseLocalSleep ? savedSleeping === 'true' : !!petData.is_sleeping);
-                        if (petData.active_ball_id) setActiveBallId(petData.active_ball_id);
-                        setActiveBedId(petData.active_bed_id || null);
                     }
 
-                    const { data: invData, error: invErr } = await supabase
-                        .from('pet_inventory')
-                        .select('item_id, quantity')
-                        .eq('user_id', currentUserId);
+                    if (shouldLoadPetInventory) {
+                        const { data: invData, error: invErr } = await supabase
+                            .from('pet_inventory')
+                            .select('item_id, quantity')
+                            .eq('user_id', currentUserId);
 
-                    if (invData && !invErr && invData.length > 0) {
                         const newInv: Record<string, number> = {};
-                        invData.forEach(row => {
-                            if (row.item_id === 'soap' || row.item_id === 'soap2') return;
-                            if (TOY_ITEM_IDS.includes(row.item_id)) {
-                                newInv[row.item_id] = row.quantity > 0 ? 1 : 0;
-                            } else {
-                                newInv[row.item_id] = row.quantity;
-                            }
-                        });
+                        if (invData && !invErr) {
+                            invData.forEach(row => {
+                                if (row.item_id === 'soap' || row.item_id === 'soap2') return;
+                                if (TOY_ITEM_IDS.includes(row.item_id)) {
+                                    newInv[row.item_id] = row.quantity > 0 ? 1 : 0;
+                                } else {
+                                    newInv[row.item_id] = row.quantity;
+                                }
+                            });
+                        } else if (invErr) {
+                            console.error('Failed to load pet inventory', invErr);
+                        }
                         setInventory(newInv);
                     }
                 } catch (err) {
@@ -463,32 +507,55 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode; currencyCo
         if (hasAdoptedPet) return false;
 
         const adoptedPet = normalizePetId(name);
+        const starterStats = createStarterStats();
+        const starterInventory = createStarterInventory();
+        const savedAt = new Date().toISOString();
 
         try {
             if (userId) {
                 const { error } = await supabase.from('inventory_pet').upsert({
                     user_id: userId,
                     pet_name: adoptedPet,
-                    hunger: stats.hunger,
-                    energy: stats.energy,
-                    happiness: stats.happiness,
-                    hygiene: stats.hygiene,
-                    level: stats.level,
-                    xp: stats.xp,
-                    coins: stats.coins,
-                    is_sleeping: isSleeping,
-                    active_ball_id: activeBallId,
-                    active_bed_id: activeBedId,
-                    updated_at: new Date().toISOString()
+                    hunger: starterStats.hunger,
+                    energy: starterStats.energy,
+                    happiness: starterStats.happiness,
+                    hygiene: starterStats.hygiene,
+                    level: starterStats.level,
+                    xp: starterStats.xp,
+                    coins: starterStats.coins,
+                    is_sleeping: false,
+                    active_ball_id: 'ball_red',
+                    active_bed_id: null,
+                    updated_at: savedAt
                 });
 
                 if (error) throw error;
+
+                const { error: inventoryError } = await supabase
+                    .from('pet_inventory')
+                    .delete()
+                    .eq('user_id', userId);
+
+                if (inventoryError) throw inventoryError;
             }
 
+            clearPetLocalStorage();
+            setStats(starterStats);
+            setInventory(starterInventory);
+            setSoapInventory({ soap: 0, soap2: 0 });
+            setActiveBallId('ball_red');
+            setActiveBedId(null);
+            setIsSleeping(false);
             _setPetName(adoptedPet);
             setHasAdoptedPet(true);
             localStorage.setItem('pet_name', adoptedPet);
             localStorage.setItem(PET_ADOPTION_CONFIRMED_KEY, 'true');
+            localStorage.setItem('pet_stats', JSON.stringify(starterStats));
+            localStorage.setItem('pet_inventory', JSON.stringify(starterInventory));
+            localStorage.setItem('pet_last_saved_at', savedAt);
+            localStorage.setItem('pet_active_ball', 'ball_red');
+            localStorage.setItem(PET_SLEEPING_KEY, 'false');
+            localStorage.setItem(PET_SLEEPING_UPDATED_AT_KEY, savedAt);
             window.dispatchEvent(new CustomEvent('virtual-pet-selection-change', { detail: adoptedPet }));
             return true;
         } catch (err) {
