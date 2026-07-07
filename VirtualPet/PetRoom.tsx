@@ -390,13 +390,13 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
     const userId = sessionInfo.data.result.uid;
     const sessionId = crypto.randomUUID();
 
-    const allowed = await consumeGameCredit(odooPartnerId, userId, sessionId);
+    // const allowed = await consumeGameCredit(odooPartnerId, userId, sessionId);
 
-    if (allowed) {
+    // if (allowed) {
       onNavigateToGame(gameId);
-    } else {
+    // } else {
       // setError('Insufficient credits. Please top up your Snabbb balance.');
-    }
+    // }
 
     // setLoading(false);
   }
