@@ -13,6 +13,8 @@ import { useBallPhysics } from './hooks/useBallPhysics';
 import LevelIndicator from './components/LevelIndicator';
 import CoinIndicator from './components/CoinIndicator';
 import { getPetOption } from './petOptions';
+import { api } from '@/services/api';
+import { consumeGameCredit } from '@/services/consumeGameCredit';
 
 const MAX_BUBBLES = 120;
 const RINSE_COMPLETE_THRESHOLD = Math.ceil(MAX_BUBBLES * 0.05);
