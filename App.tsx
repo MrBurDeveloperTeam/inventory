@@ -1345,6 +1345,18 @@ useEffect(() => {
     setIsAuthenticated(true);
     setCurrentView('dashboard');
     if (userId) {
+      // Check whether this account has ever had a profile row BEFORE we
+      // create/update one below — this is the only reliable "first login
+      // ever" signal, so it must run before the upsert touches the row.
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!existingProfile) {
+        setShowTutorialVideo(true);
+      }
+
       const { error } = await supabase.from('profiles').upsert({
         user_id: userId,
         email: userProfile.email,
@@ -3011,6 +3023,7 @@ const handleLogout = async () => {
         // onDashboardClick={() => setCurrentView('dashboard')}
         onLogout={handleLogout}
         onAddCollaborator={currentRole === 'owner' ? () => setIsCollaboratorModalOpen(true) : undefined}
+        onWatchTutorial={() => setShowTutorialVideo(true)}
         user={user}
         userInitials={userInitials}
         userAvatarUrl={user?.avatarUrl}

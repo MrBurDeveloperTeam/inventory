@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from './types';
-import { LogOut, Building2, ChevronRight, Camera, Download, Sun, Moon } from 'lucide-react';
+import { LogOut, Building2, ChevronRight, Camera, Download, Sun, Moon, PlayCircle } from 'lucide-react';
 import { getWallet } from './services/getWallet';
 import { supabase } from './supabaseClient';
 import { PET_OPTIONS, getPetOption, normalizePetId, PetId } from './VirtualPet/petOptions';
@@ -11,6 +11,7 @@ interface HeaderProps {
   onDashboardClick?: () => void;
   onLogout?: () => void;
   onAddCollaborator?: () => void;
+  onWatchTutorial?: () => void;
   user?: UserProfile | null;
   userInitials?: string;
   userAvatarUrl?: string;
@@ -26,6 +27,7 @@ const Header: React.FC<HeaderProps> = ({
   onDashboardClick,
   onLogout,
   onAddCollaborator,
+  onWatchTutorial,
   user,
   userInitials = 'U',
   userAvatarUrl,
@@ -192,6 +194,11 @@ const Header: React.FC<HeaderProps> = ({
     onAddCollaborator?.();
   }
 
+  const handleWatchTutorial = () => {
+    setIsOpen(false);
+    onWatchTutorial?.();
+  }
+
 
 
   const currentInventoryName = availableInventories.find(i => i.id === currentInventoryId)?.name || 'My Inventory';
@@ -328,6 +335,19 @@ const Header: React.FC<HeaderProps> = ({
                   <span>Add Collaborator</span>
                 </button>
               </div>
+
+              {onWatchTutorial && (
+                <div className="pt-4 border-t border-slate-100">
+                  <h3 className="text-xs font-bold text-slate-700 tracking-normal mb-3">Help</h3>
+                  <button
+                    onClick={handleWatchTutorial}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-xl transition-all font-semibold text-sm text-slate-700 shadow-sm"
+                  >
+                    <PlayCircle size={16} />
+                    <span>Watch Tutorial</span>
+                  </button>
+                </div>
+              )}
 
               {showInstallBtn && (
                 <div className="mt-4 pt-4 border-t border-slate-100">
