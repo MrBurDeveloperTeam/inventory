@@ -25,7 +25,7 @@ const TutorialVideoModal: React.FC<TutorialVideoModalProps> = ({ isOpen, onClose
         <div className="bg-black">
           <video
             className="w-full aspect-video"
-            src="/video/snabbb-inventory-tutorial.mp4"
+            src="https://opdotszsldcgwjqtvgul.supabase.co/storage/v1/object/public/video/inventory-tutorial/Snabbb-inventory-tutorial.mp4"
             controls
             autoPlay
             playsInline
