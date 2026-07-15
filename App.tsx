@@ -6,6 +6,7 @@ import Header from './Header';
 import ClinicMap from './ClinicMap';
 import RoomModal from './RoomModal';
 import LandingModal from './LandingModal';
+import TutorialVideoModal from './TutorialVideoModal';
 import ProfilePage from './ProfilePage';
 import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
@@ -184,6 +185,7 @@ const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isCollaboratorModalOpen, setIsCollaboratorModalOpen] = useState(false);
+  const [showTutorialVideo, setShowTutorialVideo] = useState(false);
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
   const [history, setHistory] = useState<PurchaseHistory[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -870,6 +872,9 @@ useEffect(() => {
     }
     setFinalProfile(prof);
     if (!prof && sbUser) {
+      // No profile row existed yet — this is this user's very first login ever.
+      setShowTutorialVideo(true);
+
       const fallbackProfile = {
         user_id: userId,
         email: sbUser.email || '',
@@ -3232,6 +3237,11 @@ const handleLogout = async () => {
         isOpen={isCollaboratorModalOpen}
         onClose={() => setIsCollaboratorModalOpen(false)}
         currentUser={user}
+      />
+
+      <TutorialVideoModal
+        isOpen={showTutorialVideo}
+        onClose={() => setShowTutorialVideo(false)}
       />
 
       {!isVirtualPetOpen && (
