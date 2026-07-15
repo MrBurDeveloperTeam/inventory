@@ -871,7 +871,6 @@ useEffect(() => {
       console.error('Profile fetch error', profError);
     }
     setFinalProfile(prof);
-    setShowTutorialVideo(true);
     if (!prof && sbUser) {
       // No profile row existed yet — this is this user's very first login ever.
       setShowTutorialVideo(true);
@@ -3011,6 +3010,7 @@ const handleLogout = async () => {
         // onDashboardClick={() => setCurrentView('dashboard')}
         onLogout={handleLogout}
         onAddCollaborator={currentRole === 'owner' ? () => setIsCollaboratorModalOpen(true) : undefined}
+        onWatchTutorial={() => setShowTutorialVideo(true)}
         user={user}
         userInitials={userInitials}
         userAvatarUrl={user?.avatarUrl}
