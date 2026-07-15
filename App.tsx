@@ -889,13 +889,17 @@ useEffect(() => {
       console.error('Profile fetch error', profError);
     }
     setFinalProfile(prof);
-    if (!prof && sbUser) {
-      // No profile row existed yet — this is this user's very first login ever.
-      if (!hasSeenTutorialVideo(userId)) {
-        setShowTutorialVideo(true);
-        markTutorialVideoSeen(userId);
-      }
 
+    // Tutorial trigger is intentionally independent of whether a `profiles`
+    // row already exists — signup can provision that row server-side before
+    // the user ever logs in, so "no row yet" is not a reliable first-login
+    // signal. The per-user localStorage flag is the source of truth instead.
+    if (sbUser && !hasSeenTutorialVideo(userId)) {
+      setShowTutorialVideo(true);
+      markTutorialVideoSeen(userId);
+    }
+
+    if (!prof && sbUser) {
       const fallbackProfile = {
         user_id: userId,
         email: sbUser.email || '',
@@ -1365,15 +1369,10 @@ useEffect(() => {
     setIsAuthenticated(true);
     setCurrentView('dashboard');
     if (userId) {
-      // Check whether this account has ever had a profile row BEFORE we
-      // create/update one below — this is the only reliable "first login
-      // ever" signal, so it must run before the upsert touches the row.
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('user_id')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (!existingProfile && !hasSeenTutorialVideo(userId)) {
+      // Tutorial trigger relies solely on the per-user localStorage flag —
+      // not on whether a `profiles` row exists yet, since that row can be
+      // provisioned server-side during signup before the user ever logs in.
+      if (!hasSeenTutorialVideo(userId)) {
         setShowTutorialVideo(true);
         markTutorialVideoSeen(userId);
       }
