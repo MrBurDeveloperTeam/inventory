@@ -62,6 +62,24 @@ type ProfileRow = {
 const PROFILE_IMAGE_STORAGE_PREFIX = 'denta_profile_images_';
 const PROFILE_IMAGE_BUCKET = 'profile-media';
 const PREFERRED_INVENTORY_ID_KEY = 'denta_preferred_inventory_id_';
+const TUTORIAL_VIDEO_SEEN_KEY_PREFIX = 'denta_tutorial_video_seen_';
+
+const hasSeenTutorialVideo = (userId: string) => {
+  try {
+    return localStorage.getItem(`${TUTORIAL_VIDEO_SEEN_KEY_PREFIX}${userId}`) === 'true';
+  } catch (err) {
+    console.error('Failed to read tutorial video flag', err);
+    return false;
+  }
+};
+
+const markTutorialVideoSeen = (userId: string) => {
+  try {
+    localStorage.setItem(`${TUTORIAL_VIDEO_SEEN_KEY_PREFIX}${userId}`, 'true');
+  } catch (err) {
+    console.error('Failed to persist tutorial video flag', err);
+  }
+};
 
 const loadUserImages = (userId: string) => {
   try {
@@ -871,10 +889,12 @@ useEffect(() => {
       console.error('Profile fetch error', profError);
     }
     setFinalProfile(prof);
-    setShowTutorialVideo(true);
     if (!prof && sbUser) {
       // No profile row existed yet — this is this user's very first login ever.
-      setShowTutorialVideo(true);
+      if (!hasSeenTutorialVideo(userId)) {
+        setShowTutorialVideo(true);
+        markTutorialVideoSeen(userId);
+      }
 
       const fallbackProfile = {
         user_id: userId,
@@ -1353,8 +1373,9 @@ useEffect(() => {
         .select('user_id')
         .eq('user_id', userId)
         .maybeSingle();
-      if (!existingProfile) {
+      if (!existingProfile && !hasSeenTutorialVideo(userId)) {
         setShowTutorialVideo(true);
+        markTutorialVideoSeen(userId);
       }
 
       const { error } = await supabase.from('profiles').upsert({
