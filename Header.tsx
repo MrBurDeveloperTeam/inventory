@@ -140,8 +140,8 @@ const Header: React.FC<HeaderProps> = ({
         });
         const { data: sessionData } = info || {};
         const { data } = await creditApi.get(`/api/wallet?partner_id=${sessionData.result.partner_id}`);
-        console.log("data from wallet API:", data);
-        setBalance(data.snabbb_balance);
+        console.log("data from wallet API:", data.data);
+        setBalance(data.data.snabbb_balance);
       } catch (err) {
         console.error(err);
       }
