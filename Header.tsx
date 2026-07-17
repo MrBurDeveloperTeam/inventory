@@ -135,12 +135,12 @@ const Header: React.FC<HeaderProps> = ({
 
     async function loadWallet() {
       try {
-        console.log('Loading wallet for user:', user);
         const info  = await odooApi.post('/web/session/get_session_info', {}).catch(err => {
           console.error('Session info error:', err);
         });
         const { data: sessionData } = info || {};
         const { data } = await creditApi.get(`/api/wallet?partner_id=${sessionData.result.partner_id}`);
+        console.log("data from wallet API:", data);
         setBalance(data.snabbb_balance);
       } catch (err) {
         console.error(err);
