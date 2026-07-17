@@ -8,6 +8,8 @@ import { creditApi, odooApi } from './services/api';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AuthFormData } from './types/AuthFormData';
 import { useGetUserId } from './mutation/useGetUserId';
+import { getAuthUser } from './src/utils/authStorage';
+import { syncThemeFromOdoo } from './src/utils/themeSync';
 
 interface HeaderProps {
   onProfileClick?: () => void;
@@ -493,7 +495,7 @@ const Header: React.FC<HeaderProps> = ({
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-slate-800 leading-tight">Snabbb Credit</p>
                           <p className="text-[11px] font-semibold text-slate-400 truncate">
-                            {creditBalance !== null ? `${creditBalance} credits` : 'Loading...'}
+                            {balance !== null ? `${balance} credits` : 'Loading...'}
                           </p>
                         </div>
                         <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors"></i>
