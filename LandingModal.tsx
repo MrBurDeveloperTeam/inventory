@@ -21,6 +21,9 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
   const [phone, setPhone] = useState('');
   const [position, setPosition] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [dob, setDob] = useState('');
+  const [country, setCountry] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   // Password states (FIX: no hardcoded passwords)
   const [password, setPassword] = useState('');
@@ -65,20 +68,36 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
           setErrorMsg('Passwords do not match.');
           return;
         }
+        if (!name.trim() || !phone.trim() || !position || !dob || !country) {
+          setErrorMsg('Please complete all required fields.');
+          return;
+        }
 
+        if (accountType === 'company' && !companyName.trim()) {
+          setErrorMsg('Please enter your company name.');
+          return;
+        }
+
+        if (!agreedToTerms) {
+          setErrorMsg('You must agree to the Terms of Service, Privacy Policy and Disclaimer.');
+          return;
+        }
         const payload = {
           email: email.trim(),
           password,
           options: {
             data: {
-              name,
+              name: name.trim(),
               account_type: accountType,
-              phone,
+              phone: phone.trim(),
               position,
-              company_name: accountType === 'company' ? companyName : null,
+              dob,
+              country,
+              agreed_to_terms: agreedToTerms,
+              company_name: accountType === 'company' ? companyName.trim() : null,
             },
           },
-        }
+        };
         const { data: odooData } = await api.post('/inventory/sign-up', payload);
         console.log('ODoo sign-up response:', odooData);
 
@@ -241,6 +260,22 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               </div>
 
               <div>
+                <label className={labelClass}>Date of Birth</label>
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  required
+                />
+                {accountType === 'company' && (
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Date of birth of the company representative.
+                  </p>
+                )}
+              </div>
+
+              <div>
                 <label className={labelClass}>Job Position</label>
                 <div className="relative">
                   <select
@@ -256,6 +291,24 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                 </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Country</label>
+                <select
+                  className={inputClass}
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  required
+                >
+                  <option value="">-- Select Country --</option>
+                  <option value="Malaysia">Malaysia</option>
+                  <option value="Singapore">Singapore</option>
+                  <option value="Indonesia">Indonesia</option>
+                  <option value="Thailand">Thailand</option>
+                  <option value="United Kingdom">United Kingdom</option>
+                  <option value="United States">United States</option>
+                </select>
               </div>
 
               <div>
@@ -279,6 +332,23 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                   required
                 />
               </div>
+
+              <label className="flex items-start gap-2 text-[11px] text-slate-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  required
+                  className="mt-0.5 accent-[#004aad]"
+                />
+                <span>
+                  I agree to the{' '}
+                  <a href="https://app.snabbb.com/terms" target="_blank" rel="noreferrer" className="font-semibold text-[#004aad] hover:underline">Terms of Service</a>,{' '}
+                  <a href="https://app.snabbb.com/privacy" target="_blank" rel="noreferrer" className="font-semibold text-[#004aad] hover:underline">Privacy Policy</a>{' '}
+                  and{' '}
+                  <a href="https://app.snabbb.com/disclaimer" target="_blank" rel="noreferrer" className="font-semibold text-[#004aad] hover:underline">Disclaimer</a>.
+                </span>
+              </label>
 
               <button
                 type="submit"
