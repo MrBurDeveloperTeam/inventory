@@ -20,7 +20,7 @@ import {
   Info
 } from 'lucide-react';
 import { PurchaseHistory, Item } from './types';
-import { CATEGORIES } from './constants';
+import { CATEGORIES } from './constants'; 
 
 interface ClinicAnalyticsProps {
   history: PurchaseHistory[];
