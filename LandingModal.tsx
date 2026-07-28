@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
-import { User, Building2, ChevronDown, Mail, Phone, CalendarDays, BriefcaseBusiness, Globe2, ShieldCheck } from 'lucide-react';
+import { User, Building2, ChevronDown, Mail, Phone, BriefcaseBusiness, Globe2, ShieldCheck } from 'lucide-react';
 import { UserProfile } from './types';
 import { api } from './services/api';
 import { loginOdoo } from './services/LoginOdoo';
 import applink from './services/applink';
+import { DENTAL_POSITIONS } from './constants/dentalPositions';
+import { DOBPicker } from './components/DOBPicker';
 
 interface LandingModalProps {
   onLogin: (user: UserProfile) => void;
@@ -20,6 +22,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [position, setPosition] = useState('');
+  const [customJobPosition, setCustomJobPosition] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [dob, setDob] = useState('');
   const [country, setCountry] = useState('');
@@ -65,11 +68,15 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
       }
 
       if (view === 'signup') {
+        const effectivePosition = position === 'OTHER'
+          ? customJobPosition.trim()
+          : position;
+
         if (password !== confirmPassword) {
           setErrorMsg('Passwords do not match.');
           return;
         }
-        if (!name.trim() || !phone.trim() || !position || !dob || !country) {
+        if (!name.trim() || !phone.trim() || !effectivePosition || !dob || !country) {
           setErrorMsg('Please complete all required fields.');
           return;
         }
@@ -91,7 +98,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               name: name.trim(),
               account_type: accountType,
               phone: phone.trim(),
-              position,
+              position: effectivePosition,
               dob,
               country,
               agreed_to_terms: agreedToTerms,
@@ -143,9 +150,9 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-      <div className="w-full min-h-screen sm:min-h-0 sm:max-w-sm bg-white sm:rounded-[1.5rem] shadow-none sm:shadow-2xl p-6 md:p-8 animate-in fade-in sm:zoom-in-95 duration-300 flex flex-col justify-center">
-        {view === 'signup' ? (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4 py-6 sm:px-6 sm:py-10">
+        <div className="w-full max-w-[420px] min-h-0 bg-white border border-slate-200 rounded-[1.5rem] shadow-2xl p-6 sm:max-w-xl sm:p-8 lg:max-w-2xl lg:p-10 flex flex-col justify-center">        
+          {view === 'signup' ? (
           <div className="flex flex-col gap-4">
             <header className="mb-3">
               <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter">Create Account</h1>
@@ -223,7 +230,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
 
               <div>
                 <label className={labelClass}>Date of Birth</label>
-                <div className="relative"><CalendarDays className={fieldIconClass} /><input type="date" className={inputClass} value={dob} onChange={(e) => setDob(e.target.value)} required /></div>
+                <DOBPicker value={dob} onChange={setDob} />
                 {accountType === 'company' && (
                   <p className="text-[10px] text-slate-400 mt-0.5">
                     Date of birth of the company representative.
@@ -236,26 +243,44 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                 <div className="relative">
                   <BriefcaseBusiness className={fieldIconClass} />
                   <select
-                    className={`${inputClass} appearance-none pr-8`}
+                    className={`${inputClass} appearance-none pr-8 font-bold`}
                     value={position}
                     onChange={(e) => setPosition(e.target.value)}
                     required
                   >
                     <option value="">-- Select Position --</option>
-                    <option value="Dentist">Dentist</option>
-                    <option value="Assistant">Assistant</option>
-                    <option value="Clinic Manager">Clinic Manager</option>
+                    {DENTAL_POSITIONS.map((jobPosition) => (
+                      <option key={jobPosition} value={jobPosition}>{jobPosition}</option>
+                    ))}
+                    <option value="OTHER">Other</option>
                   </select>
                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300 pointer-events-none" />
                 </div>
               </div>
+
+              {position === 'OTHER' && (
+                <div>
+                  <label className={labelClass}>Specify Position</label>
+                  <div className="relative">
+                    <BriefcaseBusiness className={fieldIconClass} />
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="e.g. Clinic Manager"
+                      value={customJobPosition}
+                      onChange={(e) => setCustomJobPosition(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className={labelClass}>Country</label>
                 <div className="relative">
                   <Globe2 className={fieldIconClass} />
                   <select
-                    className={`${inputClass} pr-10`}
+                    className={`${inputClass} pr-10 font-bold`}
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
                     required
@@ -518,12 +543,14 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
 
               <div>
                 <label className={labelClass}>Password</label>
-                <div className="relative"><ShieldCheck className={fieldIconClass} /><input type="password" className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
+                <div className="relative"><ShieldCheck className={fieldIconClass} />
+                <input type="password" placeholder = "••••••••" className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
               </div>
 
               <div>
                 <label className={labelClass}>Confirm Password</label>
-                <div className="relative"><ShieldCheck className={fieldIconClass} /><input type="password" className={inputClass} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></div>
+                <div className="relative"><ShieldCheck className={fieldIconClass} />
+                <input type="password" placeholder = "••••••••" className={inputClass} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></div>
               </div>
 
               <label className="flex items-start gap-2 text-[11px] text-slate-500 cursor-pointer">
@@ -546,8 +573,8 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full text-white py-3 rounded-xl font-bold text-base transition-all shadow-lg shadow-blue-100 mt-2 ${
-                  loading ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#004aad] hover:bg-[#003a8a]'
+                className={`w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-base transition-all shadow-lg shadow-slate-900/10 mt-2 ${
+                  loading ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'
                 }`}
               >
                 {loading ? 'Signing up…' : 'Sign up'}
@@ -558,7 +585,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               <button
                 type="button"
                 onClick={() => setView('login')}
-                className="text-[#004aad] font-bold text-xs hover:underline"
+                className="text-[hsl(180_14%_49%)] font-bold text-xs hover:underline"
               >
                 Already have an account?
               </button>
@@ -594,10 +621,10 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                   <label className="text-xs font-semibold text-slate-600">Password</label>
                   <button
                     type="button"
-                    className="text-[#004aad] text-[10px] font-bold hover:underline"
+                    className="text-tiffany-600 text-[10px] font-bold hover:underline"
                     onClick={() => setErrorMsg('Password reset is not implemented yet.')}
                   >
-                    Forgot?
+                    Forgot Password?
                   </button>
                 </div>
                 <input
@@ -617,8 +644,8 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full text-white py-3.5 rounded-xl font-bold text-base transition-all shadow-xl shadow-blue-100 ${
-                  loading ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#004aad] hover:bg-[#003a8a]'
+                className={`w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-base transition-all shadow-lg shadow-slate-900/10 mt-2 ${
+                  loading ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'
                 }`}
               >
                 {loading ? 'Logging in…' : 'Log in'}
@@ -629,7 +656,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               <button
                 type="button"
                 onClick={() => setView('signup')}
-                className="text-[#004aad] font-bold text-xs hover:underline"
+                className="text-[hsl(180_14%_49%)] font-bold text-xs hover:underline"
               >
                 Don't have an account? Sign up
               </button>
