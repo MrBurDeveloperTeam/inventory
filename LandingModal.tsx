@@ -13,7 +13,7 @@ interface LandingModalProps {
 }
 
 const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
-  const [view, setView] = useState<'signup' | 'login'>('signup');
+  const [view, setView] = useState<'signup' | 'login'>('login');
   const [accountType, setAccountType] = useState<'individual' | 'company'>('individual');
 
   // Form states
@@ -37,7 +37,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const inputClass =
-    'w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-tiffany-600/20 focus:border-tiffany-600 transition-all text-sm';
+    'w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-slate-800 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-tiffany-600/20 focus:border-tiffany-600 transition-all text-sm';
   const labelClass = 'block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 mb-1.5 ml-1';
   const fieldIconClass = 'absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300 pointer-events-none';
 
@@ -243,7 +243,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                 <div className="relative">
                   <BriefcaseBusiness className={fieldIconClass} />
                   <select
-                    className={`${inputClass} appearance-none pr-8 font-bold`}
+                    className={`${inputClass} appearance-none pr-8`}
                     value={position}
                     onChange={(e) => setPosition(e.target.value)}
                     required
@@ -280,7 +280,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                 <div className="relative">
                   <Globe2 className={fieldIconClass} />
                   <select
-                    className={`${inputClass} pr-10 font-bold`}
+                    className={`${inputClass} pr-10`}
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
                     required
@@ -587,7 +587,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                 onClick={() => setView('login')}
                 className="text-[hsl(180_14%_49%)] font-bold text-xs hover:underline"
               >
-                Already have an account?
+                Already have an account? Log in
               </button>
             </div>
           </div>
