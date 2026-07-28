@@ -88,7 +88,7 @@ export function DOBPicker({ value, onChange }: DOBPickerProps) {
       <button
         type="button"
         onClick={openPicker}
-        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 flex items-center text-left text-sm transition-all focus:outline-none focus:ring-2 focus:ring-tiffany-600/20 focus:border-tiffany-600"
+        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 flex items-center text-left text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-tiffany-600/20 focus:border-tiffany-600"
       >
         <CalendarDays className="h-4 w-4 text-slate-300 mr-3 shrink-0" />
         <span className={value ? 'text-slate-700' : 'text-slate-400'}>
