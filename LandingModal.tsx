@@ -594,7 +594,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
         ) : (
           <div className="flex flex-col gap-6">
             <div className="text-center">
-              <h2 className="text-xl font-bold text-slate-800">Welcome Back</h2>
+              <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Welcome Back</h2>
             </div>
 
             {!!errorMsg && (
@@ -618,7 +618,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-600">Password</label>
+                  <label className={labelClass}>Password</label>
                   <button
                     type="button"
                     className="text-tiffany-600 text-[10px] font-bold hover:underline"
@@ -638,7 +638,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               </div>
               <div className="flex items-center">
                 <input type="checkbox" className="w-4 h-4 text-[#004aad]" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}/>
-                <span className="text-xs text-slate-600 ml-2">Remember me</span>
+                <span className="text-[11px] text-slate-500 ml-2">Remember me</span>
               </div>
 
               <button
