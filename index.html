@@ -12,7 +12,17 @@
       // Enable class-based dark mode for Tailwind CDN
       tailwind.config = {
         darkMode: 'class',
-        theme: { extend: {} },
+        theme: {
+          extend: {
+            colors: {
+              tiffany: {
+                500: '#14b8a6',
+                600: '#0abfbc',
+                700: '#089a98',
+              },
+            },
+          },
+        },
       };
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet">

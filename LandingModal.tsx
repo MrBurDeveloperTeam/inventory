@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
-import { User, Building2, ChevronDown } from 'lucide-react';
+import { User, Building2, ChevronDown, Mail, Phone, CalendarDays, BriefcaseBusiness, Globe2, ShieldCheck } from 'lucide-react';
 import { UserProfile } from './types';
 import { api } from './services/api';
 import { loginOdoo } from './services/LoginOdoo';
@@ -34,8 +34,9 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const inputClass =
-    'w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#004aad]/20 focus:border-[#004aad] transition-all text-sm';
-  const labelClass = 'block text-xs font-semibold text-slate-600 mb-1';
+    'w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-tiffany-600/20 focus:border-tiffany-600 transition-all text-sm';
+  const labelClass = 'block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 mb-1.5 ml-1';
+  const fieldIconClass = 'absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300 pointer-events-none';
 
   const resetAuthFields = () => {
     setPassword('');
@@ -146,19 +147,22 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
       <div className="w-full min-h-screen sm:min-h-0 sm:max-w-sm bg-white sm:rounded-[1.5rem] shadow-none sm:shadow-2xl p-6 md:p-8 animate-in fade-in sm:zoom-in-95 duration-300 flex flex-col justify-center">
         {view === 'signup' ? (
           <div className="flex flex-col gap-4">
-            <div className="text-center">
-              <h2 className="text-lg font-bold text-slate-800">Account Type</h2>
-            </div>
+            <header className="mb-3">
+              <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter">Create Account</h1>
+              <p className="text-slate-500 font-semibold text-sm leading-relaxed">Track and manage your dental inventory with ease.</p>
+            </header>
+
+            <label className={labelClass}>Account Type</label>
 
             {/* Account Type Toggle */}
-            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+            <div className="grid grid-cols-2 rounded-xl border border-slate-200 overflow-hidden bg-white">
               <button
                 type="button"
                 onClick={() => setAccountType('individual')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-bold text-xs transition-all ${
+                className={`flex items-center justify-center gap-2 py-3 font-bold text-sm transition-all ${
                   accountType === 'individual'
-                    ? 'bg-[#004aad] text-white shadow-md'
-                    : 'text-slate-500 hover:bg-slate-200'
+                    ? 'bg-tiffany-600 text-white'
+                    : 'bg-white text-slate-500 hover:bg-slate-50'
                 }`}
               >
                 <User className="w-3.5 h-3.5" /> Individual
@@ -166,10 +170,10 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               <button
                 type="button"
                 onClick={() => setAccountType('company')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-bold text-xs transition-all ${
+                className={`flex items-center justify-center gap-2 py-3 font-bold text-sm transition-all ${
                   accountType === 'company'
-                    ? 'bg-[#004aad] text-white shadow-md'
-                    : 'text-slate-500 hover:bg-slate-200'
+                    ? 'bg-tiffany-600 text-white'
+                    : 'bg-white text-slate-500 hover:bg-slate-50'
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5" /> Company
@@ -187,25 +191,11 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                 <>
                   <div>
                     <label className={labelClass}>Your Name</label>
-                    <input
-                      type="text"
-                      className={inputClass}
-                      placeholder="e.g. Nour AYACHE"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                    />
+                    <div className="relative"><User className={fieldIconClass} /><input type="text" className={inputClass} placeholder="e.g. Nour AYACHE" value={name} onChange={(e) => setName(e.target.value)} required /></div>
                   </div>
                   <div>
                     <label className={labelClass}>Your Email</label>
-                    <input
-                      type="email"
-                      className={inputClass}
-                      placeholder="e.g. nour@gmail.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
+                    <div className="relative"><Mail className={fieldIconClass} /><input type="email" className={inputClass} placeholder="e.g. nur@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
                     <p className="text-[10px] text-slate-400 mt-0.5">This will be your login email</p>
                   </div>
                 </>
@@ -213,61 +203,27 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                 <>
                   <div>
                     <label className={labelClass}>Company Name</label>
-                    <input
-                      type="text"
-                      className={inputClass}
-                      placeholder="e.g. DENTA TECH"
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      required
-                    />
+                    <div className="relative"><Building2 className={fieldIconClass} /><input type="text" className={inputClass} placeholder="e.g. DENTA TECH" value={companyName} onChange={(e) => setCompanyName(e.target.value)} required /></div>
                   </div>
                   <div>
                     <label className={labelClass}>Company Email</label>
-                    <input
-                      type="email"
-                      className={inputClass}
-                      placeholder="e.g. hello@denta.tech"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
+                    <div className="relative"><Mail className={fieldIconClass} /><input type="email" className={inputClass} placeholder="e.g. hello@denta.tech" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
                   </div>
                   <div>
                     <label className={labelClass}>Name</label>
-                    <input
-                      type="text"
-                      className={inputClass}
-                      placeholder="Contact Name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                    />
+                    <div className="relative"><User className={fieldIconClass} /><input type="text" className={inputClass} placeholder="Contact Name" value={name} onChange={(e) => setName(e.target.value)} required /></div>
                   </div>
                 </>
               )}
 
               <div>
                 <label className={labelClass}>{accountType === 'individual' ? 'Phone (WhatsApp)' : 'Phone'}</label>
-                <input
-                  type="tel"
-                  className={inputClass}
-                  placeholder="e.g. +123..."
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                />
+                <div className="relative"><Phone className={fieldIconClass} /><input type="tel" className={inputClass} placeholder="e.g. +60123456789" value={phone} onChange={(e) => setPhone(e.target.value)} required /></div>
               </div>
 
               <div>
                 <label className={labelClass}>Date of Birth</label>
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={dob}
-                  onChange={(e) => setDob(e.target.value)}
-                  required
-                />
+                <div className="relative"><CalendarDays className={fieldIconClass} /><input type="date" className={inputClass} value={dob} onChange={(e) => setDob(e.target.value)} required /></div>
                 {accountType === 'company' && (
                   <p className="text-[10px] text-slate-400 mt-0.5">
                     Date of birth of the company representative.
@@ -278,6 +234,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
               <div>
                 <label className={labelClass}>Job Position</label>
                 <div className="relative">
+                  <BriefcaseBusiness className={fieldIconClass} />
                   <select
                     className={`${inputClass} appearance-none pr-8`}
                     value={position}
@@ -289,18 +246,20 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                     <option value="Assistant">Assistant</option>
                     <option value="Clinic Manager">Clinic Manager</option>
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300 pointer-events-none" />
                 </div>
               </div>
 
               <div>
                 <label className={labelClass}>Country</label>
-                <select
-                  className={inputClass}
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  required
-                >
+                <div className="relative">
+                  <Globe2 className={fieldIconClass} />
+                  <select
+                    className={`${inputClass} pr-10`}
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    required
+                  >
                   <option value="">-- Select Country --</option>
                   <option value="3">Afghanistan</option>
                   <option value="6">Albania</option>
@@ -552,29 +511,19 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                   <option value="248">Zambia</option>
                   <option value="249">Zimbabwe</option>
                   <option value="15">Åland Islands</option>
-                </select>
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300 pointer-events-none" />
+                </div>
               </div>
 
               <div>
                 <label className={labelClass}>Password</label>
-                <input
-                  type="password"
-                  className={inputClass}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <div className="relative"><ShieldCheck className={fieldIconClass} /><input type="password" className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
               </div>
 
               <div>
                 <label className={labelClass}>Confirm Password</label>
-                <input
-                  type="password"
-                  className={inputClass}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
+                <div className="relative"><ShieldCheck className={fieldIconClass} /><input type="password" className={inputClass} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></div>
               </div>
 
               <label className="flex items-start gap-2 text-[11px] text-slate-500 cursor-pointer">
@@ -583,14 +532,14 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
                   checked={agreedToTerms}
                   onChange={(e) => setAgreedToTerms(e.target.checked)}
                   required
-                  className="mt-0.5 accent-[#004aad]"
+                  className="mt-0.5 accent-tiffany-600"
                 />
                 <span>
                   I agree to the{' '}
-                  <a href="https://app.snabbb.com/terms" target="_blank" rel="noreferrer" className="font-semibold text-[#004aad] hover:underline">Terms of Service</a>,{' '}
-                  <a href="https://app.snabbb.com/privacy" target="_blank" rel="noreferrer" className="font-semibold text-[#004aad] hover:underline">Privacy Policy</a>{' '}
+                  <a href="https://app.snabbb.com/terms" target="_blank" rel="noreferrer" className="font-semibold text-tiffany-600 hover:underline">Terms of Service</a>,{' '}
+                  <a href="https://app.snabbb.com/privacy" target="_blank" rel="noreferrer" className="font-semibold text-tiffany-600 hover:underline">Privacy Policy</a>{' '}
                   and{' '}
-                  <a href="https://app.snabbb.com/disclaimer" target="_blank" rel="noreferrer" className="font-semibold text-[#004aad] hover:underline">Disclaimer</a>.
+                  <a href="https://app.snabbb.com/disclaimer" target="_blank" rel="noreferrer" className="font-semibold text-tiffany-600 hover:underline">Disclaimer</a>.
                 </span>
               </label>
 
