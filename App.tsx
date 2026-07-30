@@ -3015,7 +3015,13 @@ const handleLogout = async () => {
   }
 
   if (!isAuthenticated) {
-    return <LandingModal onLogin={handleLogin} />;
+    return (
+      <LandingModal
+        onLogin={handleLogin}
+        theme={theme}
+        onThemeToggle={() => handleSetTheme(theme === 'dark' ? 'light' : 'dark')}
+      />
+    );
   }
 
   if (isAuthenticated && isAdmin && user) {

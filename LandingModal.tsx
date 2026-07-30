@@ -7,12 +7,15 @@ import { loginOdoo } from './services/LoginOdoo';
 import applink from './services/applink';
 import { DENTAL_POSITIONS } from './constants/dentalPositions';
 import { DOBPicker } from './components/DOBPicker';
+import AuthShell from './components/AuthShell';
 
 interface LandingModalProps {
   onLogin: (user: UserProfile) => void;
+  theme: string;
+  onThemeToggle: () => void;
 }
 
-const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
+const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeToggle }) => {
   const [view, setView] = useState<'signup' | 'login'>('login');
   const [accountType, setAccountType] = useState<'individual' | 'company'>('individual');
 
@@ -150,7 +153,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
   };
 
   return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4 py-6 sm:px-6 sm:py-10">
+    <AuthShell view={view} theme={theme} onViewChange={setView} onThemeToggle={onThemeToggle}>
         <div className="w-full max-w-[420px] min-h-0 bg-white border border-slate-200 rounded-[1.5rem] shadow-2xl p-6 sm:max-w-xl sm:p-8 lg:max-w-2xl lg:p-10 flex flex-col justify-center">        
           {view === 'signup' ? (
           <div className="flex flex-col gap-4">
@@ -664,7 +667,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin }) => {
           </div>
         )}
       </div>
-    </div>
+    </AuthShell>
   );
 };
 
