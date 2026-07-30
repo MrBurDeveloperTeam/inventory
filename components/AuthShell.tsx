@@ -1,5 +1,6 @@
 import React from 'react';
 import { Moon, Sun } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 type AuthView = 'login' | 'signup';
 
@@ -24,10 +25,15 @@ const AuthShell: React.FC<AuthShellProps> = ({
         <a
           href="https://app.snabbb.com"
           className="font-extrabold text-xl sm:text-2xl tracking-tighter text-slate-900"
+          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           aria-label="Go to App.Snabbb"
         >
-          <span className="inline-block -skew-x-[7deg]">App.</span>{' '}
-          <span className="inline-block -skew-x-[7deg] text-tiffany-600">Snabbb.</span>
+          <span style={{ transform: 'skewX(353deg)', display: 'inline-block' }}>App.</span>
+          <img
+            src="/icons/Snabbb-Teal.png"
+            alt="Snabbb"
+            style={{ height: '1.59em', width: 'auto', display: 'inline-block', verticalAlign: 'middle' }}
+          />
         </a>
 
         <nav className="flex items-center gap-1 sm:gap-5" aria-label="Authentication navigation">
@@ -48,13 +54,15 @@ const AuthShell: React.FC<AuthShellProps> = ({
           >
             Log In
           </button>
-          <button
+          <motion.button
             type="button"
             onClick={() => onViewChange('signup')}
+            whileHover={{ scale: 1.05, y: -1 }}
+            whileTap={{ scale: 0.95 }}
             className="px-4 sm:px-6 py-2.5 bg-tiffany-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-tiffany-600/20 hover:bg-tiffany-700 transition-all"
           >
             Sign Up
-          </button>
+          </motion.button>
         </nav>
       </div>
     </header>
