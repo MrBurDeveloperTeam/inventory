@@ -21,7 +21,7 @@ api.interceptors.response.use(
 );
 
 export const creditApi = axios.create({
-  baseURL: import.meta.env.ODOO_API_URL, 
+  baseURL: import.meta.env.VITE_ODOO_API_URL, 
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -30,28 +30,6 @@ export const creditApi = axios.create({
 
 // Optional: basic error unwrap
 creditApi.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    const msg =
-      err?.response?.data?.message ||
-      err?.response?.data?.error ||
-      err.message;
-    return Promise.reject(new Error(msg));
-  }
-);
-
-export const odooApi = axios.create({
-  baseURL: "/api",       
-  withCredentials: true, 
-  headers: {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-    "X-Requested-With": "XMLHttpRequest",
-    "X-SSO-API-KEY": "my-sso-secret-123",
-  },
-});
-
-odooApi.interceptors.response.use(
   (res) => res,
   (err) => {
     const msg =

@@ -28,7 +28,6 @@ import { supabase } from './supabaseClient';
 import { api } from './services/api';
 import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
-import { getCreditBalance } from './services/get_credit_balance';
 import { jwtDecode } from 'jwt-decode';
 import {
   ARCHIVED_LOCATION_LABEL,
@@ -343,16 +342,6 @@ useEffect(() => {
 
       if (data.session?.user) {
         await bootstrapUser(data.session.user);
-        
-        // Only fetch balance if we have a valid ID (wait for bootstrap to set it or use it directly)
-        const userId = data.session.user.id;
-        // If the API expects an integer ID, we need to find where that comes from.
-        // For now, let's keep it safe and avoid NaN.
-        const partnerId = parseInt(userId); 
-        console.log(`Bootstrap complete for user ${userId} with partner ID ${partnerId}`);
-        if (!isNaN(partnerId)) {
-          await getCreditBalance(partnerId).catch(err => console.error("Credit fetch failed:", err));
-        }
       } else {
         setBlueprint(PRESET_BLUEPRINTS[0].url);
         setIsAuthenticated(false);
