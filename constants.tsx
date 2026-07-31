@@ -20,7 +20,7 @@ export const CATEGORIES = [
   { id: 'other', label: 'Other', icon: <Box className="w-4 h-4" /> },
 ];
 
-export const UOMS = ['pcs', 'box', 'unit', 'kit'];
+export const UOMS = ['pcs', 'box'];
 
 export const CATEGORY_ORDER = ['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other'];
 
