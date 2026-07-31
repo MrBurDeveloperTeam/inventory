@@ -1,14 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { UserProfile } from './types';
 import { LogOut, Building2, ChevronRight, Camera, Download, Sun, Moon, PlayCircle } from 'lucide-react';
-import { getWallet } from './services/getWallet';
 import { supabase } from './supabaseClient';
 import { PET_OPTIONS, getPetOption, normalizePetId, PetId } from './VirtualPet/petOptions';
-import { creditApi, odooApi } from './services/api';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AuthFormData } from './types/AuthFormData';
 import { useGetUserId } from './mutation/useGetUserId';
-import { getAuthUser } from './src/utils/authStorage';
 import { syncThemeFromOdoo } from './src/utils/themeSync';
 
 interface HeaderProps {
@@ -59,7 +56,6 @@ const Header: React.FC<HeaderProps> = ({
   const [selectedPetId, setSelectedPetId] = useState<PetId>(() => normalizePetId(localStorage.getItem('pet_name')));
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inventoryRef = useRef<HTMLDivElement>(null);
-  const [balance, setBalance] = useState<number | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
@@ -68,19 +64,9 @@ const Header: React.FC<HeaderProps> = ({
   const [path, setPath] = useState(window.location.pathname);
   const [authFormData, setAuthFormData] = useState<AuthFormData>(initialFormData);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [creditLoading, setCreditLoading] = useState(false);
+  const [creditError, setCreditError] = useState<string | null>(null);
   const { mutateAsync: createAppLink, isPending } = useGetUserId();
-
-  useEffect(() => {
-  const partnerId = authFormData?.partner_id // or however you store partner_id after login
-  if (!partnerId) return
-
-  fetch(`https://app.snabbb.com/api/wallet?partner_id=${partnerId}`, {
-    credentials: 'include',
-  })
-    .then(r => r.json())
-    .then(data => setCreditBalance(data?.data?.balance ?? null))
-    .catch(() => setCreditBalance(null))
-}, [authFormData?.partner_id])
 
   useEffect(() => {
     const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
@@ -133,22 +119,6 @@ const Header: React.FC<HeaderProps> = ({
       }
     };
 
-    async function loadWallet() {
-      try {
-        const info  = await odooApi.post('/web/session/get_session_info', {}).catch(err => {
-          console.error('Session info error:', err);
-        });
-        const { data: sessionData } = info || {};
-        const { data } = await creditApi.get(`/api/wallet?partner_id=${sessionData.result.partner_id}`);
-        console.log("data from wallet API:", data.data);
-        setBalance(data.data.snabbb_balance);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    loadWallet();
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -157,6 +127,84 @@ const Header: React.FC<HeaderProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    const email = user?.email?.trim();
+
+    if (!email) {
+      setCreditBalance(null);
+      setCreditError(null);
+      setCreditLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadCreditBalance() {
+      setCreditLoading(true);
+      setCreditError(null);
+
+      try {
+        const response = await fetch(
+          `/api/wallet?email=${encodeURIComponent(email)}`,
+          {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              Accept: 'application/json',
+            },
+          }
+        );
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok || !data?.ok) {
+          throw new Error(
+            data?.error ||
+            'Unable to retrieve credit balance'
+          );
+        }
+
+        const rawBalance =
+          data?.data?.snabbb_balance ??
+          data?.data?.balance ??
+          data?.result?.snabbb_balance ??
+          data?.result?.balance ??
+          data?.snabbb_balance ??
+          data?.balance;
+
+        const parsedBalance = Number(rawBalance);
+
+        if (!Number.isFinite(parsedBalance)) {
+          throw new Error('Invalid credit balance');
+        }
+
+        if (!cancelled) {
+          setCreditBalance(parsedBalance);
+        }
+      } catch (error) {
+        console.error(
+          'Failed to load Snabbb Credit:',
+          error
+        );
+
+        if (!cancelled) {
+          setCreditBalance(null);
+          setCreditError('Unable to load balance');
+        }
+      } finally {
+        if (!cancelled) {
+          setCreditLoading(false);
+        }
+      }
+    }
+
+    void loadCreditBalance();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.email]);
 
   useEffect(() => {
     let isMounted = true;
@@ -495,7 +543,13 @@ const Header: React.FC<HeaderProps> = ({
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-slate-800 leading-tight">Snabbb Credit</p>
                           <p className="text-[11px] font-semibold text-slate-400 truncate">
-                            {balance !== null ? `${balance} credits` : 'Loading...'}
+                            {creditLoading
+                              ? 'Loading...'
+                              : creditError
+                                ? creditError
+                                : creditBalance !== null
+                                  ? `${creditBalance} credits`
+                                  : 'Balance unavailable'}
                           </p>
                         </div>
                         <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors"></i>
