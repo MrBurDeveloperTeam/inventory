@@ -29,6 +29,7 @@ interface ClinicAnalyticsProps {
 
 const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = [] }) => {
   const [breakdownType, setBreakdownType] = useState<'category' | 'vendor' | 'product' | 'reorder'>('category');
+  const [purchaseQuantityUom, setPurchaseQuantityUom] = useState<'pcs' | 'box'>('pcs');
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [isMouseOverSVG, setIsMouseOverSVG] = useState(false);
   const [chartHoveredDay, setChartHoveredDay] = useState<number | null>(null);
@@ -172,7 +173,10 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
 
   const usageStats = useMemo(() => {
     const totalExpense = distributionHistory.reduce((acc, curr) => acc + curr.totalPrice, 0);
-    const totalQuantity = distributionHistory.reduce((acc, curr) => acc + curr.qty, 0);
+    const quantityPurchaseHistory = distributionHistory.filter(
+      h => (h.uom || 'pcs').trim().toLowerCase() === purchaseQuantityUom
+    );
+    const totalQuantity = quantityPurchaseHistory.reduce((acc, curr) => acc + curr.qty, 0);
     const totalReorders = distributionHistory.length;
 
     // Category Breakdown
@@ -224,9 +228,10 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
       }]
       : vendorSortedList;
 
-    // Product Consumption Breakdown
+    // Purchased quantity breakdown for the selected UOM. PCS and BOX must not
+    // share a denominator because they are not comparable quantities.
     const productMap: Record<string, { qty: number; count: number; totalSpent: number; label: string }> = {};
-    distributionHistory.forEach(h => {
+    quantityPurchaseHistory.forEach(h => {
       const norm = normalizeKey(h.productName, 'Unknown Product');
       const displayLabel = h.productName || 'Unknown Product';
       if (!productMap[norm]) productMap[norm] = { qty: 0, count: 0, totalSpent: 0, label: displayLabel };
@@ -259,11 +264,22 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
       }]
       : productSortedList;
 
-    // Most Reordered Products
-    const reorderSortedList = Object.entries(productMap)
+    // Purchase frequency uses every receiving record in the selected period
+    // and intentionally remains independent of the quantity UOM filter.
+    const reorderMap: Record<string, { qty: number; count: number; totalSpent: number; label: string }> = {};
+    distributionHistory.forEach(h => {
+      const norm = normalizeKey(h.productName, 'Unknown Product');
+      const displayLabel = h.productName || 'Unknown Product';
+      if (!reorderMap[norm]) reorderMap[norm] = { qty: 0, count: 0, totalSpent: 0, label: displayLabel };
+      reorderMap[norm].qty += h.qty;
+      reorderMap[norm].count += 1;
+      reorderMap[norm].totalSpent += h.totalPrice;
+    });
+
+    const reorderSortedList = Object.entries(reorderMap)
       .map(([name, stats]) => ({
         id: `reorder-${name}`,
-        label: name,
+        label: stats.label,
         amount: stats.count,
         totalQty: stats.qty,
         count: stats.count,
@@ -295,7 +311,7 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
       productBreakdown: finalProductBreakdown,
       reorderBreakdown: finalReorderBreakdown
     };
-  }, [distributionHistory]);
+  }, [distributionHistory, purchaseQuantityUom]);
 
   const spendingAnalysisData = useMemo(() => {
     const getDaysInMonth = (monthStr: string) => {
@@ -460,8 +476,8 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
   const breakdownOptions = [
     { value: 'category', label: 'By Category', icon: <PieChart className="w-4 h-4" /> },
     { value: 'vendor', label: 'By Vendor', icon: <Building2 className="w-4 h-4" /> },
-    { value: 'product', label: 'Most Consumed', icon: <PackageSearch className="w-4 h-4" /> },
-    { value: 'reorder', label: 'Most Reordered', icon: <RefreshCw className="w-4 h-4" /> },
+    { value: 'product', label: 'Top Purchased Items', icon: <PackageSearch className="w-4 h-4" /> },
+    { value: 'reorder', label: 'Purchase Frequency', icon: <RefreshCw className="w-4 h-4" /> },
   ];
 
   const currentBreakdownOption = breakdownOptions.find(opt => opt.value === breakdownType) || breakdownOptions[0];
@@ -1128,6 +1144,12 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
                   <span className="uppercase tracking-wide">
                     {currentBreakdownOption.label}
                   </span>
+                  {breakdownType === 'product' && (
+                    <>
+                      <span className="text-slate-300 mx-1">|</span>
+                      <span className="uppercase tracking-wide">By {purchaseQuantityUom}</span>
+                    </>
+                  )}
                   <span className="text-slate-300 mx-1">|</span>
                   <span className="uppercase tracking-wide">
                     {distributionPeriod === 'all' ? 'All Time' : formatPeriodName(distributionPeriod)}
@@ -1221,6 +1243,24 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
                   </div>
                 )}
               </div>
+
+              {breakdownType === 'product' && (
+                <div className="relative">
+                  <select
+                    aria-label="Purchased quantity unit of measure"
+                    value={purchaseQuantityUom}
+                    onChange={(e) => {
+                      setPurchaseQuantityUom(e.target.value as 'pcs' | 'box');
+                      setHoveredIdx(null);
+                    }}
+                    className="appearance-none min-w-[112px] px-4 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl shadow-sm hover:border-indigo-600 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-[10px] font-black text-slate-700 uppercase tracking-widest cursor-pointer"
+                  >
+                    <option value="pcs">By PCS</option>
+                    <option value="box">By BOX</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                </div>
+              )}
             </div>
           </div>
 
@@ -1295,12 +1335,12 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
                           ? (isReorderReport
                             ? currentBreakdown[hoveredIdx].amount.toLocaleString()
                             : (isQuantityReport
-                              ? currentBreakdown[hoveredIdx].amount.toLocaleString()
+                              ? `${currentBreakdown[hoveredIdx].amount.toLocaleString()} ${purchaseQuantityUom.toUpperCase()}`
                               : `$${(currentBreakdown[hoveredIdx].totalSpent ?? currentBreakdown[hoveredIdx].amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`))
                           : (isReorderReport
                             ? usageStats.totalReorders.toLocaleString()
                             : (isQuantityReport
-                              ? usageStats.totalQuantity.toLocaleString()
+                              ? `${usageStats.totalQuantity.toLocaleString()} ${purchaseQuantityUom.toUpperCase()}`
                               : `$${usageStats.totalExpense.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`))}
                       </text>
                     </g>
@@ -1318,7 +1358,7 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
                   <div className="bg-white border border-slate-111 rounded-[1.25rem] p-4 flex flex-col items-center text-center min-w-[130px] shadow-sm">
                     <span className="text-[10px] font-bold text-slate-500 leading-none mb-1.5 tracking-wide">{currentBreakdown[hoveredIdx].label}</span>
                     <span className="text-sm font-black text-slate-800 leading-none mb-1.5">
-                      {isReorderReport ? `${currentBreakdown[hoveredIdx].amount.toLocaleString()} Reorders` : (isQuantityReport ? `${currentBreakdown[hoveredIdx].amount.toLocaleString()} Units` : `$${currentBreakdown[hoveredIdx].amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
+                      {isReorderReport ? `${currentBreakdown[hoveredIdx].amount.toLocaleString()} Purchases` : (isQuantityReport ? `${currentBreakdown[hoveredIdx].amount.toLocaleString()} ${purchaseQuantityUom.toUpperCase()}` : `$${currentBreakdown[hoveredIdx].amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
                     </span>
                     <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100/50">
                       {currentBreakdown[hoveredIdx].percentage.toFixed(1)}%
@@ -1360,7 +1400,7 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
                     </div>
                     <div className="text-right shrink-0">
                       <span className="text-xs font-black text-slate-800">
-                        {isReorderReport ? cat.amount : (isQuantityReport ? cat.amount.toLocaleString() : `$${cat.totalSpent.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`)}
+                        {isReorderReport ? cat.amount : (isQuantityReport ? `${cat.amount.toLocaleString()} ${purchaseQuantityUom.toUpperCase()}` : `$${cat.totalSpent.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`)}
                       </span>
                     </div>
                   </div>
