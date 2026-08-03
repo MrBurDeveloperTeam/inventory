@@ -11,6 +11,7 @@ const PET_SLEEPING_KEY = 'pet_is_sleeping';
 const PET_SLEEPING_UPDATED_AT_KEY = 'pet_is_sleeping_updated_at';
 const MASCOT_SESSION_STATE_KEY = 'inventory_cat_mascot_session_state';
 const DEFAULT_MASCOT_POSITION = { x: -10, y: 85 };
+const DEFAULT_WELCOME_BACK_AUTO_CLOSE_MS = 6000;
 const MALLOW_ROWS = {
   idle: { row: 0, frames: 6, duration: '1.1s' },
   runRight: { row: 1, frames: 8, duration: '0.7s' },
@@ -37,18 +38,17 @@ const readMascotSessionState = () => {
       y: parsed.y,
       facingLeft: !!parsed.facingLeft,
       entryComplete: !!parsed.entryComplete,
-      dismissedDialog: !!parsed.dismissedDialog,
     };
   } catch {
     return null;
   }
 };
 
-const saveMascotSessionState = ({ x, y, facingLeft, entryComplete, dismissedDialog }) => {
+const saveMascotSessionState = ({ x, y, facingLeft, entryComplete }) => {
   try {
     sessionStorage.setItem(
       MASCOT_SESSION_STATE_KEY,
-      JSON.stringify({ x, y, facingLeft, entryComplete, dismissedDialog })
+      JSON.stringify({ x, y, facingLeft, entryComplete })
     );
   } catch {
     // Ignore storage failures; the mascot can still run normally.
@@ -146,23 +146,176 @@ export default function CatMascot({ onCatClick, disabled = false }) {
   const [currentUserId, setCurrentUserId] = useState(null);
   const autoCloseTimerRef = useRef(null);
   const isEntryWalkComplete = useRef(!!restoredMascotStateRef.current?.entryComplete);
-  const hasDismissedDialog = useRef(!!restoredMascotStateRef.current?.dismissedDialog);
+  // Which dialog type is currently prepared to show ('intro' | 'welcomeBack' | null),
+  // and which dialog types have already been dismissed during this page lifecycle.
+  // Tracking dismissal per-type (rather than one shared flag) means dismissing the
+  // Post-Login Intro no longer permanently blocks the Welcome Back dialog, or vice versa.
+  const currentDialogType = useRef(null);
+  const dismissedDialogs = useRef(new Set());
+  // Holds the auto-close duration for a prepared 'welcomeBack' dialog, set when
+  // its content is fetched but only ever consumed by tryActivateDialog() at the
+  // moment it actually shows — see the comment on tryActivateDialog for why.
+  const welcomeBackAutoCloseMsRef = useRef(DEFAULT_WELCOME_BACK_AUTO_CLOSE_MS);
+  // Mirrors isDialogActive synchronously (React state updates aren't immediate).
+  // Without this, tryActivateDialog() can be called again while a dialog is
+  // already showing (e.g. StrictMode's dev double-invoke of the fetch effect,
+  // or the click-to-move handler firing again) and would re-arm the Welcome
+  // Back timer from scratch every time, so it could keep getting reset before
+  // ever completing a full countdown.
+  const isDialogActiveRef = useRef(false);
+  // Unlike the other 6 Snabbb apps, this CatMascot instance is never unmounted
+  // across login/logout (rendered once with disabled={!isAuthenticated}, no key).
+  // Tracks the previous `disabled` value so a logged-out -> logged-in transition
+  // (a real new auth session, detected via the auth boundary itself rather than
+  // comparing userIds, since the same user can log back in with the same id) can
+  // clear dismissedDialogs — otherwise a 'welcomeBack' dismissed in a prior
+  // session would keep suppressing it after a fresh re-login in the same tab.
+  const prevDisabledRef = useRef(disabled);
+  // Bumped at the start of every initDialog() run. Async Supabase calls check
+  // this after each await and bail out if a newer run has since started (e.g.
+  // disabled flipped due to logout/login) — so a slow, stale request from a
+  // previous session can never apply its result (dialog steps, dialog type)
+  // to a later session or a different user.
+  const initDialogRequestIdRef = useRef(0);
+
+  const clearWelcomeBackAutoCloseTimer = () => {
+    if (autoCloseTimerRef.current !== null) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
+  };
+
+  const startWelcomeBackAutoCloseTimer = () => {
+    clearWelcomeBackAutoCloseTimer();
+
+    const configuredDuration = Number(welcomeBackAutoCloseMsRef.current);
+    const duration = Number.isFinite(configuredDuration) && configuredDuration > 0
+      ? configuredDuration
+      : DEFAULT_WELCOME_BACK_AUTO_CLOSE_MS;
+
+    autoCloseTimerRef.current = setTimeout(() => {
+      autoCloseTimerRef.current = null;
+      closeDialog();
+    }, duration);
+  };
+
+  // Marks the Post-Login Intro stage complete for a given user — either because
+  // they actually dismissed a visible Intro, or because a successful query
+  // confirmed there's no Intro configured/usable to show. Takes an explicit
+  // userId (rather than reading currentUserId state) so it's safe to call from
+  // inside initDialog() itself, where the just-fetched userId may not yet be
+  // reflected in currentUserId (state updates aren't synchronous).
+  const markIntroCompleted = (uid) => {
+    if (!uid) return;
+    localStorage.setItem(`intro_shown_${uid}`, 'true');
+  };
+
+  // Fetches and prepares the Welcome Back dialog for a given user. Used both
+  // when intro_shown_<userId> is already 'true' on entry, and as a same-login
+  // fallback right after markIntroCompleted() when the Intro stage turns out
+  // to have no usable content. Takes an explicit requestId (see
+  // initDialogRequestIdRef) and bails out after every await if a newer
+  // initDialog() run has since started — e.g. disabled flipped back to true,
+  // or the user logged out/in again — so a slow, stale request can never
+  // apply its result to a later session or a different user.
+  const prepareWelcomeBackDialog = async (uid, userMeta, userEmail, requestId) => {
+    try {
+      const { data: config, error } = await supabase
+        .from('aiboard_simulator_configs')
+        .select('welcome_back_text, welcome_back_auto_close_ms')
+        .eq('module_name', 'Inventory')
+        .limit(1)
+        .maybeSingle();
+
+      if (initDialogRequestIdRef.current !== requestId) return;
+
+      let welcomeText = !error ? config?.welcome_back_text : null;
+      const autoCloseMs = (!error && config?.welcome_back_auto_close_ms) || DEFAULT_WELCOME_BACK_AUTO_CLOSE_MS;
+
+      if (welcomeText && /\[name\]/i.test(welcomeText)) {
+        let displayName = null;
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('name, full_name')
+            .eq('user_id', uid)
+            .maybeSingle();
+          displayName = profile?.name || profile?.full_name || null;
+        } catch (err) {
+          console.error("Error fetching profile for welcome back name:", err);
+        }
+
+        if (initDialogRequestIdRef.current !== requestId) return;
+
+        if (!displayName) displayName = userMeta?.name || null;
+        if (!displayName && userEmail) displayName = userEmail.split('@')[0];
+        // Never show a raw email address, even if it came from profiles.name/full_name.
+        if (displayName && displayName.includes('@')) displayName = displayName.split('@')[0];
+
+        welcomeText = displayName
+          ? welcomeText.replace(/\[name\]/gi, displayName)
+          : welcomeText
+              .replace(/,\s*\[name\]/gi, '')
+              .replace(/\[name\],\s*/gi, '')
+              .replace(/\[name\]/gi, '')
+              .replace(/\s{2,}/g, ' ')
+              .trim();
+      }
+
+      if (initDialogRequestIdRef.current !== requestId) return;
+
+      if (welcomeText) {
+        setDialogSteps([welcomeText]);
+        setDialogStep(0);
+        currentDialogType.current = 'welcomeBack';
+        welcomeBackAutoCloseMsRef.current = autoCloseMs;
+        tryActivateDialog();
+      }
+    } catch (err) {
+      console.error("Error fetching welcome back message:", err);
+    }
+  };
 
   const closeDialog = () => {
-    hasDismissedDialog.current = true;
+    const dialogType = currentDialogType.current;
+    if (dialogType) {
+      dismissedDialogs.current.add(dialogType);
+    }
+    isDialogActiveRef.current = false;
     setIsDialogActive(false);
     saveMascotSessionState({
       ...catPos,
       facingLeft,
       entryComplete: isEntryWalkComplete.current,
-      dismissedDialog: true,
     });
-    if (autoCloseTimerRef.current) {
-      clearTimeout(autoCloseTimerRef.current);
-      autoCloseTimerRef.current = null;
+    clearWelcomeBackAutoCloseTimer();
+    if (dialogType === 'intro' && !disabled && currentUserId) {
+      markIntroCompleted(currentUserId);
     }
-    if (!disabled && currentUserId) {
-      localStorage.setItem(`intro_shown_${currentUserId}`, 'true');
+  };
+
+  // Single source of truth for showing a prepared dialog: only activates once the
+  // entry walk has finished AND a dialog type has been prepared AND that specific
+  // type hasn't already been dismissed this page lifecycle. Idempotent via
+  // isDialogActiveRef — once active, further calls (StrictMode's dev double-invoke
+  // of the fetch effect, click-to-move, etc.) are no-ops instead of re-arming the
+  // Welcome Back timer from scratch every time.
+  const tryActivateDialog = () => {
+    const dialogType = currentDialogType.current;
+    if (
+      !isEntryWalkComplete.current ||
+      !dialogType ||
+      dismissedDialogs.current.has(dialogType) ||
+      isDialogActiveRef.current
+    ) {
+      return;
+    }
+
+    isDialogActiveRef.current = true;
+    setIsDialogActive(true);
+
+    if (dialogType === 'welcomeBack') {
+      startWelcomeBackAutoCloseTimer();
     }
   };
 
@@ -305,62 +458,115 @@ export default function CatMascot({ onCatClick, disabled = false }) {
   }, [disabled]);
 
   useEffect(() => {
+    // A transition from logged-out to logged-in is a new auth session boundary.
+    // Clear per-type dismissals from the previous session so a dialog dismissed
+    // before logout (e.g. 'welcomeBack') doesn't keep suppressing itself forever
+    // just because this component instance was never unmounted.
+    const wasDisabled = prevDisabledRef.current;
+    prevDisabledRef.current = disabled;
+    if (wasDisabled && !disabled) {
+      dismissedDialogs.current.clear();
+      currentDialogType.current = null;
+      // If a dialog from the previous session was left open (e.g. logout while
+      // Welcome Back was still showing), fully close it so the new session's
+      // dialog can activate cleanly instead of being skipped as "already active".
+      if (isDialogActiveRef.current) {
+        isDialogActiveRef.current = false;
+        setIsDialogActive(false);
+      }
+      clearWelcomeBackAutoCloseTimer();
+    }
+
     const initDialog = async () => {
+      const requestId = ++initDialogRequestIdRef.current;
       let userId = null;
+      let userMeta = null;
+      let userEmail = null;
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        if (initDialogRequestIdRef.current !== requestId) return;
         userId = session?.user?.id || null;
+        userMeta = session?.user?.user_metadata || null;
+        userEmail = session?.user?.email || null;
         setCurrentUserId(userId);
       } catch (err) {
         console.error("Error fetching session in initDialog:", err);
       }
 
-      // If user is logged in (disabled = false) and has seen the intro, show Welcome Back and auto-close
+      // If user is logged in (disabled = false) and has seen the intro, fetch
+      // the configurable Welcome Back message and auto-close after a few seconds.
       if (!disabled && userId && localStorage.getItem(`intro_shown_${userId}`) === 'true') {
-        setDialogSteps(["Welcome back! 👋"]);
-        setDialogStep(0);
-
-        if (isEntryWalkComplete.current && !hasDismissedDialog.current) {
-          setIsDialogActive(true);
-        }
-
-        if (autoCloseTimerRef.current) {
-          clearTimeout(autoCloseTimerRef.current);
-        }
-        autoCloseTimerRef.current = setTimeout(() => {
-          hasDismissedDialog.current = true;
-          setIsDialogActive(false);
-        }, 6000); // disappear after 6 seconds
+        await prepareWelcomeBackDialog(userId, userMeta, userEmail, requestId);
         return;
       }
 
       try {
-        const { data: configs } = await supabase
+        const { data: configs, error: configsError } = await supabase
           .from('aiboard_simulator_configs')
           .select('id')
           .eq('module_name', 'Inventory')
           .limit(1);
 
-        if (configs && configs.length > 0) {
-          const configId = configs[0].id;
+        if (initDialogRequestIdRef.current !== requestId) return;
 
-          const { data, error } = await supabase
-            .from('aiboard_simulator_dialog_steps')
-            .select('step_text, sort_order')
-            .eq('config_id', configId)
-            .eq('is_post_login', !disabled)
-            .order('sort_order', { ascending: true });
+        if (configsError) {
+          // Infrastructure/query failure — do not mark the intro stage
+          // complete; preserve the ability to retry on the next login/reload.
+          return;
+        }
 
-          if (!error && data && data.length > 0) {
-            setDialogSteps(data.map(d => d.step_text));
-            setDialogStep(0);
-            if (isEntryWalkComplete.current && !hasDismissedDialog.current) {
-              setIsDialogActive(true);
-            }
+        if (!configs || configs.length === 0) {
+          // Query succeeded and confirmed no simulator config exists at all
+          // for this module — there is no Intro to ever show. Mark the stage
+          // complete and immediately fall back to Welcome Back in this same
+          // login, instead of requiring another reload/login to see it.
+          if (!disabled) {
+            markIntroCompleted(userId);
+            await prepareWelcomeBackDialog(userId, userMeta, userEmail, requestId);
           }
+          return;
+        }
+
+        const configId = configs[0].id;
+
+        const { data, error } = await supabase
+          .from('aiboard_simulator_dialog_steps')
+          .select('step_text, sort_order')
+          .eq('config_id', configId)
+          .eq('is_post_login', !disabled)
+          .order('sort_order', { ascending: true });
+
+        if (initDialogRequestIdRef.current !== requestId) return;
+
+        if (error) {
+          // Infrastructure/query failure — do not mark the intro stage complete.
+          return;
+        }
+
+        const steps = (data || [])
+          .map(d => d.step_text)
+          .filter(text => typeof text === 'string' && text.trim().length > 0);
+
+        if (steps.length > 0) {
+          setDialogSteps(steps);
+          setDialogStep(0);
+          currentDialogType.current = 'intro';
+          tryActivateDialog();
+          return;
+        }
+
+        // Query succeeded but returned no usable intro content (zero rows, or
+        // every row was empty/whitespace-only) — there is nothing to show.
+        // Mark the stage complete and immediately fall back to Welcome Back
+        // in this same login, instead of requiring another reload/login.
+        if (!disabled) {
+          markIntroCompleted(userId);
+          await prepareWelcomeBackDialog(userId, userMeta, userEmail, requestId);
         }
       } catch (err) {
         console.error("Error fetching dialog steps:", err);
+        // Do not mark the intro stage complete on an unexpected/network
+        // failure — preserve the ability to retry on the next login or reload.
       }
     };
 
@@ -560,7 +766,7 @@ export default function CatMascot({ onCatClick, disabled = false }) {
       setWalkDuration(0);
       setIsWalking(false);
       isEntryWalkComplete.current = true;
-      hasDismissedDialog.current = restored.dismissedDialog || hasDismissedDialog.current;
+      tryActivateDialog();
     } else {
       lastMoveStartPos.current = DEFAULT_MASCOT_POSITION;
       lastMoveTarget.current = { x: destX, y: destY };
@@ -581,11 +787,8 @@ export default function CatMascot({ onCatClick, disabled = false }) {
           y: destY,
           facingLeft: false,
           entryComplete: true,
-          dismissedDialog: hasDismissedDialog.current,
         });
-        if (!hasDismissedDialog.current) {
-          setIsDialogActive(true);
-        }
+        tryActivateDialog();
       }, duration * 1000);
     }
 
@@ -641,7 +844,6 @@ export default function CatMascot({ onCatClick, disabled = false }) {
         y: targetY,
         facingLeft: nextFacingLeft,
         entryComplete: true,
-        dismissedDialog: hasDismissedDialog.current,
       });
 
       if (walkTimeoutRef.current) clearTimeout(walkTimeoutRef.current);
@@ -653,11 +855,8 @@ export default function CatMascot({ onCatClick, disabled = false }) {
           y: targetY,
           facingLeft: nextFacingLeft,
           entryComplete: true,
-          dismissedDialog: hasDismissedDialog.current,
         });
-        if (!hasDismissedDialog.current) {
-          setIsDialogActive(true);
-        }
+        tryActivateDialog();
       }, duration * 1000);
     };
 
@@ -674,7 +873,6 @@ export default function CatMascot({ onCatClick, disabled = false }) {
         ...lastMoveTarget.current,
         facingLeft,
         entryComplete: isEntryWalkComplete.current,
-        dismissedDialog: hasDismissedDialog.current,
       });
     };
   }, []);
@@ -786,7 +984,7 @@ export default function CatMascot({ onCatClick, disabled = false }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
-              className="w-max shrink-0 max-w-[280px] bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col overflow-visible relative pointer-events-auto mb-4 mr-1 cursor-default"
+              className="w-max shrink-0 max-w-[min(85vw,340px)] bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col overflow-visible relative pointer-events-auto mb-4 mr-1 cursor-default"
               onClick={(e) => e.stopPropagation()}
             >
               <div
