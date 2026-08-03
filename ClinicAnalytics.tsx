@@ -39,6 +39,7 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const [isVendorDropdownOpen, setIsVendorDropdownOpen] = useState(false);
   const [isPeriodDropdownOpen, setIsPeriodDropdownOpen] = useState(false);
+  const [isPurchaseUomDropdownOpen, setIsPurchaseUomDropdownOpen] = useState(false);
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
 
   useEffect(() => {
@@ -51,6 +52,7 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const vendorDropdownRef = useRef<HTMLDivElement>(null);
   const periodDropdownRef = useRef<HTMLDivElement>(null);
+  const purchaseUomDropdownRef = useRef<HTMLDivElement>(null);
   const catViewDropdownRef = useRef<HTMLDivElement>(null);
   const invDimensionDropdownRef = useRef<HTMLDivElement>(null);
   const invPeriodDropdownRef = useRef<HTMLDivElement>(null);
@@ -100,6 +102,9 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
       }
       if (periodDropdownRef.current && !periodDropdownRef.current.contains(event.target as Node)) {
         setIsPeriodDropdownOpen(false);
+      }
+      if (purchaseUomDropdownRef.current && !purchaseUomDropdownRef.current.contains(event.target as Node)) {
+        setIsPurchaseUomDropdownOpen(false);
       }
       if (catViewDropdownRef.current && !catViewDropdownRef.current.contains(event.target as Node)) {
         setIsCatViewDropdownOpen(false);
@@ -510,6 +515,13 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
 
   const isQuantityReport = breakdownType === 'product';
   const isReorderReport = breakdownType === 'reorder';
+  const distributionChartTitle = breakdownType === 'product'
+    ? `Top 5 Purchased Items by ${purchaseQuantityUom.toUpperCase()}`
+    : breakdownType === 'reorder'
+      ? 'Top 5 Most Frequently Purchased Items'
+      : breakdownType === 'vendor'
+        ? 'Purchase Value by Vendor'
+        : 'Inventory Value by Category';
   const totalValue = breakdownType === 'category'
     ? inventoryBreakdownData.reduce((sum, cat) => sum + cat.value, 0)
     : (isReorderReport ? usageStats.totalReorders : (isQuantityReport ? usageStats.totalQuantity : usageStats.totalExpense));
@@ -1245,23 +1257,57 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
               </div>
 
               {breakdownType === 'product' && (
-                <div className="relative">
-                  <select
+                <div className="relative" ref={purchaseUomDropdownRef}>
+                  <button
+                    type="button"
                     aria-label="Purchased quantity unit of measure"
-                    value={purchaseQuantityUom}
-                    onChange={(e) => {
-                      setPurchaseQuantityUom(e.target.value as 'pcs' | 'box');
-                      setHoveredIdx(null);
-                    }}
-                    className="appearance-none min-w-[112px] px-4 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl shadow-sm hover:border-indigo-600 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-[10px] font-black text-slate-700 uppercase tracking-widest cursor-pointer"
+                    aria-expanded={isPurchaseUomDropdownOpen}
+                    onClick={() => setIsPurchaseUomDropdownOpen(!isPurchaseUomDropdownOpen)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl shadow-sm hover:border-indigo-600 transition-all group"
                   >
-                    <option value="pcs">By PCS</option>
-                    <option value="box">By BOX</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                    <Package className="w-4 h-4 text-indigo-600" />
+                    <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">By {purchaseQuantityUom}</span>
+                    <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-300 ${isPurchaseUomDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isPurchaseUomDropdownOpen && (
+                    <div className="absolute top-full right-0 mt-2 w-40 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[70] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="p-2 space-y-1">
+                        {(['pcs', 'box'] as const).map((uom) => (
+                          <button
+                            type="button"
+                            key={uom}
+                            onClick={() => {
+                              setPurchaseQuantityUom(uom);
+                              setHoveredIdx(null);
+                              setIsPurchaseUomDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${purchaseQuantityUom === uom ? 'bg-slate-50 text-slate-900' : 'hover:bg-slate-50 text-slate-500'}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`p-1.5 rounded-lg bg-white shadow-sm ${purchaseQuantityUom === uom ? 'text-indigo-600' : 'text-slate-400'}`}>
+                                <Package className="w-4 h-4" />
+                              </div>
+                              <span className="text-xs font-bold uppercase">By {uom}</span>
+                            </div>
+                            {purchaseQuantityUom === uom && <Check className="w-3 h-3 text-emerald-500" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="text-center -mb-3">
+            <h4 className="text-sm font-black text-slate-700 tracking-tight">{distributionChartTitle}</h4>
+            {breakdownType === 'product' && (
+              <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Ranked by purchased {purchaseQuantityUom === 'pcs' ? 'pieces' : 'boxes'}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col items-center py-2 border-b border-slate-50 w-full">
