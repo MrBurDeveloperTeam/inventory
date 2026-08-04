@@ -659,7 +659,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
                 onClick={() => setView('login')}
                 className="transition-colors hover:text-slate-600"
               >
-                Already have an account? <span className="font-bold text-tiffany-600 hover:underline">Sign in</span>
+                Already have an account? <span className="font-bold text-tiffany-600 hover:underline">Log In</span>
               </button>
             </div>
           </div>
@@ -747,7 +747,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
                 onClick={() => setView('signup')}
                 className="transition-colors hover:text-slate-600"
               >
-                Don't have an account? <span className="font-bold text-tiffany-600 hover:underline">Sign up</span>
+                Don't have an account? <span className="font-bold text-tiffany-600 hover:underline">Sign Up</span>
               </button>
             </div>
           </div>
