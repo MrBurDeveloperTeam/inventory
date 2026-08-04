@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
-import { User, Building2, ChevronDown, Mail, Phone, BriefcaseBusiness, Globe2, ShieldCheck } from 'lucide-react';
+import { User, Building2, ChevronDown, Mail, Phone, BriefcaseBusiness, Globe2, ShieldCheck, Share2 } from 'lucide-react';
 import { UserProfile } from './types';
 import { api } from './services/api';
 import { loginOdoo } from './services/LoginOdoo';
@@ -29,6 +29,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
   const [companyName, setCompanyName] = useState('');
   const [dob, setDob] = useState('');
   const [country, setCountry] = useState('');
+  const [referralCode, setReferralCode] = useState(() => new URLSearchParams(window.location.search).get('referral') || '');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   // Password states (FIX: no hardcoded passwords)
@@ -93,28 +94,59 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
           setErrorMsg('You must agree to the Terms of Service, Privacy Policy and Disclaimer.');
           return;
         }
-        const payload = {
-          email: email.trim(),
+        const normalizedEmail = email.trim().toLowerCase();
+        const normalizedReferralCode = referralCode.trim();
+        const submittedAccountType: 'individual' | 'company' = accountType === 'company' ? 'company' : 'individual';
+
+        const supabasePayload = {
+          email: normalizedEmail,
           password,
           options: {
             data: {
               name: name.trim(),
-              account_type: accountType,
+              full_name: name.trim(),
+              account_type: submittedAccountType,
               phone: phone.trim(),
               position: effectivePosition,
               dob,
               country,
               agreed_to_terms: agreedToTerms,
-              company_name: accountType === 'company' ? companyName.trim() : null,
+              company_name: submittedAccountType === 'company' ? companyName.trim() : null,
+              company_email: submittedAccountType === 'company' ? normalizedEmail : null,
+              referral_code: normalizedReferralCode || null,
             },
           },
         };
-        const { data: odooData } = await api.post('/inventory/sign-up', payload);
+
+        const inventorySignupPayload = {
+          ...supabasePayload,
+          login: normalizedEmail,
+          account_type: submittedAccountType,
+          companyName: submittedAccountType === 'company' ? companyName.trim() : undefined,
+          companyEmail: submittedAccountType === 'company' ? normalizedEmail : undefined,
+          fullName: name.trim(),
+          phone: phone.trim(),
+          country,
+          dob,
+          jobPosition: position,
+          customJobPosition: position === 'OTHER' ? customJobPosition.trim() : undefined,
+          position: effectivePosition,
+          referralCode: normalizedReferralCode || undefined,
+          referral_code: normalizedReferralCode || undefined,
+        };
+
+        const { data: odooData } = await api.post('/inventory/sign-up', inventorySignupPayload);
         console.log('ODoo sign-up response:', odooData);
 
-        const {data, error } = odooData.data.result.ok && await supabase.auth.signUp(payload);
+        const odooResult = odooData?.data?.result ?? odooData?.result ?? odooData;
+        if (odooResult?.ok === false) {
+          throw new Error(odooResult?.message || odooResult?.error || 'Company account could not be created.');
+        }
 
-          setErrorMsg('Sign up successful. Please check your email to confirm your account.');
+        const { error } = await supabase.auth.signUp(supabasePayload);
+        if (error) throw error;
+
+        setErrorMsg('Sign up successful. Please check your email to confirm your account.');
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -225,6 +257,24 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
                   </div>
                 </>
               )}
+
+              <div>
+                <label className={labelClass}>Referred by <span className="normal-case font-medium">(optional)</span></label>
+                <div className="relative">
+                  <Share2 className={fieldIconClass} />
+                  <input
+                    type="text"
+                    className={inputClass}
+                    placeholder="Referral code"
+                    value={referralCode}
+                    onChange={(e) => setReferralCode(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+                <p className="text-xs text-slate-400 italic mt-1">
+                  Referred by a doctor already on Snabbb? Enter their code, email, or share their link to auto-fill this.
+                </p>
+              </div>
 
               <div>
                 <label className={labelClass}>{accountType === 'individual' ? 'Phone (WhatsApp)' : 'Phone'}</label>

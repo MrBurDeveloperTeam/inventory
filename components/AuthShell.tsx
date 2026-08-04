@@ -19,7 +19,7 @@ const AuthShell: React.FC<AuthShellProps> = ({
   onThemeToggle,
   children,
 }) => (
-  <div className="min-h-screen bg-slate-100 flex flex-col">
+  <div className="min-h-screen bg-slate-100 flex flex-col" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
     <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-2xl border-b border-slate-200/50 shadow-[0_2px_15px_rgba(0,0,0,0.02)]">
       <div className="w-full flex items-center justify-between py-4 sm:py-5 px-4 sm:px-7">
         <a
