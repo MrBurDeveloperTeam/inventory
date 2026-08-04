@@ -352,7 +352,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
                 <div className="relative">
                   <Globe2 className={fieldIconClass} />
                   <select
-                    className={`${inputClass} pr-10`}
+                    className={`${inputClass} appearance-none pr-10`}
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
                     required
