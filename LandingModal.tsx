@@ -257,7 +257,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
                   <div>
                     <label className={labelClass}>Your Email</label>
                     <div className="relative"><Mail className={fieldIconClass} /><input type="email" className={inputClass} placeholder="e.g. nur@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-                    <p className="text-[10px] text-slate-400 mt-0.5">This will be your login email</p>
+                    <p className="text-xs text-slate-400 italic mt-1">This will be your login email</p>
                   </div>
                 </>
               ) : (
