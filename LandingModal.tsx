@@ -39,6 +39,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
   // UX states
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [noticeType, setNoticeType] = useState<'error' | 'success'>('error');
 
   const inputClass =
     'w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-slate-800 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-tiffany-600/20 focus:border-tiffany-600 transition-all text-sm';
@@ -49,6 +50,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
     setPassword('');
     setConfirmPassword('');
     setErrorMsg(null);
+    setNoticeType('error');
   };
 
   // Clear sensitive fields when switching views
@@ -59,6 +61,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setNoticeType('error');
     setLoading(true);
 
     try {
@@ -146,7 +149,8 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
         const { error } = await supabase.auth.signUp(supabasePayload);
         if (error) throw error;
 
-        setErrorMsg('Sign up successful. Please check your email to confirm your account.');
+        setNoticeType('success');
+        setErrorMsg('Registration successful! Check your email to verify your account.');
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -178,6 +182,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
       }
     } catch (err) {
       console.error('Auth error', err);
+      setNoticeType('error');
       setErrorMsg((err as Error).message || 'Authentication failed.');
     } finally {
       setLoading(false);
@@ -189,7 +194,14 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
         <div className="w-full max-w-[420px] min-h-0 bg-white border border-slate-200 rounded-[1.5rem] shadow-2xl p-6 sm:max-w-xl sm:p-8 lg:max-w-2xl lg:p-10 flex flex-col justify-center">        
           {view === 'signup' ? (
           <div className="flex flex-col gap-4">
-            <header className="mb-3">
+            <header className="mb-3 text-left">
+              <a
+                href="https://app.snabbb.com/"
+                aria-label="Return to Snabbb main app"
+                className="mb-5 inline-flex rounded-md transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tiffany-600 focus-visible:ring-offset-2"
+              >
+                <img src="/icons/Snabbb-Teal.png" alt="Snabbb" className="h-7 w-auto" />
+              </a>
               <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter">Create Account</h1>
               <p className="text-slate-500 font-semibold text-sm leading-relaxed">Track and manage your dental inventory with ease.</p>
             </header>
@@ -223,7 +235,14 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
             </div>
 
             {!!errorMsg && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <div
+                role="status"
+                className={`rounded-xl border px-3 py-2 text-xs ${
+                  noticeType === 'success'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-red-200 bg-red-50 text-red-700'
+                }`}
+              >
                 {errorMsg}
               </div>
             )}
@@ -634,24 +653,38 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
               </button>
             </form>
 
-            <div className="text-center pt-1">
+            <div className="text-center pt-1 text-xs font-medium text-slate-500">
               <button
                 type="button"
                 onClick={() => setView('login')}
-                className="text-[hsl(180_14%_49%)] font-bold text-xs hover:underline"
+                className="transition-colors hover:text-slate-600"
               >
-                Already have an account? Log in
+                Already have an account? <span className="font-bold text-tiffany-600 hover:underline">Sign in</span>
               </button>
             </div>
           </div>
         ) : (
           <div className="flex flex-col gap-6">
-            <div className="text-center">
+            <header className="text-left">
+              <a
+                href="https://app.snabbb.com/"
+                aria-label="Return to Snabbb main app"
+                className="mb-5 inline-flex rounded-md transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tiffany-600 focus-visible:ring-offset-2"
+              >
+                <img src="/icons/Snabbb-Teal.png" alt="Snabbb" className="h-7 w-auto" />
+              </a>
               <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Welcome Back</h2>
-            </div>
+            </header>
 
             {!!errorMsg && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <div
+                role="status"
+                className={`rounded-xl border px-3 py-2 text-xs ${
+                  noticeType === 'success'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-red-200 bg-red-50 text-red-700'
+                }`}
+              >
                 {errorMsg}
               </div>
             )}
@@ -675,7 +708,10 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
                   <button
                     type="button"
                     className="text-tiffany-600 text-[10px] font-bold hover:underline"
-                    onClick={() => setErrorMsg('Password reset is not implemented yet.')}
+                    onClick={() => {
+                      setNoticeType('error');
+                      setErrorMsg('Password reset is not implemented yet.');
+                    }}
                   >
                     Forgot Password?
                   </button>
@@ -705,13 +741,13 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
               </button>
             </form>
 
-            <div className="text-center">
+            <div className="text-center text-xs font-medium text-slate-500">
               <button
                 type="button"
                 onClick={() => setView('signup')}
-                className="text-[hsl(180_14%_49%)] font-bold text-xs hover:underline"
+                className="transition-colors hover:text-slate-600"
               >
-                Don't have an account? Sign up
+                Don't have an account? <span className="font-bold text-tiffany-600 hover:underline">Sign up</span>
               </button>
             </div>
           </div>
