@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from './supabaseClient';
 import { User, Building2, ChevronDown, Mail, Phone, BriefcaseBusiness, Globe2, ShieldCheck, Share2 } from 'lucide-react';
 import { UserProfile } from './types';
 import { api } from './services/api';
@@ -101,7 +100,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
         const normalizedReferralCode = referralCode.trim();
         const submittedAccountType: 'individual' | 'company' = accountType === 'company' ? 'company' : 'individual';
 
-        const supabasePayload = {
+        const mainAppSignupPayload = {
           email: normalizedEmail,
           password,
           options: {
@@ -122,7 +121,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
         };
 
         const inventorySignupPayload = {
-          ...supabasePayload,
+          ...mainAppSignupPayload,
           login: normalizedEmail,
           account_type: submittedAccountType,
           companyName: submittedAccountType === 'company' ? companyName.trim() : undefined,
@@ -146,39 +145,14 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
           throw new Error(odooResult?.message || odooResult?.error || 'Company account could not be created.');
         }
 
-        const { error } = await supabase.auth.signUp(supabasePayload);
-        if (error) throw error;
-
         setNoticeType('success');
         setErrorMsg('Registration successful! Check your email to verify your account.');
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-        
-        if (error) {
-          const { data } =  await loginOdoo(email, password); 
-          data && data?.result && data.result?.uid
-          if (data && data.result && data.result.uid) {
-            const applinkData = await applink(data.result);
-            console.log('Applink response:', applinkData);
-          }
-          return data;
-        };
-
-        if (data.user) {
-          const inferredAccountType = (data.user.user_metadata?.account_type as any) || (email.trim().toLowerCase() === 'admin123@gmail.com' ? 'admin' : 'individual');
-          const profile: UserProfile = {
-            name: data.user.user_metadata?.name || data.user.email || 'User',
-            email: data.user.email || email.trim(),
-            accountType: inferredAccountType,
-            phone: data.user.user_metadata?.phone || '',
-            position: data.user.user_metadata?.position || '',
-            companyName: data.user.user_metadata?.company_name,
-          };
-          onLogin(profile);
+        const { data } = await loginOdoo(email.trim(), password);
+        if (!data?.result?.uid) {
+          throw new Error('Invalid login credentials.');
         }
+        await applink(data.result);
       }
     } catch (err) {
       console.error('Auth error', err);
