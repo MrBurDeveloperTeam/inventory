@@ -1541,7 +1541,12 @@ const handleLogout = async () => {
     setHistory(prev => itemAction === 'delete'
       ? markRoomPurchaseHistoryArchived(prev, id)
       : prev.map(h => h.roomId === id && targetRoom ? { ...h, roomId: targetRoom.id, location: targetRoom.name } : h));
-    addActivity(
+    // Awaited (unlike other addActivity call sites) because this log
+    // references the room's own id, and that room row is about to be
+    // deleted for real a few lines below. Without awaiting, the log's
+    // Supabase insert can lose the race and land after the room DELETE,
+    // violating inventory_activity_logs_room_id_fkey.
+    await addActivity(
       id,
       room.name,
       'delete',
