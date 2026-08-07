@@ -26,6 +26,7 @@ import {
 import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { api } from './services/api';
+import { logActivityToOdoo } from './services/logActivityToOdoo';
 import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
 import { jwtDecode } from 'jwt-decode';
@@ -1853,6 +1854,22 @@ const handleLogout = async () => {
       if (error) console.error('Failed to persist activity log:', error);
       syncInFlight.current = false;
     }
+
+    // Best-effort sync to Odoo. Never awaited by callers and never allowed
+    // to throw — Odoo being slow/unreachable must not block the UI or the
+    // Supabase write above, which remains the source of truth locally.
+    logActivityToOdoo({
+      logId: newLogId,
+      supabaseUserId: supabaseUserId || null,
+      actorName: user?.name || null,
+      action,
+      roomId,
+      roomName,
+      details,
+      beforeValue: options?.beforeValue,
+      afterValue: options?.afterValue,
+      occurredAt: timestamp,
+    }).catch((err) => console.error('logActivityToOdoo threw unexpectedly:', err));
   };
 
   const updateRoomName = async (id: string, name: string) => {

@@ -10,6 +10,11 @@
 
 const ODOO_BASE_URL = 'https://mrbur.odoo.com';
 const ODOO_THEME_URL = 'https://mrbur.odoo.com/api/user/theme';
+// Odoo-side controller that should persist one inventory activity event.
+// Not implemented yet on the Odoo side — see ACTIVITY_TRACKER_ODOO_SYNC.md.
+// Rename this constant once the real Odoo route is known; nothing else needs to change.
+const ODOO_ACTIVITY_URL = 'https://mrbur.odoo.com/api/inventory/activity';
+const ACTIVITY_ACTIONS = new Set(['add', 'remove', 'delete', 'transfer_out', 'transfer_in', 'edit', 'receive']);
 const COOKIE_NAME    = 'snabbb-theme';
 const COOKIE_DOMAIN  = '.snabbb.com';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
@@ -85,29 +90,15 @@ function buildThemeCookie(theme) {
   return [`${COOKIE_NAME}=${encodeURIComponent(theme)}`, 'Path=/', `Domain=${COOKIE_DOMAIN}`, `Max-Age=${COOKIE_MAX_AGE}`, 'SameSite=Lax', 'Secure'].join('; ');
 }
 
-async function handleWalletRequest(request) {
-  if (request.method !== 'GET') {
-    return jsonResponse(
-      {
-        ok: false,
-        error: 'Method not allowed',
-      },
-      405
-    );
-  }
-
-  const odooCookie = getOdooCookie(request);
-
-  if (!odooCookie) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: 'Missing Odoo session',
-      },
-      401
-    );
-  }
-
+/**
+ * Resolves the Odoo partner_id (and raw session result) for the session_id/mrbur_sso
+ * cookie already forwarded by the browser. Shared by handleWalletRequest and
+ * handleActivityRequest so both trust the server-side Odoo session rather than
+ * any partner_id the client might claim to be.
+ *
+ * Returns { ok: true, partnerId, session } or { ok: false, status, error }.
+ */
+async function resolveOdooSession(odooCookie) {
   try {
     const sessionResponse = await fetch(
       `${ODOO_BASE_URL}/web/session/get_session_info`,
@@ -136,18 +127,8 @@ async function handleWalletRequest(request) {
       sessionData?.error ||
       !sessionData?.result
     ) {
-      console.error(
-        'Odoo session response:',
-        sessionData
-      );
-
-      return jsonResponse(
-        {
-          ok: false,
-          error: 'Unable to retrieve Odoo session',
-        },
-        401
-      );
+      console.error('Odoo session response:', sessionData);
+      return { ok: false, status: 401, error: 'Unable to retrieve Odoo session' };
     }
 
     const partnerId =
@@ -155,14 +136,45 @@ async function handleWalletRequest(request) {
       sessionData.result.partnerId;
 
     if (!partnerId) {
-      return jsonResponse(
-        {
-          ok: false,
-          error: 'Odoo partner_id was not found',
-        },
-        404
-      );
+      return { ok: false, status: 404, error: 'Odoo partner_id was not found' };
     }
+
+    return { ok: true, partnerId, session: sessionData.result };
+  } catch (error) {
+    console.error('Odoo session lookup error:', error);
+    return { ok: false, status: 500, error: error?.message || 'Odoo session service is unavailable' };
+  }
+}
+
+async function handleWalletRequest(request) {
+  if (request.method !== 'GET') {
+    return jsonResponse(
+      {
+        ok: false,
+        error: 'Method not allowed',
+      },
+      405
+    );
+  }
+
+  const odooCookie = getOdooCookie(request);
+
+  if (!odooCookie) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: 'Missing Odoo session',
+      },
+      401
+    );
+  }
+
+  try {
+    const sessionResult = await resolveOdooSession(odooCookie);
+    if (!sessionResult.ok) {
+      return jsonResponse({ ok: false, error: sessionResult.error }, sessionResult.status);
+    }
+    const { partnerId } = sessionResult;
 
     const walletResponse = await fetch(
       `${ODOO_BASE_URL}/api/wallet?partner_id=${encodeURIComponent(
@@ -248,6 +260,124 @@ async function handleWalletRequest(request) {
   }
 }
 
+/**
+ * POST /api/activity
+ *
+ * Receives one inventory activity event from the app (see
+ * services/logActivityToOdoo.ts), resolves the caller's Odoo partner_id
+ * server-side from their session cookie (never trusts a client-supplied
+ * partner_id), and forwards the event to Odoo to be persisted.
+ *
+ * This endpoint is best-effort from the app's point of view: it should
+ * always return quickly and never throw uncaught, since a failed sync must
+ * not affect the app's local (Supabase) activity log, which remains the
+ * source of truth in the UI.
+ *
+ * Expected request body:
+ * {
+ *   app_code: "inventory",
+ *   external_ref: "activity-<uuid>",   // idempotency key, forwarded as-is to Odoo
+ *   supabase_user_id: string | null,
+ *   actor_name: string | null,
+ *   action: "add"|"remove"|"delete"|"transfer_out"|"transfer_in"|"edit"|"receive",
+ *   room_id: string,
+ *   room_name: string,
+ *   details: string,
+ *   before_value: string | null,
+ *   after_value: string | null,
+ *   occurred_at: string (ISO timestamp)
+ * }
+ */
+async function handleActivityRequest(request) {
+  if (request.method !== 'POST') {
+    return jsonResponse({ ok: false, error: 'Method not allowed' }, 405);
+  }
+
+  const odooCookie = getOdooCookie(request);
+  if (!odooCookie) {
+    return jsonResponse({ ok: false, error: 'Missing Odoo session' }, 401);
+  }
+
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+
+  const {
+    external_ref,
+    supabase_user_id = null,
+    actor_name = null,
+    action,
+    room_id,
+    room_name,
+    details,
+    before_value = null,
+    after_value = null,
+    occurred_at,
+  } = body;
+
+  if (!external_ref || !action || !room_id || !details || !occurred_at) {
+    return jsonResponse(
+      { ok: false, error: 'Missing required field(s): external_ref, action, room_id, details, occurred_at' },
+      400
+    );
+  }
+
+  if (!ACTIVITY_ACTIONS.has(action)) {
+    return jsonResponse({ ok: false, error: `Unknown action "${action}"` }, 400);
+  }
+
+  const sessionResult = await resolveOdooSession(odooCookie);
+  if (!sessionResult.ok) {
+    return jsonResponse({ ok: false, error: sessionResult.error }, sessionResult.status);
+  }
+  const { partnerId, session } = sessionResult;
+
+  try {
+    const odooResponse = await fetch(ODOO_ACTIVITY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Cookie: odooCookie,
+      },
+      body: JSON.stringify({
+        app_code: 'inventory',
+        external_ref,
+        odoo_partner_id: partnerId,
+        odoo_company_id: session?.company_id || null,
+        supabase_user_id,
+        actor_name,
+        action,
+        room_id,
+        room_name: room_name || null,
+        details,
+        before_value,
+        after_value,
+        occurred_at,
+      }),
+    });
+
+    const odooData = await odooResponse.json().catch(() => null);
+
+    if (!odooResponse.ok || odooData?.ok === false) {
+      console.error('Activity sync to Odoo failed:', odooData);
+      return jsonResponse(
+        { ok: false, error: odooData?.error || 'Odoo rejected the activity event' },
+        odooResponse.status || 502
+      );
+    }
+
+    return jsonResponse({ ok: true, external_ref });
+  } catch (error) {
+    console.error('Activity sync error:', error);
+    return jsonResponse(
+      { ok: false, error: error?.message || 'Activity sync service is unavailable' },
+      500
+    );
+  }
+}
+
 function isHtmlRequest(request) {
   const accept = request.headers.get('Accept') || '';
   if (!accept.includes('text/html')) return false;
@@ -272,6 +402,10 @@ export default {
 
     if (url.pathname === '/api/wallet') {
       return handleWalletRequest(request);
+    }
+
+    if (url.pathname === '/api/activity') {
+      return handleActivityRequest(request);
     }
 
     if (!isHtmlRequest(request)) {
