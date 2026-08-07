@@ -1489,11 +1489,15 @@ const handleLogout = async () => {
 
     // 1. Optimistic Update
     setRooms(prev => [...prev, newRoom]);
-    addActivity(newRoomId, newRoom.name, 'add', `Created "${newRoom.name}"`);
     setIsAddMode(false);
     isDirty.current = true;
 
-    // 2. Direct Persistence
+    // 2. Direct Persistence — insert the room itself first. The activity
+    // log below references this room's id via a foreign key
+    // (inventory_activity_logs_room_id_fkey), so the room row must exist
+    // before we try to log against it — logging first (fire-and-forget)
+    // was racing this insert and intermittently losing.
+    let roomPersisted = true;
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
@@ -1507,12 +1511,21 @@ const handleLogout = async () => {
       if (error) {
         console.error('Failed to persist new room:', error);
         setSyncStatus('error');
+        roomPersisted = false;
       } else {
         setSyncStatus('synced');
       }
       isDirty.current = false;
       syncInFlight.current = false;
     }
+
+    // Only log once we know the room row exists (or no remote persistence
+    // is in play at all, in which case addActivity's own Supabase write is
+    // skipped too via the same currentInventoryOwnerId check).
+    if (roomPersisted) {
+      await addActivity(newRoomId, newRoom.name, 'add', `Created "${newRoom.name}"`);
+    }
+
     return newRoomId;
   };
 
