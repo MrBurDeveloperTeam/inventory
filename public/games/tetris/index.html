@@ -3,15 +3,28 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <link
+      rel="stylesheet"
+      href="style.css?v=20260731-4"
+  />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 </head>
 
 <body tabindex="0">
-  <div class="wrap">
-    <div class="board">
+  <!--
+    The viewport represents the currently visible iframe area.
+    The complete three-column board is scaled as one unit.
+  -->
+  <div
+    id="tetris-viewport"
+    class="wrap"
+  >
+    <div
+      id="tetris-stage"
+      class="board"
+    >
       <!-- Left Side Panel -->
       <div class="side">
         <div class="preview-box" style="margin-bottom: 24px;">
@@ -58,9 +71,6 @@
               style="color: #f0f000">i</span><span style="color: #00f0f0">s</span>
           </div>
         </div>
-        <!-- Floating Pause Button -->
-        <button id="btn-pause" data-testid="btn-pause" class="floating-pause-btn" style="display:none"><i
-            class="fas fa-pause"></i></button>
 
         <canvas id="tetris" width="280" height="560" data-testid="game-canvas"></canvas>
 
@@ -159,42 +169,476 @@
 
       </div>
 
-      <div class="side">
-        <div class="preview-box" style="margin-top: 28px; margin-bottom: 24px;">
-          <div class="preview-inner">
-            <div class="preview-glare"></div>
-            <div class="preview-label">Next</div>
-            <canvas id="next" class="next-canvas" width="168" height="112" data-testid="next-canvas"></canvas>
+            <!-- Right Side Panel -->
+            <div class="side">
+              <div
+                class="preview-box"
+                style="
+                  margin-top: 28px;
+                  margin-bottom: 24px;
+                "
+              >
+                <div class="preview-inner">
+                  <div class="preview-glare"></div>
+
+                  <div class="preview-label">
+                    Next
+                  </div>
+
+                  <canvas
+                    id="next"
+                    class="next-canvas"
+                    width="168"
+                    height="112"
+                    data-testid="next-canvas"
+                  ></canvas>
+                </div>
+              </div>
+
+              <div
+                class="panel"
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  gap: 8px;
+                "
+              >
+                <div
+                  class="stat-card"
+                  style="margin-bottom: 0;"
+                >
+                  <div class="stat-label">
+                    <i
+                      class="fas fa-trophy"
+                      style="
+                        color: #fcd34d;
+                        margin-right: 5px;
+                      "
+                    ></i>
+                    Your High Score
+                  </div>
+
+                  <div
+                    id="highscore"
+                    class="stat-value highscore-value"
+                    style="font-size: 28px;"
+                    data-testid="highscore"
+                  >
+                    0
+                  </div>
+                </div>
+
+                <div
+                  class="stat-card"
+                  style="margin-bottom: 0;"
+                >
+                  <div class="stat-label">
+                    Current Score
+                  </div>
+
+                  <div
+                    id="score"
+                    class="stat-value"
+                    data-testid="score"
+                  >
+                    0
+                  </div>
+                </div>
+
+                <div
+                  class="stat-card"
+                  style="margin-bottom: 0;"
+                >
+                  <div class="stat-label">
+                    Level
+                  </div>
+
+                  <div
+                    id="level"
+                    class="stat-value"
+                    data-testid="level"
+                  >
+                    1
+                  </div>
+                </div>
+
+                <div
+                  class="stat-card"
+                  style="margin-bottom: 0;"
+                >
+                  <div class="stat-label">
+                    Lines Cleared
+                  </div>
+
+                  <div
+                    id="lines"
+                    class="stat-value"
+                    data-testid="lines"
+                  >
+                    0
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Close #tetris-stage -->
           </div>
+
+          <!--
+            Keep pause outside the scaled Tetris stage so it
+            remains fully visible on desktop and mobile.
+          -->
+          <button
+            id="btn-pause"
+            data-testid="btn-pause"
+            class="floating-pause-btn"
+            type="button"
+            aria-label="Pause Tetris"
+            title="Pause"
+            style="display:none"
+          >
+            <i
+              class="fas fa-pause"
+              aria-hidden="true"
+            ></i>
+          </button>
+
+          <!--
+            Mobile replacement for the keyboard C key.
+            Keep it outside #tetris-stage so it remains
+            independent from the scaled desktop layout.
+          -->
+          <button
+            id="mobile-hold-button"
+            type="button"
+            aria-label="Hold or swap the current Tetris piece"
+            title="Hold piece"
+          >
+            <span>HOLD</span>
+            <small>C</small>
+          </button>
+
+          <!-- Mobile-only Tetris guide button -->
+          <button
+            id="mobile-guide-button"
+            type="button"
+            aria-label="Open mobile Tetris instructions"
+            aria-controls="mobile-guide-modal"
+            aria-expanded="false"
+          >
+            <i class="fas fa-book-open" aria-hidden="true"></i>
+            <span>GUIDE</span>
+          </button>
+
+          <!-- Mobile Tetris guide popup -->
+          <div
+            id="mobile-guide-modal"
+            class="mobile-guide-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-guide-title"
+            hidden
+          >
+            <button
+              class="mobile-guide-backdrop"
+              type="button"
+              aria-label="Close mobile instructions"
+              data-mobile-guide-close
+            ></button>
+
+            <section class="mobile-guide-card">
+              <div class="mobile-guide-header">
+                <div>
+                  <div class="mobile-guide-kicker">TOUCH CONTROLS</div>
+                  <h2 id="mobile-guide-title">How to Play</h2>
+                </div>
+
+                <button
+                  id="mobile-guide-close"
+                  class="mobile-guide-close"
+                  type="button"
+                  aria-label="Close mobile instructions"
+                  data-mobile-guide-close
+                >
+                  <i class="fas fa-xmark" aria-hidden="true"></i>
+                </button>
+              </div>
+
+              <p class="mobile-guide-intro">
+                Use these gestures directly on the game area.
+              </p>
+
+              <div class="mobile-guide-list">
+                <div class="mobile-guide-row">
+                  <span class="mobile-guide-icon">
+                    <i class="fas fa-arrows-left-right"></i>
+                  </span>
+                  <div>
+                    <strong>Swipe left or right</strong>
+                    <small>Move the piece</small>
+                  </div>
+                </div>
+
+                <div class="mobile-guide-row">
+                  <span class="mobile-guide-icon">
+                    <i class="fas fa-hand-pointer"></i>
+                  </span>
+                  <div>
+                    <strong>Single tap</strong>
+                    <small>Hard drop</small>
+                  </div>
+                </div>
+
+                <div class="mobile-guide-row">
+                  <span class="mobile-guide-icon">
+                    <i class="fas fa-rotate"></i>
+                  </span>
+                  <div>
+                    <strong>Double tap</strong>
+                    <small>Rotate the piece</small>
+                  </div>
+                </div>
+
+                <div class="mobile-guide-row">
+                  <span class="mobile-guide-icon">
+                    <i class="fas fa-hand"></i>
+                  </span>
+                  <div>
+                    <strong>Press and hold</strong>
+                    <small>Soft drop while held</small>
+                  </div>
+                </div>
+
+                <div class="mobile-guide-row">
+                  <span class="mobile-guide-icon">
+                    <i class="fas fa-box-archive"></i>
+                  </span>
+                  <div>
+                    <strong>Tap the HOLD button</strong>
+                    <small>Store or swap the piece</small>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                class="mobile-guide-done"
+                type="button"
+                data-mobile-guide-close
+              >
+                Got it
+              </button>
+            </section>
+          </div>
+
+          <!-- Close #tetris-viewport -->
         </div>
 
-        <div class="panel" style="display: flex; flex-direction: column; gap: 8px;">
-          <div class="stat-card" style="margin-bottom: 0;">
-            <div class="stat-label"><i class="fas fa-trophy" style="color: #fcd34d; margin-right: 5px;"></i> Your High Score
-            </div>
-            <div id="highscore" class="stat-value highscore-value" style="font-size: 28px;" data-testid="highscore">0
-            </div>
-          </div>
+  <script src="game.js?v=20260731-1"></script>
 
-          <div class="stat-card" style="margin-bottom: 0;">
-            <div class="stat-label">Current Score</div>
-            <div id="score" class="stat-value" data-testid="score">0</div>
-          </div>
+  <script src="mobile-controls.js?v=20260731-1"></script>
 
-          <div class="stat-card" style="margin-bottom: 0;">
-            <div class="stat-label">Level</div>
-            <div id="level" class="stat-value" data-testid="level">1</div>
-          </div>
+  <script>
+      /*
+      * Fit the fixed 870 × 590 Tetris stage inside the
+      * available iframe viewport on every device.
+      */
+      (function () {
+          var DESIGN_WIDTH = 870;
+          var DESIGN_MIN_HEIGHT = 590;
 
-          <div class="stat-card" style="margin-bottom: 0;">
-            <div class="stat-label">Lines Cleared</div>
-            <div id="lines" class="stat-value" data-testid="lines">0</div>
-          </div>
-        </div>
-      </div>
-    </div>
+          var viewport =
+              document.getElementById(
+                  'tetris-viewport'
+              );
 
-    <script src="game.js"></script>
+          var stage =
+            document.getElementById(
+                'tetris-stage'
+            );
+
+          if (!viewport || !stage) {
+              return;
+          }
+
+          var fitFrame = 0;
+
+          function getPixelValue(value) {
+              var parsed =
+                  parseFloat(value);
+
+              return Number.isFinite(parsed)
+                  ? parsed
+                  : 0;
+          }
+
+          function fitTetrisToViewport() {
+              cancelAnimationFrame(
+                  fitFrame
+              );
+
+              fitFrame =
+                  requestAnimationFrame(
+                      function () {
+                          var viewportStyle =
+                              window.getComputedStyle(
+                                  viewport
+                              );
+
+                          var horizontalPadding =
+                              getPixelValue(
+                                  viewportStyle.paddingLeft
+                              ) +
+                              getPixelValue(
+                                  viewportStyle.paddingRight
+                              );
+
+                          var verticalPadding =
+                              getPixelValue(
+                                  viewportStyle.paddingTop
+                              ) +
+                              getPixelValue(
+                                  viewportStyle.paddingBottom
+                              );
+
+                          var availableWidth =
+                              Math.max(
+                                  viewport.clientWidth -
+                                      horizontalPadding,
+                                  1
+                              );
+
+                          var availableHeight =
+                              Math.max(
+                                  viewport.clientHeight -
+                                      verticalPadding,
+                                  1
+                              );
+
+                          /*
+                          * Measure the actual unscaled stage dimensions.
+                          * offsetWidth, offsetHeight and scrollHeight are not
+                          * changed by CSS transform scaling.
+                          */
+                          var stageWidth =
+                              Math.max(
+                                  DESIGN_WIDTH,
+                                  stage.offsetWidth,
+                                  stage.scrollWidth,
+                                  1
+                              );
+
+                          var stageHeight =
+                              Math.max(
+                                  DESIGN_MIN_HEIGHT,
+                                  stage.offsetHeight,
+                                  stage.scrollHeight,
+                                  1
+                              );
+
+                          /*
+                          * Scale according to the complete tallest column,
+                          * rather than assuming every layout is exactly 590px tall.
+                          */
+                          var nextScale =
+                              Math.min(
+                                  availableWidth /
+                                      stageWidth,
+
+                                  availableHeight /
+                                      stageHeight,
+
+                                  1
+                              );
+
+                          document.documentElement
+                              .style
+                              .setProperty(
+                                  '--tetris-scale',
+                                  String(
+                                      nextScale
+                                  )
+                              );
+                      }
+                  );
+          }
+
+          function fitAfterLayout() {
+              requestAnimationFrame(
+                  function () {
+                      requestAnimationFrame(
+                          fitTetrisToViewport
+                      );
+                  }
+              );
+          }
+
+          /*
+          * Run immediately instead of waiting only for load.
+          * Cached iframe documents may already have completed
+          * their load event before listeners are attached.
+          */
+          fitAfterLayout();
+
+          window.addEventListener(
+              'load',
+              fitAfterLayout
+          );
+
+          window.addEventListener(
+              'resize',
+              fitTetrisToViewport
+          );
+
+          window.addEventListener(
+              'orientationchange',
+              function () {
+                  setTimeout(
+                      fitAfterLayout,
+                      180
+                  );
+              }
+          );
+
+          if (window.visualViewport) {
+              window.visualViewport
+                  .addEventListener(
+                      'resize',
+                      fitTetrisToViewport
+                  );
+          }
+
+          if (
+              document.fonts &&
+              document.fonts.ready
+          ) {
+              document.fonts.ready.then(
+                  fitAfterLayout
+              );
+          }
+
+          if (
+              'ResizeObserver' in window
+          ) {
+              var resizeObserver =
+                  new ResizeObserver(
+                      fitTetrisToViewport
+                  );
+
+              /*
+              * Observe only the viewport.
+              * Do not observe the scaled stage because changing
+              * its transform can create browser-specific loops.
+              */
+              resizeObserver.observe(
+                  viewport
+              );
+
+              resizeObserver.observe(
+                  stage
+              );
+          }
+      })();
+  </script>
 </body>
 
 </html>
