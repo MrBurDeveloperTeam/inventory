@@ -152,20 +152,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
         if (!data?.result?.uid) {
           throw new Error('Invalid login credentials.');
         }
-        const isPreview =
-          window.location.hostname.endsWith('.pages.dev');
-
-        if (isPreview) {
-          onLogin({
-            name: data.result.name || data.result.username || 'Preview User',
-            email: data.result.username || email.trim(),
-            accountType: 'individual',
-            phone: '',
-            position: '',
-          });
-        } else {
-          await applink(data.result);
-        }
+        await applink(data.result);
       }
     } catch (err) {
       console.error('Auth error', err);
