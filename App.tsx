@@ -1860,6 +1860,7 @@ const handleLogout = async () => {
     // Supabase write above, which remains the source of truth locally.
     logActivityToOdoo({
       logId: newLogId,
+      actorEmail: user?.email || null,
       supabaseUserId: supabaseUserId || null,
       actorName: user?.name || null,
       action,
