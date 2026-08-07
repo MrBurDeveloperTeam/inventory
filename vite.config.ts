@@ -18,7 +18,12 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {
-          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+          maximumFileSizeToCacheInBytes:
+            4 * 1024 * 1024,
+
+          navigateFallbackDenylist: [
+            /^\/games\//,
+          ],
         },
         devOptions: {
           enabled: true
