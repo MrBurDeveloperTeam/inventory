@@ -10,9 +10,10 @@
 
 const ODOO_BASE_URL = 'https://mrbur.odoo.com';
 const ODOO_THEME_URL = 'https://mrbur.odoo.com/api/user/theme';
-// Odoo-side controller that should persist one inventory activity event.
-// Not implemented yet on the Odoo side — see ACTIVITY_TRACKER_ODOO_SYNC.md.
-// Rename this constant once the real Odoo route is known; nothing else needs to change.
+// Odoo-side controller that persists one inventory activity event. Source
+// for this controller lives in odoo_addon/inventory_activity_log/ (this
+// repo) — it must be installed on the mrbur.odoo.com database before this
+// URL will work. See ACTIVITY_TRACKER_ODOO_SYNC.md for install steps.
 const ODOO_ACTIVITY_URL = 'https://mrbur.odoo.com/api/inventory/activity';
 const ACTIVITY_ACTIONS = new Set(['add', 'remove', 'delete', 'transfer_out', 'transfer_in', 'edit', 'receive']);
 const COOKIE_NAME    = 'snabbb-theme';
