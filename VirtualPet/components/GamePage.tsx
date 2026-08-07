@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { TiArrowBack } from 'react-icons/ti';
 import { useGameState } from '../hooks/useGameState';
 
 const GAME_CONFIG: Record<string, { title: string; url: string; icon: string; gradient: string }> = {
@@ -11,7 +11,7 @@ const GAME_CONFIG: Record<string, { title: string; url: string; icon: string; gr
     },
     paccat: {
         title: 'Pac-Cat',
-        url: '/games/pac-cat/index.html?v=20260806-1',
+        url: '/games/pac-cat/index.html?v=20260807-2',
         icon: '👻',
         gradient: 'from-blue-400 to-indigo-600'
     },
@@ -67,9 +67,14 @@ const AnimatedCounter: React.FC<{ value: number }> = ({ value }) => {
 interface GamePageProps {
     gameId: string;
     onClose: () => void;
+    onExitPet: () => void;
 }
 
-export const GamePage: React.FC<GamePageProps> = ({ gameId, onClose }) => {
+export const GamePage: React.FC<GamePageProps> = ({
+    gameId,
+    onClose,
+    onExitPet
+}) => {
     const [isLoading, setIsLoading] = useState(true);
     const { stats, setStats } = useGameState();
     const [sessionCoins, setSessionCoins] = useState(0);
@@ -139,19 +144,22 @@ export const GamePage: React.FC<GamePageProps> = ({ gameId, onClose }) => {
             style={{ fontFamily: "'Fredoka', sans-serif" }}
         >
             <div className="relative h-full w-full overflow-hidden animate-in zoom-in-95 fade-in duration-300">
-                {/* Back to Virtual Pet */}
+                {/* Back to Main App */}
                 <button
                     type="button"
-                    onClick={onClose}
-                    className="absolute z-[60] flex h-10 w-10 items-center justify-center rounded-full border-2 border-white/10 bg-black/40 text-white/80 shadow-lg backdrop-blur-sm transition-all hover:scale-110 hover:bg-black/80 hover:text-white active:scale-95 sm:h-12 sm:w-12"
+                    onClick={onExitPet}
+                    className="absolute z-[60] flex h-11 w-11 items-center justify-center rounded-xl border border-white/60 bg-white/80 text-slate-700 shadow-xl shadow-black/20 backdrop-blur-md transition-all hover:-translate-x-0.5 hover:scale-105 hover:bg-white active:scale-95 sm:h-12 sm:w-12"
                     style={{
                         top: 'max(0.75rem, env(safe-area-inset-top, 0px))',
                         left: 'max(0.75rem, env(safe-area-inset-left, 0px))',
                     }}
-                    title="Back to Virtual Pet"
-                    aria-label="Back to Virtual Pet"
+                    title="Back to Inventory"
+                    aria-label="Back to Inventory"
                 >
-                    <ArrowLeft className="h-5 w-5 sm:h-6 sm:w-6" />
+                    <TiArrowBack
+                        className="h-8 w-8 sm:h-9 sm:w-9"
+                        strokeWidth={0}
+                    />
                 </button>
 
                 {/* Top UI Area */}
