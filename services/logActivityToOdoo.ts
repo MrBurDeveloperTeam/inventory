@@ -19,7 +19,13 @@ import type { ActivityLog } from '../types';
  * it and swallow/log errors rather than await + throw.
  */
 
-const ACTIVITY_ENDPOINT = '/api/activity';
+// NOTE: not /api/activity — that path already belongs to a different,
+// unrelated feature on the shared snabbb-worker (a clinic/appointment
+// activity log requiring an Authorization: Bearer JWT). Using it caused
+// every request here to be rejected by that other handler before ever
+// reaching the inventory-activity code. /api/inventory/activity matches the
+// existing convention for this app's other routes (sync, meta, rooms, etc).
+const ACTIVITY_ENDPOINT = '/api/inventory/activity';
 
 export interface ActivityOdooPayload {
   external_ref: string;       // idempotency key so retries don't double-log in Odoo
