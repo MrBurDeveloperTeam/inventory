@@ -168,6 +168,7 @@ const VirtualPetContent: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     <GamePage
                         gameId={activeGameId || ''}
                         onClose={handleCloseGame}
+                        onExitPet={handleCloseVirtualPet}
                     />
 
                     {requiresLandscapeMode(activeGameId) && showRotateNotice && (

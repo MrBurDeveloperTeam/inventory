@@ -466,11 +466,6 @@ h3 {
     visibility: visible !important;
 }
 
-#canvas-panel-title-pacman {
-    display: block !important;
-    visibility: visible !important;
-}
-
 #score,
 #highscore {
     top: 70px !important;
@@ -491,6 +486,111 @@ h3 {
 #control {
     display: none !important;
 }
+#canvas-home-title-pacman,
+#canvas-panel-title-pacman {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/*
+ * Final PAC-CAT title layout.
+ * Overrides all legacy mobile rules.
+ */
+
+#home h1,
+#panel h1 {
+  position: absolute !important;
+  left: 50% !important;
+  right: auto !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  visibility: visible !important;
+  opacity: 1 !important;
+
+  white-space: nowrap;
+
+  color: #fff !important;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+
+  transform: translateX(-50%) !important;
+
+  z-index: 999999 !important;
+  pointer-events: none;
+}
+
+/*
+ * Home / character selection title.
+ */
+#home h1 {
+  top: 18px !important;
+
+  font-size: 42px !important;
+  letter-spacing: 2px !important;
+
+  gap: 10px;
+}
+
+/*
+ * In-game PAC-CAT title.
+ */
+#panel h1 {
+  top: 10px !important;
+
+  font-size: 20px !important;
+  letter-spacing: 1.5px !important;
+
+  gap: 5px;
+}
+
+/*
+ * Reset the old emoji positioning.
+ */
+#home .cat-emoji,
+#panel .cat-emoji {
+  position: static !important;
+
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+
+  display: inline-block !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  line-height: 1 !important;
+  vertical-align: middle !important;
+
+  transform: none !important;
+}
+
+/*
+ * Large cat icon on home screen.
+ */
+#home .cat-emoji {
+  font-size: 42px !important;
+}
+
+/*
+ * Small cat icon during gameplay.
+ */
+#panel .cat-emoji {
+  font-size: 20px !important;
+}
+
+/*
+ * Legacy canvas titles are no longer used.
+ */
 #canvas-home-title-pacman,
 #canvas-panel-title-pacman {
   display: none !important;
