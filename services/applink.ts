@@ -28,39 +28,30 @@ const applink = async (param: any) => {
       );
     }
 
+    const currentOrigin = window.location.origin;
+    const isProduction =
+      currentOrigin === PROD_ORIGIN;
+
     const targetUrl = new URL(
       resultUrl,
       PROD_ORIGIN
     );
 
-    const currentOrigin =
-      window.location.origin;
+    console.log('[SSO] Current origin:', currentOrigin);
+    console.log('[SSO] Backend URL:', resultUrl);
 
-    const isProduction =
-      currentOrigin === PROD_ORIGIN;
-
-    /*
-     * Production:
-     * inventory.snabbb.com
-     * -> inventory.snabbb.com
-     *
-     * Preview:
-     * current preview origin
-     * -> current preview origin
-     *
-     * Keep the SSO path and query string
-     * returned by the backend.
-     */
-    if (
-      !isProduction &&
-      targetUrl.origin === PROD_ORIGIN
-    ) {
+    if (!isProduction) {
       targetUrl.protocol =
         window.location.protocol;
 
       targetUrl.host =
         window.location.host;
     }
+
+    console.log(
+      '[SSO] Final redirect:',
+      targetUrl.toString()
+    );
 
     window.location.assign(
       targetUrl.toString()
@@ -69,7 +60,7 @@ const applink = async (param: any) => {
     return data;
   } catch (err: any) {
     console.error(
-      'Redirection error:',
+      '[SSO] Redirection error:',
       err
     );
 
