@@ -596,3 +596,11 @@ h3 {
   display: none !important;
   visibility: hidden !important;
 }
+
+/*
+ * Keep the maze below the PAC-CAT
+ * title and score header.
+ */
+#panel #board {
+  top: 105px !important;
+}
