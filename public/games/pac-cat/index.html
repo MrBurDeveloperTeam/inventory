@@ -21,14 +21,29 @@
 	<meta property="og:title" content="PAC-CAT">
 
 	<meta name="viewport"
-		content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no" />
+		content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
 	<meta name="description"
 		content="Pac-Man game written in HTML5 + CSS3 + jQuery with Canvas. This WebApp is a Responsive Web Design (RWD) website." />
 	<meta name="keywords"
 		content="pacman, pac-man, pac-man online, pacman online, online, online games, games, free, puzzle, lucio panepinto, lucio, panepinto, html, html5, css, css3, javascript, jquery, rwd, responsive, responsive web design, responsive web, web design, canvas, draw" />
 
-	<link rel="stylesheet" type="text/css" href="css/pacman.css" />
-	<link rel="stylesheet" type="text/css" href="css/pacman-home.css" />
+	<link
+		rel="stylesheet"
+		type="text/css"
+		href="css/pacman.css"
+	/>
+
+	<link
+		rel="stylesheet"
+		type="text/css"
+		href="css/pacman-home.css"
+	/>
+
+	<link
+    rel="stylesheet"
+    type="text/css"
+    href="css/mobile-controls-v2.css"
+	/>
 
 	<script type="text/javascript" src="js/jquery.js"></script>
 	<!--<script type="text/javascript" src="js/jquery-mobile.js"></script>-->
@@ -58,13 +73,132 @@
 			jQuery('body').trigger(e);
 		}
 
+		/*
+		* Prevent touch dragging from moving the page on mobile browsers.
+		*/
+		function preventPacCatScroll(event) {
+			event.preventDefault();
+		}
+
+		/*
+		* Scale the fixed 570 × 705 PAC-CAT layout so the entire
+		* game always fits inside the currently visible viewport.
+		*
+		* The CSS panel width is 550px plus 20px horizontal padding.
+		* The CSS panel height is 690px plus 15px vertical padding.
+		*/
+		function fitPacCatToViewport() {
+			var viewport = window.visualViewport;
+
+			var viewportWidth = viewport
+				? viewport.width
+				: window.innerWidth;
+
+			var viewportHeight = viewport
+				? viewport.height
+				: window.innerHeight;
+
+			var viewportLeft = viewport
+				? viewport.offsetLeft
+				: 0;
+
+			var viewportTop = viewport
+				? viewport.offsetTop
+				: 0;
+
+			var baseWidth = 570;
+			var baseHeight = 705;
+			var edgePadding = 8;
+
+			var availableWidth = Math.max(
+				viewportWidth - edgePadding * 2,
+				1
+			);
+
+			var availableHeight = Math.max(
+				viewportHeight - edgePadding * 2,
+				1
+			);
+
+			var gameScale = Math.min(
+				availableWidth / baseWidth,
+				availableHeight / baseHeight,
+				1
+			);
+
+			document.documentElement.style.setProperty(
+				"--pac-cat-scale",
+				String(gameScale)
+			);
+
+			document.documentElement.style.setProperty(
+				"--pac-cat-center-x",
+				viewportLeft + viewportWidth / 2 + "px"
+			);
+
+			document.documentElement.style.setProperty(
+				"--pac-cat-center-y",
+				viewportTop + viewportHeight / 2 + "px"
+			);
+		}
+
 		$(document).ready(function () {
+
+			/*
+			* Always begin on the presentation screen without
+			* gameplay direction controls.
+			*/
+			document.body.classList.remove(
+				"game-active"
+			);
+
 			//$.mobile.loading().hide();
 			loadAllSound();
 
 			HELP_TIMER = setInterval('blinkHelp()', HELP_DELAY);
 
 			initHome();
+
+			fitPacCatToViewport();
+
+			window.addEventListener(
+				"resize",
+				fitPacCatToViewport
+			);
+
+			window.addEventListener(
+				"orientationchange",
+				function () {
+					/*
+					* Give Safari time to finish updating its visual viewport
+					* after the device changes orientation.
+					*/
+					setTimeout(
+						fitPacCatToViewport,
+						150
+					);
+				}
+			);
+
+			if (window.visualViewport) {
+				window.visualViewport.addEventListener(
+					"resize",
+					fitPacCatToViewport
+				);
+
+				window.visualViewport.addEventListener(
+					"scroll",
+					fitPacCatToViewport
+				);
+			}
+
+			document.addEventListener(
+				"touchmove",
+				preventPacCatScroll,
+				{
+					passive: false
+				}
+			);
 
 			$(".sound").click(function (e) {
 				e.stopPropagation();
@@ -220,30 +354,52 @@
 	</div>
 
 	<div id="home">
-		<h1>PAC-CAT</h1>
+		<h1>
+			PAC-CAT
+			<span class="cat-emoji" aria-hidden="true">🐱</span>
+		</h1>
 		<canvas id="canvas-home-title-pacman"></canvas>
 		<div id="presentation">
-			<div id="presentation-titles">character &nbsp;/&nbsp; nickname</div>
+			<div id="presentation-titles">
+				character &nbsp;/&nbsp; nickname
+			</div>
+
 			<canvas id="canvas-presentation-blinky"></canvas>
 			<div id="presentation-character-blinky">- shadow</div>
 			<div id="presentation-name-blinky">"blinky"</div>
+
 			<canvas id="canvas-presentation-pinky"></canvas>
 			<div id="presentation-character-pinky">- speedy</div>
 			<div id="presentation-name-pinky">"pinky"</div>
+
 			<canvas id="canvas-presentation-inky"></canvas>
 			<div id="presentation-character-inky">- bashful</div>
 			<div id="presentation-name-inky">"inky"</div>
+
 			<canvas id="canvas-presentation-clyde"></canvas>
 			<div id="presentation-character-clyde">- pokey</div>
 			<div id="presentation-name-clyde">"clyde"</div>
+
+			<div
+				id="start-notice"
+				role="status"
+				aria-live="polite"
+			>
+				Click or tap anywhere to start
+			</div>
 		</div>
+
 		<canvas id="trailer"></canvas>
+
 		<div class="help-button">- help -</div>
 		<a class="sound" href="javascript:void(0);" data-sound="on"><img src="img/sound-on.png" alt="" border="0"></a>
 	</div>
 
 	<div id="panel">
-		<h1>PAC-CAT</h1>
+		<h1>
+			PAC-CAT
+			<span class="cat-emoji" aria-hidden="true">🐱</span>
+		</h1>
 		<canvas id="canvas-panel-title-pacman"></canvas>
 		<div id="score">
 			<h2>1UP</h2><span>00</span>
@@ -261,10 +417,6 @@
 			<canvas id="canvas-ghost-pinky"></canvas>
 			<canvas id="canvas-ghost-inky"></canvas>
 			<canvas id="canvas-ghost-clyde"></canvas>
-			<div id="control-up-big"></div>
-			<div id="control-down-big"></div>
-			<div id="control-left-big"></div>
-			<div id="control-right-big"></div>
 		</div>
 		<div id="control">
 			<div id="control-up"></div>
@@ -279,6 +431,35 @@
 		<div id="message"></div>
 		<div class="help-button">- help -</div>
 		<a class="sound" href="javascript:void(0);" data-sound="on"><img src="img/sound-on.png" alt="" border="0"></a>
+	</div>
+
+	<div
+		id="mobile-controls"
+		aria-label="PAC-CAT movement controls"
+	>
+		<div
+			id="control-up-big"
+			role="button"
+			aria-label="Move up"
+		></div>
+
+		<div
+			id="control-left-big"
+			role="button"
+			aria-label="Move left"
+		></div>
+
+		<div
+			id="control-down-big"
+			role="button"
+			aria-label="Move down"
+		></div>
+
+		<div
+			id="control-right-big"
+			role="button"
+			aria-label="Move right"
+		></div>
 	</div>
 
 </body>

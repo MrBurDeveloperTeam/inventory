@@ -114,3 +114,46 @@
 @media screen and (max-height:480px), screen and (min-device-height : 320px) and (max-device-height : 480px) { 
 
 }
+
+/*
+ * Display the start notice directly below the final
+ * character and nickname row.
+ */
+#start-notice {
+    position: absolute;
+    top: 238px;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    z-index: 500;
+
+    width: 100%;
+    margin: 0;
+
+    color: #fff200;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    line-height: 1.5;
+    text-align: center;
+    text-transform: uppercase;
+
+    pointer-events: none;
+
+    animation:
+        start-notice-pulse
+        1.1s
+        ease-in-out
+        infinite;
+}
+
+@keyframes start-notice-pulse {
+    0%,
+    100% {
+        opacity: 0.45;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}

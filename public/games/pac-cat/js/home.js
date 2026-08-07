@@ -55,6 +55,13 @@ var GHOST_CLYDE_TRAILER_STATE = 0;
 
 function initHome() { 
     HOME = true;
+
+    /*
+     * Hide gameplay controls on the presentation screen.
+     */
+    document.body.classList.remove(
+        "game-active"
+    );
     
     // --- 1. SETUP THE CAT ELEMENT ---
     ensureTrailerCatElement();
@@ -169,8 +176,16 @@ function ensureTrailerCatElement() {
 }
 // ---------------------------------------
 
-function startPresentation() { 
-    $("#presentation *").hide();
+function startPresentation() {
+    /*
+     * Hide the animated presentation elements while
+     * keeping the start notice visible.
+     */
+    $("#presentation > *")
+        .not("#start-notice")
+        .hide();
+
+    $("#start-notice").show();
     
     if (HOME_PRESENTATION_TIMER === -1) { 
         HOME_PRESENTATION_STATE = 0;

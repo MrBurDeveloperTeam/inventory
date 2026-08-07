@@ -67,18 +67,22 @@ const BottomControls: React.FC<BottomControlsProps> = ({
 }) => {
     
     // Updated styling for sidebar layout
-    const getButtonStyle = (isActive: boolean) => 
-        `relative group flex flex-col items-center justify-center w-[65px] h-[65px] rounded-xl transition-all duration-300 cursor-pointer ${
-            isActive 
-            ? 'bg-white shadow-lg scale-105 z-10' 
-            : 'bg-white/20 hover:bg-white/30 hover:scale-105'
+    const getButtonStyle = (isActive: boolean) =>
+        `relative group flex h-12 w-12 flex-col items-center justify-center rounded-lg transition-all duration-300 cursor-pointer sm:h-[65px] sm:w-[65px] sm:rounded-xl ${
+            isActive
+                ? 'bg-white shadow-lg scale-105 z-10'
+                : 'bg-white/20 hover:bg-white/30 hover:scale-105'
         }`;
     
-    const getIconClass = (isActive: boolean, color: string) => 
-        `w-6 h-6 mb-1 transition-colors duration-300 ${isActive ? color : 'text-white'}`;
+    const getIconClass = (isActive: boolean, color: string) =>
+        `mb-0.5 h-5 w-5 transition-colors duration-300 sm:mb-1 sm:h-6 sm:w-6 ${
+            isActive ? color : 'text-white'
+        }`;
 
     const getLabelClass = (isActive: boolean, color: string) =>
-        `text-[10px] font-bold uppercase tracking-widest transition-colors duration-300 ${isActive ? color : 'text-white/80'}`;
+        `text-[8px] font-bold uppercase tracking-wider transition-colors duration-300 sm:text-[10px] sm:tracking-widest ${
+            isActive ? color : 'text-white/80'
+        }`;
 
     const handleFeedClick = () => {
         if (currentRoom !== RoomType.KITCHEN) {
@@ -123,17 +127,23 @@ const BottomControls: React.FC<BottomControlsProps> = ({
     };
 
     return (
-        <div className="absolute left-4 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center">
+        <div className="absolute left-2 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center sm:left-4">
             <button
               onClick={onOpenShop}
-              className="relative group flex h-[70px] w-[70px] cursor-pointer flex-col items-center justify-center rounded-xl bg-gradient-to-br from-orange-300 to-orange-500 text-white shadow-lg shadow-orange-900/20 transition-all duration-300 hover:scale-105 active:scale-95"
+              className="group relative flex h-12 w-12 cursor-pointer flex-col items-center justify-center rounded-lg bg-gradient-to-br from-orange-300 to-orange-500 text-white shadow-lg shadow-orange-900/20 transition-all duration-300 hover:scale-105 active:scale-95 sm:h-[70px] sm:w-[70px] sm:rounded-xl"
               title="Shop"
             >
-               <AiOutlineShop className="mb-0.5 h-8 w-8 drop-shadow-sm transition-transform duration-300 group-hover:-rotate-6" strokeWidth={10}/>
-               <span className="text-[11px] font-bold uppercase tracking-widest text-white">Shop</span>
+               <AiOutlineShop
+                    className="mb-0.5 h-5 w-5 drop-shadow-sm transition-transform duration-300 group-hover:-rotate-6 sm:h-8 sm:w-8"
+                    strokeWidth={10}
+                />
+
+                <span className="text-[8px] font-bold uppercase tracking-wider text-white sm:text-[11px] sm:tracking-widest">
+                    Shop
+                </span>
             </button>
 
-            <div className="flex flex-col gap-3 p-3 bg-black/20 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl scale-95 origin-left">
+            <div className="flex max-h-[65dvh] origin-left scale-95 flex-col gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-1.5 shadow-2xl backdrop-blur-xl sm:gap-3 sm:rounded-2xl sm:p-3">
                 
                 <button 
                   onClick={handleFeedClick}
