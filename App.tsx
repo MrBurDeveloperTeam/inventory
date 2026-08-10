@@ -36,6 +36,7 @@ import {
   markItemPurchaseHistoryArchived,
   markRoomPurchaseHistoryArchived
 } from './src/utils/roomDeletion';
+import {useProfileImage} from './hooks/useProfileImage';
 
 type ManagedInventory = {
   userId: string;
@@ -241,6 +242,7 @@ const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
+  const { profileImageUrl } = useProfileImage(isAuthenticated);
 
   // Keep tbaRoomRef always up-to-date so loadInventory can read it synchronously
   useEffect(() => {
@@ -3077,7 +3079,7 @@ const handleLogout = async () => {
         onWatchTutorial={() => setShowTutorialVideo(true)}
         user={user}
         userInitials={userInitials}
-        userAvatarUrl="/api/profile-avatar"
+        userAvatarUrl={profileImageUrl}
         availableInventories={availableInventories}
         currentInventoryId={currentInventoryOwnerId}
         onSwitchInventory={setCurrentInventoryOwnerId}
