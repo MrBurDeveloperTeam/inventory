@@ -147,6 +147,59 @@ async function resolveOdooSession(odooCookie) {
   }
 }
 
+async function handleProfileAvatarRequest(request) {
+  if (request.method !== 'GET') {
+    return jsonResponse({ ok: false, error: 'Method not allowed' }, 405);
+  }
+
+  const odooCookie = getOdooCookie(request);
+
+  if (!odooCookie) {
+    return jsonResponse({ ok: false, error: 'Missing Odoo session' }, 401);
+  }
+
+  const sessionResult = await resolveOdooSession(odooCookie);
+
+  if (!sessionResult.ok) {
+    return jsonResponse(
+      { ok: false, error: sessionResult.error },
+      sessionResult.status
+    );
+  }
+
+  const avatarResponse = await fetch(
+    `${ODOO_BASE_URL}/web/image/res.partner/` +
+      `${encodeURIComponent(String(sessionResult.partnerId))}/image_128`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'image/*',
+        Cookie: odooCookie,
+      },
+      redirect: 'manual',
+    }
+  );
+
+  const contentType = avatarResponse.headers.get('Content-Type') || '';
+
+  // Odoo may redirect to a login page when the session is invalid.
+  if (!avatarResponse.ok || !contentType.startsWith('image/')) {
+    return jsonResponse(
+      { ok: false, error: 'Profile picture was not found' },
+      404
+    );
+  }
+
+  return new Response(avatarResponse.body, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
 async function handleWalletRequest(request) {
   if (request.method !== 'GET') {
     return jsonResponse(
@@ -403,6 +456,10 @@ export default {
 
     if (url.pathname === '/api/wallet') {
       return handleWalletRequest(request);
+    }
+
+    if (url.pathname === '/api/profile-avatar') {
+      return handleProfileAvatarRequest(request);
     }
 
     if (url.pathname === '/api/activity') {
