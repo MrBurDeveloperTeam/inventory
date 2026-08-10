@@ -3077,7 +3077,7 @@ const handleLogout = async () => {
         onWatchTutorial={() => setShowTutorialVideo(true)}
         user={user}
         userInitials={userInitials}
-        userAvatarUrl={user?.avatarUrl}
+        userAvatarUrl="/api/profile-avatar"
         availableInventories={availableInventories}
         currentInventoryId={currentInventoryOwnerId}
         onSwitchInventory={setCurrentInventoryOwnerId}

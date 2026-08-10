@@ -66,7 +66,12 @@ const Header: React.FC<HeaderProps> = ({
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [creditLoading, setCreditLoading] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const { mutateAsync: createAppLink, isPending } = useGetUserId();
+
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [userAvatarUrl]);
 
   useEffect(() => {
     const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
@@ -329,11 +334,12 @@ const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-2 group p-1 rounded-full outline-none"
             title="Account Profile"
           >
-            {userAvatarUrl ? (
+            {userAvatarUrl && !avatarFailed ? (
               <img
                 src={userAvatarUrl}
                 alt="Profile avatar"
                 className="w-10 h-10 rounded-full object-cover shadow-sm border border-slate-100"
+                onError={() => setAvatarFailed(true)}
               />
             ) : (
               <div className="w-10 h-10 rounded-full bg-[#004aad] flex items-center justify-center text-white font-black text-sm shadow-sm">
