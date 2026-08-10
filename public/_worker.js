@@ -9,6 +9,7 @@
  */
 
 const ODOO_BASE_URL = 'https://mrbur.odoo.com';
+const ODOO_ACCOUNT_BASE_URL = 'https://account.snabbb.com';
 const ODOO_THEME_URL = 'https://mrbur.odoo.com/api/user/theme';
 // Odoo-side controller that persists one inventory activity event. Source
 // for this controller lives in odoo_addon/inventory_activity_log/ (this
@@ -158,46 +159,70 @@ async function handleProfileAvatarRequest(request) {
     return jsonResponse({ ok: false, error: 'Missing Odoo session' }, 401);
   }
 
-  const sessionResult = await resolveOdooSession(odooCookie);
-
-  if (!sessionResult.ok) {
-    return jsonResponse(
-      { ok: false, error: sessionResult.error },
-      sessionResult.status
+  try {
+    // Keep this aligned with the main app's useProfileImage hook. The account
+    // service owns the partner profile/image; mrbur.odoo.com is used by other
+    // inventory integrations but is not the source of truth for this avatar.
+    const profileResponse = await fetch(
+      `${ODOO_ACCOUNT_BASE_URL}/api/account/profile`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Cookie: odooCookie,
+        },
+        redirect: 'manual',
+      }
     );
-  }
+    const profile = await profileResponse.json().catch(() => null);
+    const partnerId = profile?.partner_id;
+    console.log('partnerId', partnerId);
+    const hasImage = profile?.partner?.has_image;
 
-  const avatarResponse = await fetch(
-    `${ODOO_BASE_URL}/web/image/res.partner/` +
-      `${encodeURIComponent(String(sessionResult.partnerId))}/image_128`,
-    {
-      method: 'GET',
-      headers: {
-        Accept: 'image/*',
-        Cookie: odooCookie,
-      },
-      redirect: 'manual',
+    if (!profileResponse.ok || !profile?.ok || !partnerId || hasImage === false) {
+      return jsonResponse(
+        { ok: false, error: 'Profile picture was not found' },
+        404
+      );
     }
-  );
 
-  const contentType = avatarResponse.headers.get('Content-Type') || '';
+    const avatarResponse = await fetch(
+      `${ODOO_ACCOUNT_BASE_URL}/web/image/res.partner/` +
+        `${encodeURIComponent(String(partnerId))}/image_128`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'image/*',
+          Cookie: odooCookie,
+        },
+        redirect: 'manual',
+      }
+    );
+    const contentType = avatarResponse.headers.get('Content-Type') || '';
 
-  // Odoo may redirect to a login page when the session is invalid.
-  if (!avatarResponse.ok || !contentType.startsWith('image/')) {
+    // Odoo may redirect to a login page when the shared session is invalid.
+    if (!avatarResponse.ok || !contentType.startsWith('image/')) {
+      return jsonResponse(
+        { ok: false, error: 'Profile picture was not found' },
+        404
+      );
+    }
+
+    return new Response(avatarResponse.body, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  } catch (error) {
+    console.error('Account avatar lookup error:', error);
     return jsonResponse(
-      { ok: false, error: 'Profile picture was not found' },
-      404
+      { ok: false, error: 'Profile picture service is unavailable' },
+      502
     );
   }
-
-  return new Response(avatarResponse.body, {
-    status: 200,
-    headers: {
-      'Content-Type': contentType,
-      'Cache-Control': 'private, no-store',
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
 }
 
 async function handleWalletRequest(request) {
