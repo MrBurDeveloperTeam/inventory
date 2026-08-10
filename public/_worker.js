@@ -176,6 +176,7 @@ async function handleProfileAvatarRequest(request) {
     );
     const profile = await profileResponse.json().catch(() => null);
     const partnerId = profile?.partner_id;
+    console.log('partnerId', partnerId);
     const hasImage = profile?.partner?.has_image;
 
     if (!profileResponse.ok || !profile?.ok || !partnerId || hasImage === false) {
