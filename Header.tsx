@@ -334,7 +334,7 @@ const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-2 group p-1 rounded-full outline-none"
             title="Account Profile"
           >
-            {userAvatarUrl && !avatarFailed ? (
+            {userAvatarUrl  ? (
               <img
                 src={userAvatarUrl}
                 alt="Profile avatar"
