@@ -16,7 +16,7 @@ interface HeaderProps {
   onWatchTutorial?: () => void;
   user?: UserProfile | null;
   userInitials?: string;
-  userAvatarUrl?: string;
+  userAvatarUrl?: string|null;
   availableInventories?: { id: string; name: string; role: string }[];
   currentInventoryId?: string | null;
   onSwitchInventory?: (id: string) => void;
@@ -44,7 +44,7 @@ const Header: React.FC<HeaderProps> = ({
   onWatchTutorial,
   user,
   userInitials = 'U',
-  userAvatarUrl,
+  userAvatarUrl = null,
   availableInventories = [],
   currentInventoryId,
   onSwitchInventory,
@@ -70,6 +70,7 @@ const Header: React.FC<HeaderProps> = ({
   const { mutateAsync: createAppLink, isPending } = useGetUserId();
 
   useEffect(() => {
+    console.log('userAvatarUrl: ',userAvatarUrl)
     setAvatarFailed(false);
   }, [userAvatarUrl]);
 
