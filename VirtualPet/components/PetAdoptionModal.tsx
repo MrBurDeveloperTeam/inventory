@@ -3,13 +3,14 @@ import { PET_OPTIONS, normalizePetId, type PetId } from '../petOptions';
 import { useGameState } from '../context/GameStateContext';
 
 const PetAdoptionModal: React.FC = () => {
-  const { hasAdoptedPet, isPetAdoptionReady, adoptPet } = useGameState();
+  const { adoptionCheckStatus, adoptPet } = useGameState();
   const [selectedPetId, setSelectedPetId] = useState<PetId>('mallow');
   const [confirmPetId, setConfirmPetId] = useState<PetId | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
-  if (!isPetAdoptionReady || hasAdoptedPet) return null;
+  // Show only after Supabase explicitly confirms this user has no selected pet.
+  if (adoptionCheckStatus !== 'confirmed_not_adopted') return null;
 
   const selectedPet = PET_OPTIONS.find((pet) => pet.id === selectedPetId) || PET_OPTIONS[0];
   const confirmPet = confirmPetId
