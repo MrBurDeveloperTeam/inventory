@@ -27,17 +27,23 @@
 export type InsightApp = 'inventory';
 
 /** Canonical trigger identity. Extend only when a new provider is actually
- *  implemented — never speculatively. `inventory_expired` reuses the
- *  Gallery reference's existing trigger identity for the same condition;
- *  `inventory_out_of_stock` is a new local-only identifier not yet present
- *  in Gallery (Gallery's Phase 1 scope never included Out of Stock). */
-export type InsightTriggerId = 'inventory_expired' | 'inventory_out_of_stock';
+ *  implemented — never speculatively. `inventory_expired` and
+ *  `inventory_low_stock`/`inventory_expiring_soon` reuse the Gallery
+ *  reference's existing trigger identities for the same conditions;
+ *  `inventory_out_of_stock` and `inventory_summary` are new local-only
+ *  identifiers not yet present in Gallery (Gallery's Phase 1 scope never
+ *  included Out of Stock or a non-urgent Summary). */
+export type InsightTriggerId =
+  | 'inventory_expired'
+  | 'inventory_out_of_stock'
+  | 'inventory_low_stock'
+  | 'inventory_expiring_soon'
+  | 'inventory_summary';
 
 /** Local-only severity scale for Inventory's own resolver — NOT Gallery's
  *  global DialoguePriority. `CRITICAL` (Expired) and `HIGH` (Out of Stock)
- *  are used in this first slice; `MEDIUM` (Low Stock), `LOW` (Expiring
- *  Soon), and `INFO` (Summary) are reserved for later slices and
- *  deliberately not used yet. */
+ *  were used in the first slice; `MEDIUM` (Low Stock), `LOW` (Expiring
+ *  Soon), and `INFO` (Summary) are now used in the second slice. */
 export type InsightPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
 
 /**

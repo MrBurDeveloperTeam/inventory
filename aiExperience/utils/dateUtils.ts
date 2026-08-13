@@ -29,8 +29,10 @@ export function toCalendarDateKey(date: Date): string {
 }
 
 /** Normalizes a raw expiry value down to a trustworthy YYYY-MM-DD key, or
- *  `null` if it isn't a real, well-formed calendar date. */
-function toValidatedDateKey(rawDate: string | null | undefined): string | null {
+ *  `null` if it isn't a real, well-formed calendar date. Exported for reuse
+ *  by inventorySnapshot.ts (Expiring Soon needs to validate an upcoming
+ *  batch's expiry the same way Expired already does). */
+export function toValidatedDateKey(rawDate: string | null | undefined): string | null {
   if (typeof rawDate !== 'string') return null;
   const key = rawDate.slice(0, 10);
   return DATE_KEY_PATTERN.test(key) ? key : null;
@@ -42,4 +44,26 @@ export function isExpiredBeforeToday(expiryDate: string | null | undefined, now:
   const validated = toValidatedDateKey(expiryDate);
   if (!validated) return false;
   return validated < toCalendarDateKey(now);
+}
+
+/**
+ * Integer calendar-day difference (toKey - fromKey) between two validated
+ * YYYY-MM-DD keys. Uses `Date.UTC` purely as a day-counting mechanism on
+ * already-parsed calendar y/m/d components — never a clock-time/millisecond
+ * subtraction between two live `Date` instances, and never re-parses a bare
+ * date string with `new Date(dateString)` (which would reintroduce the
+ * UTC-midnight shift this module exists to avoid — see this file's header).
+ * Returns `0` if either key fails validation, so a malformed value can
+ * never silently produce a wildly wrong day count.
+ */
+export function daysBetweenDateKeys(fromKey: string, toKey: string): number {
+  const from = toValidatedDateKey(fromKey);
+  const to = toValidatedDateKey(toKey);
+  if (!from || !to) return 0;
+
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  const fromUtcMs = Date.UTC(fy, fm - 1, fd);
+  const toUtcMs = Date.UTC(ty, tm - 1, td);
+  return Math.round((toUtcMs - fromUtcMs) / 86_400_000);
 }

@@ -29,7 +29,7 @@
 // (`b.qty > 0 && isExpiredBeforeToday(b.expiryDate)`).
 
 import type { Room, ItemBatch } from '../../types';
-import { isExpiredBeforeToday } from './dateUtils';
+import { isExpiredBeforeToday, toCalendarDateKey, toValidatedDateKey } from './dateUtils';
 
 export interface InventorySnapshotItem {
   itemId: string;
@@ -43,6 +43,19 @@ export interface InventorySnapshotItem {
    *  multiple qualify: earliest `expiryDate`, then batch `id` (ItemBatch
    *  has no `createdAt` field in this repo's data model — see types.ts). */
   expiredBatch: { batchId: string; expiryDate: string; qty: number } | null;
+  /**
+   * The earliest qualifying (qty > 0, valid date, NOT already expired —
+   * i.e. expiry >= today) upcoming batch for this item, or `null` if none
+   * qualifies. Deliberately not restricted to any warning window here —
+   * this snapshot describes authoritative state only; the Expiring Soon
+   * provider is what applies the 30-day product rule (see
+   * expiringSoonInventoryProvider.ts). An item that already has an
+   * `expiredBatch` may still separately have an `upcomingExpiryBatch` from
+   * a different, later batch — callers that must not double-classify an
+   * already-expired item (Expired must win) are responsible for checking
+   * `expiredBatch` first, exactly like the resolver does.
+   */
+  upcomingExpiryBatch: { batchId: string; expiryDate: string; qty: number } | null;
   createdAt: string | null;
 }
 
@@ -58,8 +71,19 @@ function compareBatchesForExpirySelection(a: ItemBatch, b: ItemBatch): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+function isUpcomingQualifyingBatch(batch: ItemBatch, todayKey: string): boolean {
+  if (toFiniteNumber(batch.qty) <= 0) return false;
+  const key = toValidatedDateKey(batch.expiryDate);
+  if (!key) return false;
+  // "Not already expired" — expiry today or later. Strictly the complement
+  // of isExpiredBeforeToday's `< today` check, so a batch is never counted
+  // as both expired and upcoming.
+  return key >= todayKey;
+}
+
 export function buildInventorySnapshot(rooms: Room[], now: Date = new Date()): InventorySnapshotItem[] {
   const snapshot: InventorySnapshotItem[] = [];
+  const todayKey = toCalendarDateKey(now);
 
   for (const room of rooms) {
     for (const item of room.items) {
@@ -73,16 +97,23 @@ export function buildInventorySnapshot(rooms: Room[], now: Date = new Date()): I
       const expiredQualifying = batches
         .filter((b) => toFiniteNumber(b.qty) > 0 && isExpiredBeforeToday(b.expiryDate, now))
         .sort(compareBatchesForExpirySelection);
+      const earliestExpired = expiredQualifying[0] ?? null;
 
-      const earliest = expiredQualifying[0] ?? null;
+      const upcomingQualifying = batches
+        .filter((b) => isUpcomingQualifyingBatch(b, todayKey))
+        .sort(compareBatchesForExpirySelection);
+      const earliestUpcoming = upcomingQualifying[0] ?? null;
 
       snapshot.push({
         itemId: item.id,
         itemName: item.name,
         roomId: room.id,
         usableQuantity,
-        expiredBatch: earliest
-          ? { batchId: earliest.id, expiryDate: earliest.expiryDate as string, qty: toFiniteNumber(earliest.qty) }
+        expiredBatch: earliestExpired
+          ? { batchId: earliestExpired.id, expiryDate: earliestExpired.expiryDate as string, qty: toFiniteNumber(earliestExpired.qty) }
+          : null,
+        upcomingExpiryBatch: earliestUpcoming
+          ? { batchId: earliestUpcoming.id, expiryDate: earliestUpcoming.expiryDate as string, qty: toFiniteNumber(earliestUpcoming.qty) }
           : null,
         createdAt: item.createdAt ?? null,
       });
