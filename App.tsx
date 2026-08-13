@@ -28,6 +28,8 @@ import { supabase } from './supabaseClient';
 import { api } from './services/api';
 import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
+import { useInventoryPersonalizedInsight } from './aiExperience/hooks/useInventoryPersonalizedInsight';
+import PersonalizedInsight from './aiExperience/components/PersonalizedInsight';
 import { jwtDecode } from 'jwt-decode';
 import {
   ARCHIVED_LOCATION_LABEL,
@@ -231,6 +233,11 @@ const App: React.FC = () => {
   const syncInFlight = useRef(false);
   const [isLoadingMain, setIsLoadingMain] = useState(true);
   const [isReloading, setIsReloading] = useState(false);
+  // Phase-2A first slice: Expired Inventory / Out of Stock only. Pure,
+  // synchronous, reevaluates whenever `rooms` (already owned above) or the
+  // loading gate changes — no new Supabase query, no dedupe, no polling.
+  // See ./aiExperience/hooks/useInventoryPersonalizedInsight.ts.
+  const inventoryPersonalizedInsight = useInventoryPersonalizedInsight(rooms, isLoadingMain);
   const lastLocalMutation = useRef(0);
   const isDirty = useRef(false);
   const lastLoadRequestId = useRef(0);
@@ -3070,6 +3077,9 @@ const handleLogout = async () => {
               {bannerPromos.map((promo) => (
                 <PromoBanner key={promo.id} appCode="inventory" promo={promo} />
               ))}
+              {inventoryPersonalizedInsight && (
+                <PersonalizedInsight candidate={inventoryPersonalizedInsight} />
+              )}
               <ClinicMap
                 rooms={rooms}
                 blueprint={blueprint}
