@@ -1731,14 +1731,19 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 {log.action === 'delete' && (() => {
                   // Item deletion: Deleted "ItemName"
                   const itemMatch = log.details?.match(/^Deleted "([^"]+)"$/);
-                  // Room deletion (genuine delete, items archived): matches both
-                  // the legacy exact format ('Deleted room "RoomName"') and the
-                  // current one with the "archived its items" suffix added when
-                  // the transfer-on-delete option was introduced. Deliberately
-                  // does NOT match the "...and transferred items to..." variant
-                  // — nothing was lost in that case, so there's nothing to
-                  // restore (the items are already sitting in the target room).
-                  const roomMatch = log.details?.match(/^Deleted room "([^"]+)"(?: and archived its items)?$/);
+                  // Room deletion: matches the legacy exact format
+                  // ('Deleted room "RoomName"') plus both suffixes added when
+                  // the transfer-on-delete option was introduced ("...and
+                  // archived its items" / "...and transferred items to
+                  // \"X\""). The ROOM itself is destroyed in every case, so
+                  // "Restore Room" should offer to recreate it regardless of
+                  // which delete mode was used — the transfer case just
+                  // won't carry an item snapshot (App.tsx only sets
+                  // beforeValue/afterValue for the non-transfer path), so
+                  // restoreRoom() recreates an empty room rather than
+                  // double-adding items that already live in the target
+                  // room.
+                  const roomMatch = log.details?.match(/^Deleted room "([^"]+)"(?: and (?:archived its items|transferred items to "[^"]+"))?$/);
 
                   if (itemMatch && onReceive) {
                     const itemName = itemMatch[1];
