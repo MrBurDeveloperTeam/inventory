@@ -1749,19 +1749,53 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     const itemName = itemMatch[1];
                     const parsedQty = Number(log.beforeValue);
                     const qty = isNaN(parsedQty) ? 1 : parsedQty;
+
+                    // Newer delete-item log entries store the full item
+                    // snapshot as JSON in beforeValue (name, brand, code,
+                    // quantity, price, uom, vendor, category, description,
+                    // expiryDate) — see deleteItem() in App.tsx — so a
+                    // restore can bring everything back, not just the name
+                    // and quantity. Older entries only ever had a plain
+                    // quantity number there; JSON.parse throws on those, so
+                    // this falls back to the original name/qty-only restore
+                    // (category defaults to "other", same as before).
+                    let snapshot: any = null;
+                    try {
+                      const parsed = log.beforeValue ? JSON.parse(log.beforeValue) : null;
+                      if (parsed && typeof parsed === 'object' && parsed.name) snapshot = parsed;
+                    } catch {
+                      // not JSON — old-style entry, leave snapshot null
+                    }
+
+                    const restoreQty = snapshot ? (Number(snapshot.quantity) || qty) : qty;
+                    const restorePrice = snapshot ? (Number(snapshot.price) || 0) : 0;
+                    const restoreExpiry = snapshot?.expiryDate || undefined;
+                    const restoreItemData: Partial<Item> = snapshot
+                      ? {
+                          name: snapshot.name,
+                          brand: snapshot.brand || '',
+                          code: snapshot.code || '',
+                          uom: snapshot.uom || 'pcs',
+                          vendor: snapshot.vendor || '',
+                          category: snapshot.category || 'other',
+                          description: snapshot.description || '',
+                        }
+                      : { name: itemName, category: 'other' as any, uom: 'pcs' as any };
+
                     return (
                       <button
                         onClick={() => {
                           onReceive(
                             log.roomId,
-                            { name: itemName, category: 'other' as any, uom: 'pcs' as any },
-                            qty,
-                            0,
-                            new Date().toISOString().split('T')[0]
+                            restoreItemData,
+                            restoreQty,
+                            restorePrice,
+                            new Date().toISOString().split('T')[0],
+                            restoreExpiry
                           );
                         }}
                         className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-nowrap"
-                        title={`Restore ${qty}x "${itemName}" to ${log.roomName}`}
+                        title={`Restore ${restoreQty}x "${itemName}" to ${log.roomName}`}
                       >
                         <RefreshCcw className="w-3 h-3" />
                         Restore Item

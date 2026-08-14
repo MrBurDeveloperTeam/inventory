@@ -2832,7 +2832,27 @@ const handleLogout = async () => {
     }
 
     if (itemName) {
-      addActivity(roomId, roomName, 'delete', `Deleted "${itemName}"`, { beforeValue: beforeQty, afterValue: '0' });
+      // Snapshot the full item (not just its quantity) so the "Restore Item"
+      // button in Recent Global Activity can bring back its real category,
+      // brand, code, vendor, description, and expiry — not just the name and
+      // qty. Older log entries (from before this change) only ever stored a
+      // plain quantity number in beforeValue; the restore button's
+      // JSON.parse falls back gracefully for those.
+      const itemSnapshot = itemToDelete
+        ? JSON.stringify({
+            name: itemToDelete.name,
+            brand: itemToDelete.brand,
+            code: itemToDelete.code,
+            quantity: itemToDelete.quantity,
+            price: itemToDelete.price,
+            uom: itemToDelete.uom,
+            vendor: itemToDelete.vendor,
+            category: itemToDelete.category,
+            description: itemToDelete.description,
+            expiryDate: itemToDelete.expiryDate,
+          })
+        : beforeQty;
+      addActivity(roomId, roomName, 'delete', `Deleted "${itemName}"`, { beforeValue: itemSnapshot, afterValue: '0' });
     }
 
     if (currentInventoryOwnerId) {
