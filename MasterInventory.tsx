@@ -1731,8 +1731,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 {log.action === 'delete' && (() => {
                   // Item deletion: Deleted "ItemName"
                   const itemMatch = log.details?.match(/^Deleted "([^"]+)"$/);
-                  // Room deletion: Deleted room "RoomName"
-                  const roomMatch = log.details?.match(/^Deleted room "([^"]+)"$/);
+                  // Room deletion (genuine delete, items archived): matches both
+                  // the legacy exact format ('Deleted room "RoomName"') and the
+                  // current one with the "archived its items" suffix added when
+                  // the transfer-on-delete option was introduced. Deliberately
+                  // does NOT match the "...and transferred items to..." variant
+                  // — nothing was lost in that case, so there's nothing to
+                  // restore (the items are already sitting in the target room).
+                  const roomMatch = log.details?.match(/^Deleted room "([^"]+)"(?: and archived its items)?$/);
 
                   if (itemMatch && onReceive) {
                     const itemName = itemMatch[1];

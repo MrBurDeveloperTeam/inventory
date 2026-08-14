@@ -1546,6 +1546,28 @@ const handleLogout = async () => {
     if (itemAction === 'transfer' && (!targetRoom || targetRoom.id === id)) return;
     lastLocalMutation.current = Date.now();
 
+    // Snapshot items before deletion so a genuine (non-transfer) delete can
+    // be restored later via the "Restore Room" button in Recent Global
+    // Activity. Not needed for the transfer case — those items aren't lost,
+    // they're already sitting in targetRoom. (This mirrors what deleteRoom
+    // used to do before the transfer option was added — restoring here
+    // fixes the Restore Room button, which stopped working when that
+    // change dropped beforeValue/afterValue from the activity log.)
+    const itemSnapshot = itemAction !== 'transfer' && room.items?.length
+      ? JSON.stringify(room.items.map(i => ({
+          name: i.name,
+          brand: i.brand,
+          code: i.code,
+          quantity: i.quantity,
+          price: i.price,
+          uom: i.uom,
+          vendor: i.vendor,
+          category: i.category,
+          description: i.description,
+          expiryDate: i.expiryDate,
+        })))
+      : undefined;
+
     // 1. Optimistic Update
     setRooms(prev => prev
       .filter(r => r.id !== id)
@@ -1567,7 +1589,10 @@ const handleLogout = async () => {
       'delete',
       itemAction === 'transfer' && targetRoom
         ? `Deleted room "${room.name}" and transferred items to "${targetRoom.name}"`
-        : `Deleted room "${room.name}" and archived its items`
+        : `Deleted room "${room.name}" and archived its items`,
+      itemAction !== 'transfer'
+        ? { beforeValue: itemSnapshot, afterValue: String(room.items?.length ?? 0) }
+        : undefined
     );
     isDirty.current = true;
 

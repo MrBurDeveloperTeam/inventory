@@ -5,32 +5,66 @@ Every inventory activity event (add / remove / delete / transfer_in / transfer_o
 already goes through a single choke point: `addActivity()` in `App.tsx`. It previously only wrote
 to Supabase (`inventory_activity_logs`). It now also fires a best-effort sync to Odoo.
 
-Three pieces:
+## The real architecture (important — read this before touching `public/_worker.js`)
 
-1. **`services/logActivityToOdoo.ts`** (client) — called from `addActivity()`, fire-and-forget.
-   POSTs the event to the app's own same-origin endpoint, `/api/activity`, with
-   `credentials: 'include'` so the Odoo session cookie rides along.
-2. **`public/_worker.js`** (Cloudflare Pages Worker, deployed with this app) — new route
-   `POST /api/activity` (`handleActivityRequest`), added next to the existing `/api/wallet` route.
-   It reads the forwarded `session_id`/`mrbur_sso` cookie, resolves the caller's Odoo `partner_id`
-   server-side via `/web/session/get_session_info` (refactored into a shared `resolveOdooSession()`
-   helper also used by `handleWalletRequest`), then forwards the event to Odoo.
-3. **Odoo-side controller** — **not implemented**, see "Still needed" below.
+`inventory.snabbb.com/api/*` is bound by a **Cloudflare Workers Route** to a separate, shared
+worker called **`snabbb-worker`** — the same worker that answers `/api/*` for `app.snabbb.com`,
+`appointment.snabbb.com`, `e-learning.snabbb.com`, `todo.snabbb.com`, etc. Workers Routes take
+priority over a Pages project's own `_worker.js`. That means:
 
-This mirrors the existing `/api/wallet` pattern in the same worker file rather than the separate
-API-key-based Snabbb host (`VITE_ODOO_BASE_URL` / `X-Snabbb-Api-Key`) used by
-`consumeGameCredit.ts` / `useWallet.ts` — same-origin + cookie auth, no client-supplied partner_id
-to trust.
+- **`public/_worker.js`'s `/api/wallet` and `/api/activity` handlers in this repo are dead code
+  for this domain.** They never run. The theme-injection logic in that same file (for HTML page
+  requests) still works, since Workers Routes only intercept `/api/*`.
+- The actual backend logic lives in `snabbb-worker`, which is **not in this repo** — it's a
+  separate Cloudflare Worker (dashboard-managed or a different git repo; ask whoever manages
+  Workers & Pages for `snabbb.com`).
+- `snabbb-worker`'s auth model is different from what an Odoo-session-cookie approach would use:
+  it calls Odoo with a static `X-Snabbb-Api-Key` header (`env.SNABBB_API_KEY`) and identifies the
+  caller **by email**, not by partner_id or session. This is the same pattern its existing
+  `/api/wallet` handler uses (`GET https://mrbur.odoo.com/snabbb/reward/api/wallet/my?email=...`).
+
+So the sync now has three pieces:
+
+1. **`services/logActivityToOdoo.ts`** (client, in this repo) — called from `addActivity()`,
+   fire-and-forget. POSTs to same-origin `/api/inventory/activity` (not `/api/activity` — see
+   "Route collision" below) with the event plus the current user's `actor_email` (needed for Odoo
+   to resolve who this is — no session cookie involved).
+2. **`SNABBB_WORKER_activity_route.js`** (this repo, but **not part of the build** — it's a
+   snippet to manually paste into the actual `snabbb-worker` script, next to its existing
+   `/api/wallet` handler). It forwards the event to Odoo with `X-Snabbb-Api-Key`, mirroring the
+   wallet handler's style exactly (same `corsHeaders`, same `env`, reuses the existing
+   `resolveWebsiteScope` helper already defined in that file).
+3. **`odoo_addon/inventory_activity_log/`** (this repo) — the Odoo module. `controllers/main.py`
+   now validates `X-Snabbb-Api-Key` (via `ir.config_parameter` "snabbb.api_key" — **align this
+   with however the existing wallet controller checks the key**, see TODO in the file) and
+   resolves `res.partner` by email instead of by session uid.
+
+## Route collision (the actual cause of the persistent 401)
+
+`snabbb-worker`'s main entry file already has a **different, unrelated route at `/api/activity`**
+— it belongs to a separate clinic/appointment-booking feature on the same worker
+(`getActivity`/`addActivity` from `./supabase/activity.js`, keyed by `clinicId`), and requires an
+`Authorization: Bearer <JWT>` header. Since `if (url.pathname === ...)` blocks are matched
+top-to-bottom and that block is registered long before any inventory-specific code, every request
+to `/api/activity` from the inventory app was being caught by that earlier handler first — which,
+seeing no `Authorization` header, returned `new Response("Unauthorized", { status: 401 })`. That's
+a plain 12-byte string response, which is exactly what showed up in the Network tab regardless of
+any ordering/const fixes made to the inventory-specific code further down the file.
+
+Fix: the inventory activity route uses **`/api/inventory/activity`** instead, matching this same
+file's existing convention for inventory-specific paths (`/api/inventory/sync`,
+`/api/inventory/meta`, `/api/inventory/rooms`, `/api/inventory/register`, etc.) — there's no
+collision on that path.
 
 ## Request/response shapes
 
-Client → Worker, `POST /api/activity`:
+Client → `snabbb-worker`, `POST /api/inventory/activity` (same-origin on `inventory.snabbb.com`):
 ```json
 {
-  "app_code": "inventory",
   "external_ref": "activity-<uuid>",
-  "supabase_user_id": "uuid | null",
+  "actor_email": "user@example.com",
   "actor_name": "Jane Doe",
+  "supabase_user_id": "uuid | null",
   "action": "add",
   "room_id": "uuid",
   "room_name": "Storage Room",
@@ -41,26 +75,55 @@ Client → Worker, `POST /api/activity`:
 }
 ```
 
-Worker → Odoo, `POST ODOO_ACTIVITY_URL` (constant in `public/_worker.js`, currently a placeholder:
-`https://mrbur.odoo.com/api/inventory/activity`): same body, plus `odoo_partner_id` and
-`odoo_company_id` resolved server-side from the session — never trusts a client-supplied partner id.
+`snabbb-worker` → Odoo, `POST https://mrbur.odoo.com/snabbb/api/inventory/activity`
+(`ODOO_ACTIVITY_URL` in `SNABBB_WORKER_activity_route.js` — **placeholder, confirm/replace**):
+same body renamed to `email` (not `actor_email`), plus `website_scope` (defaults to `"MMY"`,
+same correction logic as wallet's `MIN`→`MID`), with `X-Snabbb-Api-Key: env.SNABBB_API_KEY`.
 
-Worker → Client response: `{ ok: true, external_ref }` on success, `{ ok: false, error }` otherwise
-(401 no session, 400 bad body, 502 Odoo rejected it, 500 unexpected).
+Response back to client: `{ ok: true, external_ref }` on success, `{ ok: false, error }` otherwise.
 
-## Still needed (out of scope here)
-- **The Odoo controller itself.** `ODOO_ACTIVITY_URL` in `public/_worker.js` is a guess
-  (`/api/inventory/activity`) matching the naming of the existing `/api/wallet` Odoo controller.
-  Point it at the real route once you've added it, e.g. a controller that creates one record per
-  event in a custom model (`x_inventory_activity_log`, or logged onto the partner via
-  `mail.message`), keyed by `external_ref` so retries don't create duplicates.
-- **Deploy**: this worker change lives in `public/_worker.js` in this repo — upload/redeploy it to
-  Cloudflare Pages as usual.
-- No retry/backoff or outbox for failed syncs — best-effort only. If you need guaranteed delivery,
-  consider an `odoo_synced_at` column on `inventory_activity_logs` plus a periodic retry job.
+## Odoo module: `odoo_addon/inventory_activity_log/`
+
+Unchanged model/views from before; controller now:
+- Requires `X-Snabbb-Api-Key` header matching the existing `snabbb_reward.api_key` system
+  parameter (Settings → Technical → System Parameters) — the same one the reward/wallet API
+  already validates against — 401 JSON otherwise. (Note: the reward system also has a
+  `snabbb_reward.require_api_key` toggle, currently `0`, that can disable its own key check
+  entirely; this controller has its own `REQUIRE_API_KEY = True` constant and ignores that
+  toggle, so it always enforces the key regardless of the reward system's setting.)
+- Looks up `res.partner` by the `email` field in the body (`search([('email', '=ilike', email)])`).
+  If no match, the event is still logged (with `partner_id` empty) rather than rejected — best
+  effort, matching the "never block activity logging" principle.
+- Idempotent on `external_ref`, same as before.
+
+### Install steps
+1. Copy `odoo_addon/inventory_activity_log/` into your Odoo `addons_path`.
+2. Confirm `snabbb_reward.api_key` (Settings → Technical → System Parameters) matches the
+   `SNABBB_API_KEY` variable on the `snabbb-worker` Cloudflare Worker — it already should, since
+   both back the existing reward/wallet API.
+3. Restart Odoo, Apps → Update Apps List, install "Inventory Activity Log (Snabbb)".
+4. Paste `SNABBB_WORKER_activity_route.js`'s contents into the actual `snabbb-worker` script
+   (Cloudflare dashboard Quick Edit or its git repo — wherever `/api/wallet` lives), next to the
+   existing wallet handler.
+5. Deploy `snabbb-worker`. Test: trigger an inventory activity in the app, check Network tab for
+   `POST /api/inventory/activity` returning `{ ok: true }`, then confirm a row landed in
+   Settings → Technical → Inventory Activity Log → Activity Events in Odoo.
+
+## Still needed / not done here
+- Confirming the real `ODOO_ACTIVITY_URL` path on the Odoo side (currently a placeholder guess,
+  `/snabbb/api/inventory/activity`) and the API key validation approach.
+- Pasting `SNABBB_WORKER_activity_route.js` into the actual `snabbb-worker` source and deploying
+  it — that worker's source isn't in this repo.
+- Installing the Odoo module (source is ready, not yet installed anywhere with this auth model).
+- Optional cleanup: the dead `/api/wallet` and `/api/activity` handlers (and the now-unused
+  `resolveOdooSession` helper) in `public/_worker.js` could be removed to avoid future confusion,
+  since Workers Routes mean they never execute for this domain. Left in place for now in case
+  they're useful reference or run on a different route than assumed.
 
 ## If the contract needs to change
-- Client shape/endpoint: edit `services/logActivityToOdoo.ts`.
-- Worker routing/session handling: edit `handleActivityRequest` in `public/_worker.js`.
-- Odoo target URL: edit `ODOO_ACTIVITY_URL` in `public/_worker.js`.
+- Client shape/endpoint: `services/logActivityToOdoo.ts`.
+- Worker-side forwarding logic: `SNABBB_WORKER_activity_route.js` (then re-paste into the real
+  `snabbb-worker` script).
+- Odoo model/fields: `odoo_addon/inventory_activity_log/models/inventory_activity_log.py`.
+- Odoo controller/auth/validation: `odoo_addon/inventory_activity_log/controllers/main.py`.
 `App.tsx`'s `addActivity()` doesn't need to change for any of the above.
