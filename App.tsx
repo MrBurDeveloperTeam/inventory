@@ -1040,6 +1040,20 @@ useEffect(() => {
           console.log('Discarding stale inventory load result');
           return;
         }
+        // isDirty/lastLocalMutation are only checked once, at the very top of
+        // this function, before these queries were fired. If a local mutation
+        // (receiveStock, deleteItem, etc.) started AFTER this reload began but
+        // BEFORE it resolved, this snapshot predates that mutation — applying
+        // it would silently overwrite the newer optimistic state with stale
+        // data (e.g. a just-restored item vanishing from view even though it
+        // persisted correctly to Supabase). Re-check right before applying.
+        if (isDirty.current) {
+          console.log('loadInventory: local mutation started mid-reload, discarding stale snapshot');
+          setIsLoadingMain(false);
+          setIsReloading(false);
+          setSyncStatus('synced');
+          return;
+        }
         console.log(`Inventory loaded successfully for ${currentInventoryOwnerId}. Found ${hydratedRooms.length} rooms.`);
         isHydrated.current = true;
 
