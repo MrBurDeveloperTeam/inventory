@@ -1,5 +1,8 @@
-::-webkit-scrollbar { 
-	width: 16px;
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
+::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
 }
 ::-webkit-scrollbar-track { 
 	background-color: #333;
@@ -11,28 +14,35 @@
 	background-color: #8295d5;
 }
 
-@font-face { 
-	font-family: 'Quadrit'; 
-	src: url('../css/Quadrit.ttf'); 
-}
-
 * { 
-	font-family: Quadrit, sans-serif;
+	font-family: 'Fredoka', system-ui, sans-serif;
 	font-size: 20px;
 	color: #fff;
 }
 
-html, body { 
-	margin: 0px 0px 0px 0px;
-	padding: 0px 0px 0px 0px;
-	width: 100%;
-	height: 100%;
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+
+    overflow: hidden !important;
+    overscroll-behavior: none;
+    background-color: #000;
 }
-html  { 
-	background-color: #000;
+
+html {
+    position: fixed;
+    inset: 0;
 }
-body { 
-	position: relative;
+
+body {
+    position: fixed;
+    inset: 0;
+
+    touch-action: none;
+    -webkit-overflow-scrolling: auto;
 }
 
 
@@ -50,7 +60,7 @@ body {
 #score h2, #score span, #highscore h2, #highscore span { 
 	display: block;
 	text-transform: uppercase;
-	font-weight: normal;
+	font-weight: 800;
 	letter-spacing: 2px;
 	font-size: 16px;
 	height: 21px;
@@ -59,7 +69,8 @@ body {
 	text-align: right;
 	padding-right: 15px;
 }
-#score span, #highscore span { 
+#score span, #highscore span {letter-spacing: 0.14em;
+     
 	padding-right: 0px;
 }
 #highscore span { 
@@ -75,7 +86,7 @@ body {
 	width: 210px;
 	height: 30px;
 	text-transform: uppercase;
-	font-weight: normal;
+	font-weight: 800;
 	letter-spacing: 2px;
 	font-size: 20px;
 	color: #fff200;
@@ -90,7 +101,7 @@ span.combo, span.fruits {
 	letter-spacing: 1.5px;
 	font-size: 14px;
 	color: #89dfff;
-	font-weight: normal;
+	font-weight: 800;
 }
 
 #panel, #home { 
@@ -187,44 +198,28 @@ span.combo, span.fruits {
 	background-image: url('../img/move-right.png');
 }
 
-#control-up-big, #control-down-big, #control-left-big, #control-right-big { 
-	position: absolute;
-	opacity: 0.2;
-	margin: auto;
-	padding: 0px;
-	display: none;
-	background-size: 98px;
-	z-index: 999999;
+/*
+ * Direction button images.
+ * Size and position are controlled by mobile-controls-v2.css.
+ */
+#control-up-big {
+    background-image:
+        url('../img/move-up-big.png');
 }
-#control-up-big { 
-	bottom: 10px;
-	left: 0px;
-	right: 0px;
-	width: 125px;
-	height: 125px;
-	background-image: url('../img/move-up-big.png');
+
+#control-down-big {
+    background-image:
+        url('../img/move-down-big.png');
 }
-#control-down-big { 
-	bottom: -120px;
-	left: 0px;
-	right: 0px;
-	width: 125px;
-	height: 125px;
-	background-image: url('../img/move-down-big.png');
+
+#control-left-big {
+    background-image:
+        url('../img/move-left-big.png');
 }
-#control-left-big { 
-	left: 80px;
-	bottom: -90px;
-	width: 125px;
-	height: 175px;
-	background-image: url('../img/move-left-big.png');
-}
-#control-right-big { 
-	right: 80px;
-	bottom: -90px;
-	width: 125px;
-	height: 175px;
-	background-image: url('../img/move-right-big.png');
+
+#control-right-big {
+    background-image:
+        url('../img/move-right-big.png');
 }
 
 
@@ -374,18 +369,13 @@ h3 {
 	#panel, #home { 
 		zoom: 105%;
 	}
-	#control-up-big, #control-down-big, #control-left-big, #control-right-big { 
-		display: inline; 
-	} 
+
 
 }
 @media screen and (max-height:640px), screen and (min-device-height : 480px) and (max-device-height : 640px) and (-webkit-device-pixel-ratio: 3) { 
 	#panel, #home { 
 		zoom: 60%;
 	}
-	#control-up-big, #control-down-big, #control-left-big, #control-right-big { 
-		display: inline; 
-	} 
 	#home .help-button, #panel .help-button, #home .github, #sound, .sound { 
 		display: none;
 	}
@@ -397,9 +387,6 @@ h3 {
 	#panel, #home { 
 		zoom: 55%;
 	}
-	#control-up-big, #control-down-big, #control-left-big, #control-right-big { 
-		display: inline; 
-	} 
 	h1, #canvas-panel-title-pacman, #control-up-second, #control-down-second, #home .help-button, #panel .help-button, #home .github, #sound, .sound { 
 		display: none;
 	}
@@ -428,4 +415,192 @@ h3 {
 	#message { 
 		top: 347px;
 	}
+}
+
+/*
+ * Modern responsive PAC-CAT viewport.
+ * Override the old zoom-based mobile layout.
+ */
+:root {
+    --pac-cat-scale: 1;
+    --pac-cat-center-x: 50vw;
+    --pac-cat-center-y: 50vh;
+}
+
+#panel,
+#home {
+    box-sizing: content-box;
+
+    width: 550px !important;
+    height: 690px !important;
+
+    position: fixed !important;
+    left: var(--pac-cat-center-x) !important;
+    top: var(--pac-cat-center-y) !important;
+    right: auto !important;
+    bottom: auto !important;
+
+    margin: 0 !important;
+    margin-top: 0 !important;
+    padding: 5px 10px 10px !important;
+
+    zoom: 1 !important;
+
+    transform:
+        translate(-50%, -50%)
+        scale(var(--pac-cat-scale));
+
+    transform-origin: center center;
+    will-change: transform;
+
+    overflow: visible;
+}
+
+/*
+ * Restore elements hidden or repositioned by the old
+ * max-height mobile media queries.
+ */
+#home h1,
+#panel h1 {
+    display: block !important;
+    visibility: visible !important;
+}
+
+#score,
+#highscore {
+    top: 70px !important;
+}
+
+#message {
+    top: 413px !important;
+}
+
+#canvas-lifes,
+#canvas-level-fruits {
+    top: 670px !important;
+}
+
+/*
+ * The old lower control bar is no longer used.
+ */
+#control {
+    display: none !important;
+}
+#canvas-home-title-pacman,
+#canvas-panel-title-pacman {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/*
+ * Final PAC-CAT title layout.
+ * Overrides all legacy mobile rules.
+ */
+
+#home h1,
+#panel h1 {
+  position: absolute !important;
+  left: 50% !important;
+  right: auto !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  visibility: visible !important;
+  opacity: 1 !important;
+
+  white-space: nowrap;
+
+  color: #fff !important;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+
+  transform: translateX(-50%) !important;
+
+  z-index: 999999 !important;
+  pointer-events: none;
+}
+
+/*
+ * Home / character selection title.
+ */
+#home h1 {
+  top: 18px !important;
+
+  font-size: 42px !important;
+  letter-spacing: 2px !important;
+
+  gap: 10px;
+}
+
+/*
+ * In-game PAC-CAT title.
+ */
+#panel h1 {
+  top: 10px !important;
+
+  font-size: 20px !important;
+  letter-spacing: 1.5px !important;
+
+  gap: 5px;
+}
+
+/*
+ * Reset the old emoji positioning.
+ */
+#home .cat-emoji,
+#panel .cat-emoji {
+  position: static !important;
+
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+
+  display: inline-block !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  line-height: 1 !important;
+  vertical-align: middle !important;
+
+  transform: none !important;
+}
+
+/*
+ * Large cat icon on home screen.
+ */
+#home .cat-emoji {
+  font-size: 42px !important;
+}
+
+/*
+ * Small cat icon during gameplay.
+ */
+#panel .cat-emoji {
+  font-size: 20px !important;
+}
+
+/*
+ * Legacy canvas titles are no longer used.
+ */
+#canvas-home-title-pacman,
+#canvas-panel-title-pacman {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/*
+ * Keep the maze below the PAC-CAT
+ * title and score header.
+ */
+#panel #board {
+  top: 105px !important;
 }

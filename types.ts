@@ -1,6 +1,9 @@
-
 export type Category = 'consumables' | 'equipment' | 'instruments' | 'materials' | 'medication' | 'ppe' | 'other';
 export type UOM = 'pcs' | 'box' | 'unit' | 'kit';
+
+/** Sentinel room ID used for items whose room was deleted. Never persisted to DB. */
+export const TBA_ROOM_ID = '__TBA__';
+export const TBA_ROOM_NAME = 'Unassigned (TBA)';
 
 export interface ItemBatch {
   id: string;
@@ -23,6 +26,8 @@ export interface Item {
   expiryDate?: string | null;
   createdAt?: string;
   batches?: ItemBatch[];
+  /** True when the item's room was deleted — shown as TBA until reassigned. */
+  tba?: boolean;
 }
 
 export interface Room {
@@ -65,7 +70,7 @@ export interface PurchaseHistory {
 }
 
 export interface UserProfile {
-  id: string;
+  id?: string;
   name: string;
   email: string;
   accountType: 'individual' | 'company' | 'admin';
@@ -74,6 +79,7 @@ export interface UserProfile {
   clinicName?: string;
   avatarUrl?: string;
   backgroundUrl?: string;
+  companyName?: string;
 }
 
 export interface CatPosition {

@@ -1,0 +1,137 @@
+/*
+ * PAC-CAT mobile direction pad.
+ * Keep controls independent from
+ * legacy PAC-MAN positioning.
+ */
+#mobile-controls {
+  --control-size: clamp(28px, 7vmin, 36px);
+
+  position: fixed !important;
+
+  right: max(
+    12px,
+    env(safe-area-inset-right, 0px)
+  ) !important;
+
+  bottom: max(
+    12px,
+    env(safe-area-inset-bottom, 0px)
+  ) !important;
+
+  top: auto !important;
+  left: auto !important;
+
+  width: auto !important;
+  height: auto !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  z-index: 1000000;
+
+  display: none !important;
+
+  grid-template-columns:
+    repeat(3, var(--control-size));
+
+  grid-template-rows:
+    repeat(3, var(--control-size));
+
+  gap: 2px;
+
+  transform: none !important;
+
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/*
+ * Never show controls before
+ * gameplay actually starts.
+ */
+body:not(.game-active) #mobile-controls {
+  display: none !important;
+}
+
+/*
+ * Show controls during gameplay.
+ */
+body.game-active #mobile-controls {
+  display: grid !important;
+}
+
+/*
+ * Completely override old
+ * PAC-MAN control positioning.
+ */
+#control-up-big,
+#control-left-big,
+#control-right-big,
+#control-down-big {
+  position: relative !important;
+
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  inset: auto !important;
+
+  width: var(--control-size) !important;
+  height: var(--control-size) !important;
+
+  min-width: 0 !important;
+  min-height: 0 !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  display: block !important;
+
+  background-color: transparent !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 72% !important;
+
+  border: 0 !important;
+  border-radius: 0 !important;
+
+  opacity: 0.55 !important;
+
+  box-sizing: border-box;
+
+  transform: none !important;
+
+  cursor: pointer;
+  touch-action: none;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+#control-up-big:active,
+#control-left-big:active,
+#control-right-big:active,
+#control-down-big:active {
+  opacity: 0.9 !important;
+  transform: scale(0.9) !important;
+}
+
+#control-up-big {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+
+#control-left-big {
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+}
+
+#control-right-big {
+  grid-column: 3 !important;
+  grid-row: 2 !important;
+}
+
+#control-down-big {
+  grid-column: 2 !important;
+  grid-row: 3 !important;
+}

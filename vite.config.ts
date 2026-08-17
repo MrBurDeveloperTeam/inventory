@@ -9,11 +9,22 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
+      allowedHosts: [
+        'semistiffly-largando-alane.ngrok-free.dev'
+      ]
     },
     plugins: [
       react(),
       VitePWA({
         registerType: 'autoUpdate',
+        workbox: {
+          maximumFileSizeToCacheInBytes:
+            4 * 1024 * 1024,
+
+          navigateFallbackDenylist: [
+            /^\/games\//,
+          ],
+        },
         devOptions: {
           enabled: true
         },

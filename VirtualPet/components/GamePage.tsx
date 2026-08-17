@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useGameState } from '../hooks/useGameState';
 import { TiArrowBack } from 'react-icons/ti';
 import { supabase } from '../../supabaseClient';
@@ -6,19 +6,19 @@ import { supabase } from '../../supabaseClient';
 const GAME_CONFIG: Record<string, { title: string; url: string; icon: string; gradient: string }> = {
     flappy: {
         title: 'Flappy Cat',
-        url: '/games/flappy-cat/index.html',
+        url: '/games/flappy-cat/index.html?v=20260731-12',
         icon: '🕊️',
         gradient: 'from-yellow-400 to-orange-500'
     },
     paccat: {
         title: 'Pac-Cat',
-        url: '/games/pac-cat/index.html',
+        url: '/games/pac-cat/index.html?v=20260807-2',
         icon: '👻',
         gradient: 'from-blue-400 to-indigo-600'
     },
     tetris: {
         title: 'Tetris',
-        url: '/games/tetris/index.html',
+        url: '/games/tetris/index.html?v=20260730-10',
         icon: '🧱',
         gradient: 'from-red-400 to-pink-600'
     },
@@ -42,7 +42,7 @@ const AnimatedCounter: React.FC<{ value: number }> = ({ value }) => {
     const startValue = useRef(value);
     const endValue = useRef(value);
     const startTime = useRef(0);
-    const duration = 3000; // 1 second animation
+    const duration = 3000; // 3 second animation
 
     useEffect(() => {
         if (value === displayValue) return;
@@ -291,9 +291,24 @@ export const GamePage: React.FC<GamePageProps> = ({
 
     // Prevent scroll when game is open
     useEffect(() => {
-        document.body.style.overflow = 'hidden';
+        const html = document.documentElement;
+        const body = document.body;
+
+        const previousHtmlOverflow = html.style.overflow;
+        const previousHtmlOverscroll = html.style.overscrollBehavior;
+        const previousBodyOverflow = body.style.overflow;
+        const previousBodyOverscroll = body.style.overscrollBehavior;
+
+        html.style.overflow = 'hidden';
+        html.style.overscrollBehavior = 'none';
+        body.style.overflow = 'hidden';
+        body.style.overscrollBehavior = 'none';
+
         return () => {
-            document.body.style.overflow = '';
+            html.style.overflow = previousHtmlOverflow;
+            html.style.overscrollBehavior = previousHtmlOverscroll;
+            body.style.overflow = previousBodyOverflow;
+            body.style.overscrollBehavior = previousBodyOverscroll;
         };
     }, []);
 
@@ -445,10 +460,13 @@ export const GamePage: React.FC<GamePageProps> = ({
                     className="absolute inset-x-0 bottom-0 top-0 border-0 bg-slate-900 shadow-none outline-none"
                 >
                     {isLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-slate-900 z-10">
+                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900">
                             <div className="flex flex-col items-center gap-4">
-                                <div className="w-16 h-16 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-                                <span className="text-white/60 text-sm">Loading {config.title}...</span>
+                                <div className="h-16 w-16 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+
+                                <span className="text-sm text-white/60">
+                                    Loading {config.title}...
+                                </span>
                             </div>
                         </div>
                     )}
@@ -459,7 +477,9 @@ export const GamePage: React.FC<GamePageProps> = ({
                         className="block h-full w-full border-0 shadow-none outline-none"
                         title={config.title}
                         onLoad={() => setIsLoading(false)}
-                        allow="autoplay; fullscreen"
+                        allow="autoplay; fullscreen; screen-wake-lock"
+                        allowFullScreen
+                        scrolling="no"
                     />
                 </div>
             </div>

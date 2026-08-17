@@ -1,6 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
 body {
     margin: 0;
-    font-family: 'Courier New', Courier, monospace;
+    font-family: 'Fredoka', system-ui, sans-serif;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -63,7 +64,7 @@ body {
 }
 
 .modal-title {
-    font-family: 'Press Start 2P', 'Courier New', monospace;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-size: clamp(22px, 4vw, 32px);
     color: #2a2416;
     text-shadow: 2px 2px 0 #e3d7b0;
@@ -73,13 +74,13 @@ body {
     width: 100%;
     display: flex;
     justify-content: space-between;
-    font-family: 'Press Start 2P', 'Courier New', monospace;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-size: clamp(14px, 3vw, 18px);
     color: #2a2416;
 }
 
 #play-again {
-    font-family: 'Press Start 2P', 'Courier New', monospace;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-size: clamp(14px, 3vw, 20px);
     color: #f8f8f8;
     background: #00b8de;
@@ -105,9 +106,9 @@ body {
     align-items: center;
     
     /* Font Settings */
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-size: clamp(32px, 6vw, 72px); /* Responsive size */
-    letter-spacing: -2px; /* Pull letters closer like the logo */
+    letter-spacing: 0.02em; /* Pull letters closer like the logo */
 }
 
 /* Base style for every letter */
@@ -175,7 +176,7 @@ body {
 }
 
 #start-btn {
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-size: clamp(14px, 3vw, 24px);
     
     /* Text settings */
@@ -207,4 +208,23 @@ body {
 
 .hidden {
     display: none !important;
+}
+
+html,
+body,
+#board {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+
+    overflow: hidden;
+    overscroll-behavior: none;
+
+    touch-action: none;
+
+    user-select: none;
+    -webkit-user-select: none;
+
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
 }

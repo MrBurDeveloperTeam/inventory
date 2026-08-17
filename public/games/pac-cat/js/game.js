@@ -39,6 +39,14 @@ function initGame(newgame) {
 		stopTrailer();
 
 		HOME = false;
+		
+		/*
+		* Show the mobile direction pad during gameplay.
+		*/
+		document.body.classList.add(
+			"game-active"
+		);
+		
 		GAMEOVER = false;
 
 		$('#help').fadeOut("slow");

@@ -1,20 +1,17 @@
 
-import { PetStats, PetColor, RoomType, FoodItem } from './types';
+import { PetStats, RoomType, FoodItem, ToyItem, BedItem } from './types';
 
 export const INITIAL_STATS: PetStats = {
-  hunger: 80,
-  energy: 90,
-  happiness: 80,
-  hygiene: 50,
+  hunger: 100,
+  energy: 100,
+  happiness: 100,
+  hygiene: 100,
   level: 1,
   xp: 0,
   coins: 100
 };
 
-export const INITIAL_INVENTORY: Record<string, number> = {
-  apple: 5,
-  cookie: 3
-};
+export const INITIAL_INVENTORY: Record<string, number> = {};
 
 export const XP_TO_LEVEL_UP = 100;
 
@@ -26,15 +23,6 @@ export const ROOM_THEMES: Record<RoomType, { bg: string; accent: string; icon: s
   [RoomType.GARDEN]: { bg: 'bg-gradient-to-br from-[#F0FDF4] via-[#DCFCE7] to-[#86EFAC]', accent: 'text-emerald-600', icon: '🌳' },
   [RoomType.GAMES]: { bg: 'bg-gradient-to-br from-[#EEF2FF] via-[#E0E7FF] to-[#C7D2FE]', accent: 'text-indigo-600', icon: '🕹️' },
 };
-
-export const COLORS = [
-  { value: PetColor.POTATO, label: 'Classic' },
-  { value: PetColor.PINK, label: 'Berry' },
-  { value: PetColor.BLUE, label: 'Sky' },
-  { value: PetColor.GREEN, label: 'Mint' },
-  { value: PetColor.PURPLE, label: 'Lavender' },
-  { value: PetColor.ORANGE, label: 'Peach' },
-];
 
 export const FOOD_ITEMS: FoodItem[] = [
   // Breakfast
@@ -89,4 +77,27 @@ export const FOOD_ITEMS: FoodItem[] = [
   { id: 'icecream', icon: '🍦', label: 'Ice Cream', hunger: 10, xp: 8, happiness: 15, price: 40, category: 'Sweets', levelReq: 10 },
   { id: 'pie', icon: '🥧', label: 'Pie', hunger: 25, xp: 12, happiness: 15, price: 50, category: 'Sweets', levelReq: 15 },
   { id: 'cake', icon: '🍰', label: 'Cake', hunger: 20, xp: 15, happiness: 20, price: 70, category: 'Sweets', levelReq: 20 },
+];
+
+export const TOY_ITEMS: ToyItem[] = [
+  { id: 'ball_red', icon: '', label: 'Red Ball', price: 0, color: 'radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a)', levelReq: 1 },
+  { id: 'ball_blue', icon: '', label: 'Blue Ball', price: 50, color: 'radial-gradient(circle at 30% 30%, #339af0, #1864ab)', levelReq: 1 },
+  { id: 'ball_green', icon: '', label: 'Green Ball', price: 100, color: 'radial-gradient(circle at 30% 30%, #51cf66, #2b8a3e)', levelReq: 2 },
+  { id: 'ball_purple', icon: '', label: 'Purple Ball', price: 150, color: 'radial-gradient(circle at 30% 30%, #cc5de8, #862e9c)', levelReq: 3 },
+  { id: 'ball_orange', icon: '', label: 'Orange Ball', price: 200, color: 'radial-gradient(circle at 30% 30%, #ff922b, #d9480f)', levelReq: 4 },
+  { id: 'ball_gold', icon: '', label: 'Gold Ball', price: 500, color: 'radial-gradient(circle at 30% 30%, #fcc419, #f08c00)', levelReq: 5 },
+  // Sports Balls
+  { id: 'ball_soccer', icon: '⚽', label: 'Soccer Ball', price: 300, color: '#ffffff', levelReq: 3 },
+  { id: 'ball_baseball', icon: '⚾', label: 'Baseball', price: 250, color: '#f8f9fa', levelReq: 2 },
+  { id: 'ball_basketball', icon: '🏀', label: 'Basketball', price: 350, color: '#fd7e14', levelReq: 4 },
+  { id: 'ball_football', icon: '🏈', label: 'Football', price: 400, color: '#8b4513', levelReq: 5 },
+  { id: 'ball_tennis', icon: '🥎', label: 'Tennis Ball', price: 150, color: '#d4fc79', levelReq: 2 },
+  { id: 'ball_rugby', icon: '🏉', label: 'Rugby Ball', price: 400, color: '#a52a2a', levelReq: 5 },
+  { id: 'ball_8ball', icon: '🎱', label: '8-Ball', price: 600, color: '#212529', levelReq: 6 },
+];
+
+export const BED_ITEMS: BedItem[] = [
+  { id: 'bed_grey', label: 'Grey Bed', price: 0, src: '/pets/grey_bed.png', energyGain: 2, levelReq: 1 },
+  { id: 'bed_red', label: 'Red Bed', price: 300, src: '/pets/red_bed.png', energyGain: 3, levelReq: 1 },
+  { id: 'bed_purple', label: 'Purple Bed', price: 600, src: '/pets/purple_bed.png', energyGain: 4, levelReq: 1 },
 ];

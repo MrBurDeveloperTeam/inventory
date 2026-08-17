@@ -1,8 +1,15 @@
 import React, { useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Sparkles, Activity, Zap, ShieldCheck, AlertCircle, BarChart3 } from 'lucide-react';
+import { X, Send, Zap, ShieldCheck, AlertCircle, BarChart3, RefreshCcw } from 'lucide-react';
+import * as Icons from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatHistory } from './types';
+import { supabase } from './supabaseClient';
+
+const DynamicIcon = ({ name, ...props }: any) => {
+    const IconComponent = (Icons as any)[name] || Icons.Zap;
+    return <IconComponent {...props} />;
+};
 
 // --- Text Extraction for Logic ---
 const getText = (node: any): string => {
@@ -61,9 +68,12 @@ const MARKDOWN_COMPONENTS = {
 };
 
 const MemoizedMessage = React.memo(({ text }: { text: string }) => {
+    // Strip <ACTION>...</ACTION> blocks before rendering to keep UI clean
+    const cleanedText = text.replace(/<ACTION>[\s\S]*?<\/ACTION>/g, '').trim();
+
     return (
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
-            {text}
+            {cleanedText}
         </ReactMarkdown>
     );
 });
@@ -76,7 +86,9 @@ interface MolarChatProps {
     chatInput: string;
     setChatInput: (val: string) => void;
     onSendMessage: (e?: React.FormEvent) => void;
+    onClearChat: () => void;
     chatEndRef: React.RefObject<HTMLDivElement>;
+    onPetToggle?: () => void;
 }
 
 export const MolarChat = React.memo(({
@@ -87,15 +99,64 @@ export const MolarChat = React.memo(({
     chatInput,
     setChatInput,
     onSendMessage,
-    chatEndRef
+    onClearChat,
+    chatEndRef,
+    onPetToggle
 }: MolarChatProps) => {
     const inputRef = useRef<HTMLInputElement>(null);
+    const [config, setConfig] = React.useState({
+        title: 'Inventory Simulator',
+        subtitle: 'Ask a question or try one of the suggestions below to test the Inventory AI.'
+    });
+    const [prompts, setPrompts] = React.useState([
+        { text: 'How does it work?', icon_name: 'Zap' },
+        { text: 'Check expiring stock', icon_name: 'ShieldCheck' },
+        { text: 'Low supply alerts', icon_name: 'AlertCircle' },
+        { text: 'Usage analytics', icon_name: 'BarChart3' },
+    ]);
 
     // Auto-focus input when opened
     useEffect(() => {
         if (isOpen) {
             setTimeout(() => inputRef.current?.focus(), 100);
         }
+    }, [isOpen]);
+
+    useEffect(() => {
+        const fetchSimConfig = async () => {
+            try {
+                const { data: configs } = await supabase
+                    .from('aiboard_simulator_configs')
+                    .select('id, title, subtitle')
+                    .eq('module_name', 'Inventory')
+                    .limit(1);
+
+                if (!configs || configs.length === 0) return;
+
+                const nextConfig = configs[0];
+                setConfig({
+                    title: nextConfig.title || 'Inventory Simulator',
+                    subtitle: nextConfig.subtitle || 'Ask a question or try one of the suggestions below to test the Inventory AI.',
+                });
+
+                const { data: promptData } = await supabase
+                    .from('aiboard_simulator_prompts')
+                    .select('text, icon_name, sort_order')
+                    .eq('config_id', nextConfig.id)
+                    .order('sort_order', { ascending: true });
+
+                if (promptData && promptData.length > 0) {
+                    setPrompts(promptData.map((prompt: any) => ({
+                        text: prompt.text,
+                        icon_name: prompt.icon_name || 'Zap',
+                    })));
+                }
+            } catch (err) {
+                console.error('Error fetching inventory simulator config:', err);
+            }
+        };
+
+        if (isOpen) fetchSimConfig();
     }, [isOpen]);
 
     if (!isOpen) return null;
@@ -106,7 +167,7 @@ export const MolarChat = React.memo(({
             <div className="fixed inset-0 bg-slate-900/10 backdrop-blur-[2px] z-[9998] md:hidden" onClick={onClose} />
 
             {/* Main Capsule Container */}
-            <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 w-[90vw] md:w-[420px] h-[75vh] md:h-[700px] max-h-[85vh] flex flex-col font-sans z-[9999] animate-in slide-in-from-bottom-[5%] duration-500 ease-out-back overflow-hidden rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-white/40 bg-white/80 backdrop-blur-2xl ring-1 ring-slate-900/5">
+            <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 w-[90vw] md:w-[385px] h-[70vh] md:h-[600px] max-h-[85vh] flex flex-col font-sans z-[9999] animate-in slide-in-from-bottom-[5%] duration-500 ease-out-back overflow-hidden rounded-[1.5rem] shadow-2xl shadow-slate-200/50 border border-white/40 bg-white/80 dark:bg-slate-900/95 dark:border-slate-700/60 backdrop-blur-2xl ring-1 ring-slate-900/5">
 
                 {/* Background Ambience */}
                 <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -115,34 +176,45 @@ export const MolarChat = React.memo(({
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.2] mix-blend-overlay"></div>
                 </div>
 
-                {/* Header (Status Bar Style) */}
-                <div className="flex items-center justify-between px-6 py-4 relative z-10 border-b border-white/10 bg-gradient-to-r from-emerald-600 to-teal-600 shadow-md">
-                    {/* Noise Texture Overlay for the Header */}
-                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none"></div>
-
-                    <div className="flex items-center gap-3 relative z-10">
-                        <div className="relative">
-                            <div className="w-11 h-11 rounded-full border border-white/20 shadow-inner overflow-hidden bg-white/90">
-                                <img src="/images/MolarAI.png" alt="Molar AI" className="w-full h-full object-cover scale-125 translate-y-1" />
-                            </div>
-                        </div>
-                        <div>
-                            <h3 className="font-bold text-base text-white tracking-tight drop-shadow-sm">Molar AI</h3>
-                            <div className="flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-200 animate-pulse shadow-[0_0_8px_rgba(167,243,208,0.8)]"></span>
-                                <p className="text-[10px] font-semibold text-emerald-50/90 uppercase tracking-widest leading-none">System Online</p>
-                            </div>
-                        </div>
+                <div className="flex items-center justify-between px-5 py-2 relative z-10 border-b border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700">
+                    {/* Logo/Title */}
+                    <div className="flex items-center">
+                        <span className="text-[22px] font-extrabold tracking-normal" style={{ color: '#2A9D8F' }}>SN</span>
+                        <span className="text-[22px] font-extrabold tracking-normal text-black dark:text-white">AI</span>
                     </div>
 
-                    {/* Close Button */}
-                    <button
-                        onClick={onClose}
-                        className="relative z-10 p-1 text-white hover:text-white/80 transition-transform duration-200 hover:scale-110 active:scale-95"
-                        aria-label="Close chat"
-                    >
-                        <X className="w-7 h-7" />
-                    </button>
+                    {/* Header Actions */}
+                    <div className="flex items-center gap-1">
+                        {onPetToggle && (
+                            <button
+                                onClick={onPetToggle}
+                                className="p-1 px-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all"
+                                title="Virtual Pet"
+                                aria-label="Open virtual pet"
+                            >
+                                <span className="text-xl">🐾</span>
+                            </button>
+                        )}
+
+                        {/* Clear Chat Button */}
+                        <button
+                            onClick={onClearChat}
+                            className="p-1 text-slate-400 hover:text-emerald-500 transition-all mr-1"
+                            title="Clear conversation"
+                            aria-label="Clear conversation"
+                        >
+                            <RefreshCcw className="w-5 h-5" />
+                        </button>
+
+                        {/* Close Button */}
+                        <button
+                            onClick={onClose}
+                            className="p-1 text-slate-400 hover:text-emerald-500 transition-all"
+                            aria-label="Close chat"
+                        >
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
 
                 </div>
 
@@ -150,35 +222,26 @@ export const MolarChat = React.memo(({
                 <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-4 scroll-smooth scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent relative z-10">
                     {chatHistory.length === 0 && (
                         <div className="flex flex-col items-center justify-center h-full text-center pb-12 animate-in fade-in zoom-in-95 duration-700">
-                            <p className="text-slate-500 text-sm max-w-[260px] leading-relaxed mb-8 font-medium">
-                                Ready to analyze inventory streams and track supply metrics.
+                            <h3 className="text-slate-700 text-lg font-bold mb-2 max-w-[280px] leading-tight">
+                                {config.title}
+                            </h3>
+                            <p className="text-slate-600 text-sm max-w-[320px] leading-relaxed mb-6 font-normal">
+                                {config.subtitle}
                             </p>
 
                             <div className="grid grid-cols-1 gap-2.5 w-full max-w-[320px]">
-                                <button onClick={() => setChatInput("Check expiring stock")} className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all shadow-sm hover:shadow-md text-left">
-                                    <div className="w-8 h-8 rounded-xl bg-emerald-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-emerald-50">
-                                        <Zap className="w-4 h-4 text-emerald-600" />
-                                    </div>
-                                    <span className="text-[12px] font-bold text-slate-700 group-hover:text-emerald-800 leading-tight">Check expiring stock</span>
-                                </button>
-                                <button onClick={() => setChatInput("Total inventory value")} className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white border border-slate-100 hover:border-teal-200 hover:bg-teal-50/30 transition-all shadow-sm hover:shadow-md text-left">
-                                    <div className="w-8 h-8 rounded-xl bg-teal-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-teal-50">
-                                        <ShieldCheck className="w-4 h-4 text-teal-600" />
-                                    </div>
-                                    <span className="text-[12px] font-bold text-slate-700 group-hover:text-teal-800 leading-tight">Total inventory value</span>
-                                </button>
-                                <button onClick={() => setChatInput("Low supply alerts")} className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white border border-slate-100 hover:border-rose-200 hover:bg-rose-50/30 transition-all shadow-sm hover:shadow-md text-left">
-                                    <div className="w-8 h-8 rounded-xl bg-rose-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-rose-50">
-                                        <AlertCircle className="w-4 h-4 text-rose-600" />
-                                    </div>
-                                    <span className="text-[12px] font-bold text-slate-700 group-hover:text-rose-800 leading-tight">Low supply alerts</span>
-                                </button>
-                                <button onClick={() => setChatInput("Usage analytics")} className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all shadow-sm hover:shadow-md text-left">
-                                    <div className="w-8 h-8 rounded-xl bg-indigo-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-indigo-50">
-                                        <BarChart3 className="w-4 h-4 text-indigo-600" />
-                                    </div>
-                                    <span className="text-[12px] font-bold text-slate-700 group-hover:text-indigo-800 leading-tight">Usage analytics</span>
-                                </button>
+                                {prompts.map((prompt, index) => (
+                                    <button
+                                        key={`${prompt.text}-${index}`}
+                                        onClick={() => setChatInput(prompt.text)}
+                                        className="group flex items-center gap-3 w-full p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all shadow-sm hover:shadow-md text-left"
+                                    >
+                                        <div className="w-8 h-8 rounded-xl bg-emerald-100/50 flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-sm border border-emerald-50">
+                                            <DynamicIcon name={prompt.icon_name} className="w-4 h-4 text-emerald-600" />
+                                        </div>
+                                        <span className="text-[12px] font-bold text-slate-700 group-hover:text-emerald-800 leading-tight">{prompt.text}</span>
+                                    </button>
+                                ))}
                             </div>
                         </div>
                     )}
@@ -215,18 +278,11 @@ export const MolarChat = React.memo(({
 
                 {/* Footer Input Area */}
                 <div className="p-3 relative z-20">
-                    <button
-                        onClick={onClose}
-                        className="absolute -top-16 right-0 w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all duration-300 md:hidden pointer-events-auto shadow-lg"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-
                     <form onSubmit={onSendMessage} className="relative w-full max-w-xl mx-auto">
                         {/* Container */}
                         <div
                             className="
-                        relative flex items-center gap-2 p-1.5 rounded-full transition-all duration-300 ease-out
+                        relative flex items-center gap-0 p-1.5 rounded-full transition-all duration-300 ease-out
                         bg-slate-100
                         shadow-[inset_2px_2px_5px_rgba(148,163,184,0.25),inset_0px_-3px_6px_rgba(148,163,184,0.15),inset_-3px_-3px_7px_rgba(255,255,255,1)]
                         ring-1 ring-white/60 border border-slate-300/70
@@ -237,11 +293,11 @@ export const MolarChat = React.memo(({
                             <input
                                 ref={inputRef}
                                 className="
-                            flex-1 bg-transparent border-0 px-5 py-3 text-sm text-slate-700
-                            placeholder:text-slate-400/80 font-medium tracking-wide
+                            flex-1 bg-transparent border-0 px-3 py-2 text-sm text-slate-700
+                            placeholder:text-slate-400/70 font-medium tracking-wide
                             focus:outline-none focus:ring-0
                         "
-                                placeholder="Type your command..."
+                                placeholder="Ask SNAI..."
                                 value={chatInput}
                                 onChange={(e) => setChatInput(e.target.value)}
                             />

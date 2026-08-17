@@ -1,20 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RoomType, FoodItem, Bubble, ToolType } from './types';
-import { ROOM_THEMES, FOOD_ITEMS } from './constants';
-import Pet from './components/Pet';
+import { BED_ITEMS, ROOM_THEMES, TOY_ITEMS } from './constants';
+import Pet, { PetPose } from './components/Pet';
 import StatsBar from './components/StatsBar';
 import BottomControls from './components/BottomControls';
 import { FoodMenu, BathroomMenu, GamesMenu } from './components/RoomMenus';
 import DragLayer from './components/DragLayer';
 import Ball from './components/Ball';
 import ShopModal from './components/ShopModal';
-import { FridgeModal } from './components/FridgeModal';
 import { useGameState } from './hooks/useGameState';
 import { useBallPhysics } from './hooks/useBallPhysics';
 import LevelIndicator from './components/LevelIndicator';
 import CoinIndicator from './components/CoinIndicator';
+import { getPetOption } from './petOptions';
+import { api } from '@/services/api';
+import { consumeGameCredit } from '@/services/consumeGameCredit';
 
 const MAX_BUBBLES = 120;
+const RINSE_COMPLETE_THRESHOLD = Math.ceil(MAX_BUBBLES * 0.05);
+const POOP_REWARD_COINS = 5;
+const POOP_RESPAWN_MS = 2 * 60 * 60 * 1000;
+const POOP_NEXT_SPAWN_KEY = 'virtual_pet_next_poop_at';
+const OUTSIDE_PET_SCALE = 0.75;
+const BEDROOM_SCENE_WIDTH = 560;
+const BEDROOM_SCENE_HEIGHT = 430;
+const BEDROOM_BED_WIDTH = 550;
+const BEDROOM_BED_BOTTOM_OFFSET = 96;
+const SLEEP_WAKE_DURATION_MS = 760;
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 interface PetRoomProps {
   onNavigateToGame: (gameId: string) => void;
@@ -25,14 +38,15 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
   const {
     stats, setStats,
     petName,
-    petColor, setPetColor,
     currentRoom, setCurrentRoom,
     isSleeping, setIsSleeping,
     isEating, setIsEating,
     isPlaying, setIsPlaying,
     inventory, buyItem, consumeItem,
-    addXP
+    addXP, activeBallId, setActiveBallId, activeBedId, setActiveBedId,
+    foodItems, isFoodLoading, currencyRate
   } = useGameState();
+  const activePet = getPetOption(petName);
 
   const {
     ballPos, setBallPos,
@@ -56,7 +70,9 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
   const [showFoodMenu, setShowFoodMenu] = useState(false);
   const [showBathroomMenu, setShowBathroomMenu] = useState(false);
   const [showShopModal, setShowShopModal] = useState(false);
-  const [showFridgeModal, setShowFridgeModal] = useState(false);
+  const [isPoopVisible, setIsPoopVisible] = useState(false);
+  const [showPoopReward, setShowPoopReward] = useState(false);
+  const [bedroomSceneScale, setBedroomSceneScale] = useState(1);
 
 
   // Drag & Drop / Tool State
@@ -66,12 +82,163 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
   const [isHoveringPet, setIsHoveringPet] = useState(false);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [isSoapedUp, setIsSoapedUp] = useState(false);
+  const [outsidePetPos, setOutsidePetPos] = useState({ x: 0, y: 0 });
+  const [outsidePetPose, setOutsidePetPose] = useState<PetPose>('idle');
 
   // Pointer/Eye Tracking State
   const [pointerState, setPointerState] = useState<{ isDown: boolean, x: number, y: number }>({ isDown: false, x: 0, y: 0 });
 
+  const playAreaRef = useRef<HTMLDivElement>(null);
   const petRef = useRef<HTMLDivElement>(null);
   const lastBubbleTime = useRef(0);
+  const lastBallPlayTime = useRef(0);
+  const ballPlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outsidePetPosRef = useRef(outsidePetPos);
+  const outsidePetRaf = useRef<number>(0);
+  const ballPosRef = useRef(ballPos);
+  const outsideBallTargetRef = useRef<{ x: number; y: number } | null>(null);
+  const outsideWakeUntilRef = useRef(0);
+  const isBallMovingRef = useRef(isBallMoving);
+  const isDraggingBallRef = useRef(isDraggingBall);
+  const activeSoapType = useRef<'soap' | null>(null);
+  const soapConsumedOnRinse = useRef(false);
+  const activeSoapMultiplier = useRef(1);
+
+  useEffect(() => {
+    if (currentRoom !== RoomType.BEDROOM) {
+      setBedroomSceneScale(1);
+      return;
+    }
+
+    const playArea = playAreaRef.current;
+    if (!playArea) return;
+
+    const updateBedroomSceneScale = () => {
+      const rect = playArea.getBoundingClientRect();
+      const horizontalPadding = rect.width < 480 ? 16 : 32;
+      const topUiClearance = clamp(rect.height * 0.2, 100, 160);
+      const bottomClearance = 16;
+
+      const availableWidth = Math.max(rect.width - horizontalPadding, 1);
+      const availableHeight = Math.max(
+        rect.height - topUiClearance - bottomClearance,
+        1
+      );
+
+      const sceneFootprintHeight =
+        BEDROOM_SCENE_HEIGHT +
+        BEDROOM_BED_BOTTOM_OFFSET;
+
+      const nextScale = clamp(
+        Math.min(
+          availableWidth / BEDROOM_SCENE_WIDTH,
+          availableHeight / sceneFootprintHeight
+        ),
+        0.24,
+        1
+      );
+
+      setBedroomSceneScale(nextScale);
+    };
+
+    updateBedroomSceneScale();
+
+    const resizeObserver = new ResizeObserver(
+      updateBedroomSceneScale
+    );
+
+    resizeObserver.observe(playArea);
+    window.addEventListener(
+      'resize',
+      updateBedroomSceneScale
+    );
+
+    window.visualViewport?.addEventListener(
+      'resize',
+      updateBedroomSceneScale
+    );
+
+    return () => {
+      resizeObserver.disconnect();
+
+      window.removeEventListener(
+        'resize',
+        updateBedroomSceneScale
+      );
+
+      window.visualViewport?.removeEventListener(
+        'resize',
+        updateBedroomSceneScale
+      );
+    };
+  }, [currentRoom]);
+
+  useEffect(() => {
+    outsidePetPosRef.current = outsidePetPos;
+  }, [outsidePetPos]);
+
+  useEffect(() => {
+    ballPosRef.current = ballPos;
+  }, [ballPos]);
+
+  useEffect(() => {
+    isBallMovingRef.current = isBallMoving;
+  }, [isBallMoving]);
+
+  useEffect(() => {
+    isDraggingBallRef.current = isDraggingBall;
+  }, [isDraggingBall]);
+
+  const getSoapItem = () => foodItems.find((item) => item.id === 'soap' && item.category === 'Soap');
+
+  const getBedItem = (id: string | null) => {
+    if (!id) return null;
+    const shopBed = foodItems.find((item) => item.id === id && item.category === 'Beds');
+    const fallback = BED_ITEMS.find((bed) => bed.id === id);
+    if (!shopBed && !fallback) return null;
+
+    return {
+      id,
+      src: shopBed?.imageSrc || fallback?.src || '',
+      energyGain: shopBed?.energyGain || fallback?.energyGain || 1,
+    };
+  };
+
+  useEffect(() => {
+    if (currentRoom !== RoomType.PLAYROOM || !playAreaRef.current) return;
+
+    const rect = playAreaRef.current.getBoundingClientRect();
+    const initialPos = {
+      x: rect.width / 2,
+      y: Math.max(190, rect.height / 2),
+    };
+    outsidePetPosRef.current = initialPos;
+    setOutsidePetPos(initialPos);
+    setOutsidePetPose('idle');
+  }, [currentRoom]);
+
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const syncPoopVisibility = () => {
+      const nextSpawnAt = Number(localStorage.getItem(POOP_NEXT_SPAWN_KEY) || 0);
+      const now = Date.now();
+
+      if (!nextSpawnAt || now >= nextSpawnAt) {
+        setIsPoopVisible(true);
+        return;
+      }
+
+      setIsPoopVisible(false);
+      timeoutId = setTimeout(syncPoopVisibility, nextSpawnAt - now);
+    };
+
+    syncPoopVisibility();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
 
   // Manage Soaped State (Hysteresis)
   useEffect(() => {
@@ -81,7 +248,7 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
       // Add a delay before resetting soaped state to show "Clean" message
       const timer = setTimeout(() => {
         setIsSoapedUp(false);
-      }, 2000);
+      }, 800);
       return () => clearTimeout(timer);
     } else if (bubbles.length === 0 && !isSoapedUp) {
       // Immediate reset if not previously soaped (initial state)
@@ -104,6 +271,7 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
 
   const handleBallDown = (e: React.PointerEvent) => {
     e.preventDefault();
+    outsideBallTargetRef.current = null;
     setIsDraggingBall(true);
     ballVel.current = { vx: 0, vy: 0 };
     lastDragPos.current = { x: e.clientX, y: e.clientY, time: Date.now() };
@@ -143,11 +311,18 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
           const relY = ((e.clientY - rect.top) / rect.height) * 200;
 
           if (draggedTool === 'soap') {
+            if (!activeSoapType.current) {
+              activeSoapType.current = 'soap';
+              soapConsumedOnRinse.current = false;
+              const soapItem = getSoapItem();
+              activeSoapMultiplier.current = Math.max(1, (soapItem?.hygiene || 50) / 50);
+            }
+
             if (now - lastBubbleTime.current > 50) {
               const newBubble: Bubble = {
                 id: now,
-                x: relX + (Math.random() * 20 - 10),
-                y: relY + (Math.random() * 20 - 10),
+                x: clamp(relX + (Math.random() * 20 - 10), 36, 164),
+                y: clamp(relY + (Math.random() * 20 - 10), 20, 190),
                 size: Math.random() * 12 + 7
               };
 
@@ -166,10 +341,16 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
                   const isUnderShower = distX < 25 && (b.y > relY && b.y < relY + 150);
                   return !isUnderShower;
                 });
-                if (remaining.length < prev.length && stats.hygiene < 100) {
-                  setStats(s => ({ ...s, hygiene: Math.min(100, s.hygiene + 0.5) }));
+                const rinsedBubbles = remaining.length <= RINSE_COMPLETE_THRESHOLD ? [] : remaining;
+                if (rinsedBubbles.length < prev.length && stats.hygiene < 100) {
+                  setStats(s => ({ ...s, hygiene: Math.min(100, s.hygiene + (0.5 * activeSoapMultiplier.current)) }));
                 }
-                return remaining;
+                if (rinsedBubbles.length === 0 && prev.length > 0 && activeSoapType.current && !soapConsumedOnRinse.current) {
+                  soapConsumedOnRinse.current = true;
+                  activeSoapType.current = null;
+                  activeSoapMultiplier.current = 1;
+                }
+                return rinsedBubbles;
               });
             }
           }
@@ -182,8 +363,8 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
       const now = Date.now();
       const dt = now - lastDragPos.current.time;
       if (dt > 0) {
-        const vx = (e.clientX - lastDragPos.current.x) * 0.5;
-        const vy = (e.clientY - lastDragPos.current.y) * 0.5;
+        const vx = (e.clientX - lastDragPos.current.x) * 0.7;
+        const vy = (e.clientY - lastDragPos.current.y) * 0.7;
         ballVel.current = { vx, vy };
       }
       lastDragPos.current = { x: e.clientX, y: e.clientY, time: now };
@@ -227,25 +408,30 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
 
     // Drop Ball
     if (isDraggingBall) {
+      outsideBallTargetRef.current = { x: e.clientX, y: e.clientY };
+      if (currentRoom === RoomType.PLAYROOM && isSleeping) {
+        outsideWakeUntilRef.current = Date.now() + SLEEP_WAKE_DURATION_MS;
+        setIsSleeping(false);
+      }
       setIsDraggingBall(false);
     }
   };
 
   // --- Game Actions ---
-  const handlePlay = () => {
-    if (stats.energy < 20) return;
-    if (isSleeping) return;
+  // const handlePlay = () => {
+  //   if (stats.energy < 20) return;
+  //   if (isSleeping) return;
 
-    setIsPlaying(true);
-    setStats(prev => ({
-      ...prev,
-      happiness: Math.min(100, prev.happiness + 15),
-      energy: Math.max(0, prev.energy - 10),
-      hunger: Math.max(0, prev.hunger - 5)
-    }));
-    addXP(15);
-    setTimeout(() => setIsPlaying(false), 800);
-  };
+  //   setIsPlaying(true);
+  //   setStats(prev => ({
+  //     ...prev,
+  //     happiness: Math.min(100, prev.happiness + 15),
+  //     energy: Math.max(0, prev.energy - 10),
+  //     hunger: Math.max(0, prev.hunger - 5)
+  //   }));
+  //   addXP(15);
+  //   setTimeout(() => setIsPlaying(false), 800);
+  // };
 
   const handlePetClick = () => {
     if (isSleeping) {
@@ -253,10 +439,41 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
       return;
     }
     setStats(prev => ({ ...prev, happiness: Math.min(100, prev.happiness + 5) }));
-    setIsPlaying(true);
-    setTimeout(() => setIsPlaying(false), 500);
   };
 
+  const handlePoopClick = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const nextSpawnAt = Date.now() + POOP_RESPAWN_MS;
+    localStorage.setItem(POOP_NEXT_SPAWN_KEY, String(nextSpawnAt));
+    setIsPoopVisible(false);
+    setShowPoopReward(false);
+    window.setTimeout(() => setShowPoopReward(true), 0);
+    window.setTimeout(() => setShowPoopReward(false), 1500);
+    setStats(prev => ({ ...prev, coins: (prev.coins || 0) + POOP_REWARD_COINS }));
+  };
+
+
+  async function handlePlay(gameId: string) {
+    const sessionInfo = await api.post('/web/session/get_session_info', {
+      credentials: 'include',
+    });
+    console.log('Session Info:', sessionInfo);
+    const odooPartnerId = sessionInfo.data.result.partner_id;
+    const userId = sessionInfo.data.result.uid;
+    const sessionId = crypto.randomUUID();
+
+    // const allowed = await consumeGameCredit(odooPartnerId, userId, sessionId);
+
+    // if (allowed) {
+      onNavigateToGame(gameId);
+    // } else {
+      // setError('Insufficient credits. Please top up your Snabbb balance.');
+    // }
+
+    // setLoading(false);
+  }
 
   // Room switching cleanup & auto-show menus
   useEffect(() => {
@@ -272,18 +489,134 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
       setShowBathroomMenu(false);
       setBubbles([]);
       setIsSoapedUp(false);
+      activeSoapType.current = null;
+      soapConsumedOnRinse.current = false;
+      activeSoapMultiplier.current = 1;
     }
   }, [currentRoom]);
 
   const roomConfig = ROOM_THEMES[currentRoom];
+  const activeBed = getBedItem(activeBedId);
+  const bathroomProgressPercent = isSoapedUp
+    ? bubbles.length <= RINSE_COMPLETE_THRESHOLD
+      ? 100
+      : (1 - (bubbles.length / MAX_BUBBLES)) * 100
+    : (bubbles.length / MAX_BUBBLES) * 100;
+  const isRinseComplete = isSoapedUp && bubbles.length <= RINSE_COMPLETE_THRESHOLD;
 
   const handleStartGame = (gameId: string) => {
-    onNavigateToGame(gameId);
+    handlePlay(gameId);
   };
+
+  useEffect(() => {
+    if (currentRoom !== RoomType.PLAYROOM || !isBallMoving || isDraggingBall || !petRef.current) return;
+
+    const rect = petRef.current.getBoundingClientRect();
+    const padding = 36;
+    const isBallNearPet =
+      ballPos.x >= rect.left - padding &&
+      ballPos.x <= rect.right + padding &&
+      ballPos.y >= rect.top - padding &&
+      ballPos.y <= rect.bottom + padding;
+
+    if (!isBallNearPet) return;
+
+    const now = Date.now();
+    if (now - lastBallPlayTime.current < 900) return;
+
+    lastBallPlayTime.current = now;
+    setIsPlaying(true);
+    setStats(prev => ({
+      ...prev,
+      happiness: Math.min(100, prev.happiness + 2),
+    }));
+    addXP(2);
+
+    if (ballPlayTimer.current) clearTimeout(ballPlayTimer.current);
+    ballPlayTimer.current = setTimeout(() => {
+      setIsPlaying(false);
+      ballPlayTimer.current = null;
+    }, 700);
+  }, [addXP, ballPos.x, ballPos.y, currentRoom, isBallMoving, isDraggingBall, setIsPlaying, setStats]);
+
+  useEffect(() => {
+    return () => {
+      if (ballPlayTimer.current) clearTimeout(ballPlayTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (currentRoom !== RoomType.PLAYROOM) {
+      cancelAnimationFrame(outsidePetRaf.current);
+      setOutsidePetPose('idle');
+      return;
+    }
+
+    const tick = () => {
+      const area = playAreaRef.current;
+      if (!area) {
+        outsidePetRaf.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      const rect = area.getBoundingClientRect();
+      const current = outsidePetPosRef.current;
+      const petWidth = 192 * OUTSIDE_PET_SCALE;
+      const petHeight = 208 * OUTSIDE_PET_SCALE;
+      const latestBallPos = ballPosRef.current;
+      const ballSpeed = Math.hypot(ballVel.current.vx, ballVel.current.vy);
+      const ballIsReleasedAndMoving = isBallMovingRef.current && !isDraggingBallRef.current && ballSpeed > 0.5;
+      const hasReleasedBallTarget = !!outsideBallTargetRef.current || ballIsReleasedAndMoving;
+      const chaseTarget = hasReleasedBallTarget ? latestBallPos : null;
+
+      if (Date.now() < outsideWakeUntilRef.current) {
+        setOutsidePetPose('idle');
+        outsidePetRaf.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (!chaseTarget || isDraggingBallRef.current) {
+        setOutsidePetPose('idle');
+        outsidePetRaf.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      const target = {
+        x: chaseTarget.x - rect.left,
+        y: chaseTarget.y - rect.top,
+      };
+      const dx = target.x - current.x;
+      const dy = target.y - current.y;
+      const distance = Math.hypot(dx, dy);
+      const shouldChase = distance > 75;
+
+      if (shouldChase) {
+        const speed = Math.min(7, Math.max(2, distance * 0.045));
+        const next = {
+          x: clamp(current.x + (dx / distance) * speed, petWidth / 2, rect.width - petWidth / 2),
+          y: clamp(current.y + (dy / distance) * speed, petHeight / 2, rect.height - petHeight / 2),
+        };
+
+        outsidePetPosRef.current = next;
+        setOutsidePetPos(next);
+        setOutsidePetPose(dx < 0 ? 'run-left' : 'run-right');
+      } else if (ballIsReleasedAndMoving) {
+        setOutsidePetPose(dx < 0 ? 'run-left' : 'run-right');
+      } else {
+        outsideBallTargetRef.current = null;
+        setOutsidePetPose('idle');
+      }
+
+      outsidePetRaf.current = requestAnimationFrame(tick);
+    };
+
+    outsidePetRaf.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(outsidePetRaf.current);
+  }, [currentRoom]);
 
   return (
     <div
-      className={`h-screen w-full relative transition-colors duration-700 ease-in-out ${roomConfig.bg} overflow-hidden flex flex-col items-center justify-between py-6`}
+      className={`relative flex h-[100dvh] min-h-0 w-full flex-col items-center justify-between overflow-hidden py-[clamp(8px,2dvh,24px)] transition-colors duration-700 ease-in-out ${roomConfig.bg}`}
       onPointerDown={handleAppPointerDown}
       onPointerMove={handleAppPointerMove}
       onPointerUp={handleAppPointerUp}
@@ -297,25 +630,49 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
 
       {/* Bedroom Lamp Switch */}
       {currentRoom === RoomType.BEDROOM && (
-        <div className="absolute top-0 left-1/3 z-10 flex flex-col items-center">
-          {/* Lamp Cord - Changed h-32 to h-48 */}
-          <div className="w-1 h-48 bg-slate-800/80" />
-          {/* Lamp Bulb */}
+        <div
+          className="pointer-events-none absolute left-[72%] z-[5] flex -translate-x-1/2 flex-col items-center"
+          style={{
+            top: 'env(safe-area-inset-top, 0px)',
+          }}
+        >
+          <div className="h-[clamp(132px,20dvh,176px)] w-1 bg-slate-800/80" />
+
           <button
-            onClick={() => setIsSleeping(!isSleeping)}
-            // Added 'rotate-180' to flip the emoji upside down
-            className="text-6xl -mt-2 transition-all duration-300 hover:scale-110 active:scale-95 outline-none rotate-180"
-            title={isSleeping ? "Turn On" : "Turn Off"}
+            type="button"
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            onPointerUp={(event) => {
+              event.stopPropagation();
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsSleeping(!isSleeping);
+            }}
+            className="pointer-events-auto -mt-1 flex h-[clamp(44px,8dvh,56px)] w-[clamp(44px,8dvh,56px)] touch-manipulation items-center justify-center text-[clamp(36px,8dvh,60px)] outline-none transition-transform duration-300 hover:scale-110 active:scale-95"
+            title={isSleeping ? 'Turn On' : 'Turn Off'}
+            aria-label={
+              isSleeping
+                ? 'Turn on bedroom light'
+                : 'Turn off bedroom light'
+            }
           >
-            <div className={`transition-all duration-500 ${isSleeping ? 'grayscale opacity-50 blur-[1px]' : 'filter drop-shadow-[0_0_25px_rgba(255,235,59,0.8)]'}`}>
+            <span
+              className={`rotate-180 transition-all duration-500 ${
+                isSleeping
+                  ? 'grayscale opacity-50'
+                  : 'drop-shadow-[0_0_20px_rgba(255,235,59,0.8)]'
+              }`}
+            >
               💡
-            </div>
+            </span>
           </button>
         </div>
       )}
 
       {/* Top Right UI */}
-      <LevelIndicator stats={stats} onColorChange={setPetColor} />
+      <LevelIndicator stats={stats} />
       <CoinIndicator amount={stats.coins || 0} />
 
       {/* Stats HUD (Top Center) */}
@@ -330,7 +687,7 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
             ${isSoapedUp && bubbles.length === MAX_BUBBLES
               ? 'scale-110 ring-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.6)]'
               : 'ring-white/40'}
-            ${bubbles.length === 0 ? 'ring-green-400' : ''}    
+            ${isRinseComplete ? 'ring-green-400' : ''}    
           `}>
 
             <div
@@ -340,10 +697,7 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
                 ${isSoapedUp && bubbles.length < MAX_BUBBLES ? 'bg-gradient-to-r from-blue-400 to-cyan-500' : ''}
               `}
               style={{
-                width: `${(isSoapedUp && (bubbles.length < MAX_BUBBLES || bubbles.length === 0))
-                  ? (1 - (bubbles.length / MAX_BUBBLES)) * 100 // Rinsing: 0 -> 100%
-                  : (bubbles.length / MAX_BUBBLES) * 100       // Soaping or Ready: 0 -> 100%
-                  }%`
+                width: `${bathroomProgressPercent}%`
               }}
             >
               <div className="absolute inset-0 bg-gradient-to-b from-white/30 to-transparent" />
@@ -353,30 +707,201 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
       )}
 
       {/* The Pet */}
-      <div className="flex-1 flex items-center justify-center relative w-full">
-        <Pet
-          ref={petRef}
-          color={petColor}
-          stats={stats}
-          isSleeping={isSleeping}
-          isEating={isEating}
-          isPlaying={isPlaying}
-          isHoveredWithFood={isHoveringPet && !!draggedItem}
-          bubbles={bubbles}
-          lookAt={
-            currentRoom === RoomType.PLAYROOM
-              ? (isBallMoving ? ballPos : null)
-              : (pointerState.isDown ? { x: pointerState.x, y: pointerState.y } : null)
-          }
-          onClick={handlePetClick}
-        />
+      <div
+        ref={playAreaRef}
+        className="relative flex min-h-0 w-full flex-1 items-center justify-center"
+      >
+        {currentRoom === RoomType.PLAYROOM ? (
+          <div
+            className="absolute z-20"
+            style={{
+              left: outsidePetPos.x,
+              top: outsidePetPos.y,
+              transform: 'translate(-50%, -50%)',
+            }}
+          >
+            <Pet
+              ref={petRef}
+              stats={stats}
+              isSleeping={isSleeping}
+              isEating={isEating}
+              isPlaying={false}
+              isHoveredWithFood={false}
+              bubbles={[]}
+              lookAt={isBallMoving ? ballPos : null}
+              displayScale={OUTSIDE_PET_SCALE}
+              showDirtyEffects={false}
+              sleepLabelClassName="-top-4 -right-2"
+              spriteSheetUrl={activePet.spriteSheetUrl}
+              mouthPosition={activePet.mouthPosition}
+              idleFrames={activePet.idleFrames}
+              idleDuration={activePet.idleDuration}
+              sleepInFrames={activePet.sleepInFrames}
+              sleepHoldFrame={activePet.sleepHoldFrame}
+              clickRow={activePet.clickRow}
+              clickFrames={activePet.clickFrames}
+              clickDuration={activePet.clickDuration}
+              pose={outsidePetPose}
+              onClick={handlePetClick}
+            />
+          </div>
+        ) : currentRoom === RoomType.BEDROOM ? (
+          <div
+            className="absolute left-1/2 z-10 flex items-center justify-center"
+            style={{
+              width: BEDROOM_SCENE_WIDTH * bedroomSceneScale,
+              height: BEDROOM_SCENE_HEIGHT * bedroomSceneScale,
+              bottom:
+                BEDROOM_BED_BOTTOM_OFFSET *
+                bedroomSceneScale,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            {activeBed && (
+              <img
+                src={activeBed.src}
+                alt=""
+                draggable={false}
+                className="pointer-events-none absolute left-1/2 z-0 -translate-x-1/2 select-none drop-shadow-2xl"
+                style={{
+                  width:
+                    BEDROOM_BED_WIDTH *
+                    bedroomSceneScale,
+                  bottom:
+                    -BEDROOM_BED_BOTTOM_OFFSET *
+                    bedroomSceneScale,
+                }}
+              />
+            )}
+
+            <div
+              className="relative z-10"
+              style={{
+                transform:
+                  `translateY(${8 * bedroomSceneScale}px)`,
+              }}
+            >
+              <Pet
+                ref={petRef}
+                stats={stats}
+                isSleeping={isSleeping}
+                isEating={isEating}
+                isPlaying={isPlaying}
+                isHoveredWithFood={
+                  isHoveringPet &&
+                  !!draggedItem
+                }
+                bubbles={bubbles}
+                lookAt={
+                  pointerState.isDown
+                    ? {
+                        x: pointerState.x,
+                        y: pointerState.y,
+                      }
+                    : null
+                }
+                displayScale={bedroomSceneScale}
+                sleepVisualOffsetY={
+                  72 * bedroomSceneScale
+                }
+                sleepLabelClassName="top-24 right-14"
+                spriteSheetUrl={activePet.spriteSheetUrl}
+                mouthPosition={activePet.mouthPosition}
+                idleFrames={activePet.idleFrames}
+                idleDuration={activePet.idleDuration}
+                sleepInFrames={activePet.sleepInFrames}
+                sleepHoldFrame={activePet.sleepHoldFrame}
+                clickRow={activePet.clickRow}
+                clickFrames={activePet.clickFrames}
+                clickDuration={activePet.clickDuration}
+                onClick={handlePetClick}
+              />
+            </div>
+          </div>
+        ) : (
+          <Pet
+            ref={petRef}
+            stats={stats}
+            isSleeping={isSleeping}
+            isEating={isEating}
+            isPlaying={isPlaying}
+            isHoveredWithFood={isHoveringPet && !!draggedItem}
+            bubbles={bubbles}
+            lookAt={pointerState.isDown ? { x: pointerState.x, y: pointerState.y } : null}
+            spriteSheetUrl={activePet.spriteSheetUrl}
+            mouthPosition={activePet.mouthPosition}
+            idleFrames={activePet.idleFrames}
+            idleDuration={activePet.idleDuration}
+            sleepInFrames={activePet.sleepInFrames}
+            sleepHoldFrame={activePet.sleepHoldFrame}
+            clickRow={activePet.clickRow}
+            clickFrames={activePet.clickFrames}
+            clickDuration={activePet.clickDuration}
+            onClick={handlePetClick}
+          />
+        )}
 
         {/* Room Specific Decor */}
         {currentRoom === RoomType.BATHROOM && (
           <div className="absolute bottom-10 right-10 opacity-50 text-6xl animate-float">🦆</div>
         )}
+        {currentRoom === RoomType.BATHROOM &&
+          (isPoopVisible || showPoopReward) && (
+            <div
+              className="pointer-events-none absolute z-40 flex h-[clamp(72px,22vw,96px)] w-[clamp(72px,22vw,96px)] items-center justify-center"
+              style={{
+                right:
+                  'max(clamp(12px,6vw,72px), env(safe-area-inset-right, 0px))',
+                bottom:
+                  'clamp(150px,22dvh,210px)',
+              }}
+            >
+              {isPoopVisible && (
+                <button
+                  type="button"
+                  onPointerDown={(e) =>
+                    e.stopPropagation()
+                  }
+                  onPointerUp={(e) =>
+                    e.stopPropagation()
+                  }
+                  onClick={handlePoopClick}
+                  className="pointer-events-auto flex h-full w-full touch-manipulation items-center justify-center rounded-2xl p-1.5 transition-transform duration-200 hover:scale-110 active:scale-95 md:p-2"
+                  aria-label="Collect poop for 5 coins"
+                  title="+5 coins"
+                >
+                  <img
+                    src="/images/poop.png"
+                    alt=""
+                    draggable={false}
+                    className="h-[clamp(56px,18vw,80px)] w-[clamp(56px,18vw,80px)] object-contain drop-shadow-xl"
+                  />
+                </button>
+              )}
+
+              {showPoopReward && (
+                <div className="absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2">
+                  <div className="animate-poop-reward whitespace-nowrap rounded-full bg-amber-400 px-3 py-1.5 text-[14px] font-black tracking-wider text-white shadow-lg">
+                    +5 coins
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         {currentRoom === RoomType.GAMES && (
-          <div className="absolute top-10 left-10 opacity-30 text-8xl animate-pulse">👾</div>
+          // Icon removed as requested
+          null
+        )}
+
+        {/* Playroom Store Button */}
+        {false && currentRoom === RoomType.PLAYROOM && (
+          <button
+            onClick={() => undefined}
+            className="absolute bottom-10 right-10 bg-white/40 hover:bg-white/60 backdrop-blur-md p-4 rounded-3xl border-4 border-pink-200 shadow-xl transition-all hover:scale-110 active:scale-95 group z-30"
+          >
+            <div className="text-4xl group-hover:rotate-12 transition-transform">🏪</div>
+            <div className="mt-1 text-[10px] font-black text-pink-500 uppercase tracking-widest">Toy Shop</div>
+          </button>
         )}
       </div>
 
@@ -386,6 +911,8 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
           position={ballPos}
           isDragging={isDraggingBall}
           onPointerDown={handleBallDown}
+          color={TOY_ITEMS.find(t => t.id === activeBallId)?.color}
+          icon={TOY_ITEMS.find(t => t.id === activeBallId)?.icon}
         />
       )}
 
@@ -395,7 +922,7 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
           onDragStart={handleDragStartItem}
           inventory={inventory}
           onOpenShop={() => setShowShopModal(true)}
-          onOpenFridge={() => setShowFridgeModal(true)}
+          items={foodItems}
         />
       )}
 
@@ -426,6 +953,7 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
         currentRoom={currentRoom}
         isSleeping={isSleeping}
         onNavigate={(room) => setCurrentRoom(room)}
+        onOpenShop={() => setShowShopModal(true)}
         onToggleSleep={() => setIsSleeping(!isSleeping)}
         onToggleFoodMenu={() => setShowFoodMenu(!showFoodMenu)}
         onToggleBathroomMenu={() => setShowBathroomMenu(!showBathroomMenu)}
@@ -437,23 +965,36 @@ export const PetRoom: React.FC<PetRoomProps> = ({ onNavigateToGame }) => {
       <ShopModal
         isOpen={showShopModal}
         onClose={() => setShowShopModal(false)}
-        items={FOOD_ITEMS}
+        items={foodItems}
         inventory={inventory}
+        activeBedId={activeBedId}
+        activeBallId={activeBallId}
         coins={stats.coins}
         currentLevel={stats.level}
-        onBuy={(item) => buyItem(item.id, item.price)}
-      />
-
-      <FridgeModal
-        isOpen={showFridgeModal}
-        onClose={() => setShowFridgeModal(false)}
-        items={FOOD_ITEMS}
-        inventory={inventory}
-        onFeed={onFeed}
-        onOpenShop={() => {
-          setShowFridgeModal(false);
-          setShowShopModal(true);
+        onBuy={(item) => buyItem(item.id, item.price * currencyRate)}
+        onBuyBed={(bed) => {
+          if (buyItem(bed.id, bed.price * currencyRate)) {
+            setActiveBedId(bed.id);
+          }
         }}
+        onSelectBed={(id) => setActiveBedId(id)}
+        onBuyToy={(item) => {
+          const toy = TOY_ITEMS.find((candidate) =>
+            candidate.id === item.id ||
+            candidate.label.toLowerCase() === item.label.toLowerCase() ||
+            candidate.label.toLowerCase().replace(/\s+/g, '_') === item.id.toLowerCase()
+          );
+          const toyId = toy?.id || item.id;
+          if ((inventory[toyId] || inventory[item.id] || 0) > 0) {
+            setActiveBallId(toyId);
+            return;
+          }
+          if (buyItem(toyId, item.price * currencyRate)) {
+            setActiveBallId(toyId);
+          }
+        }}
+        onSelectToy={(id) => setActiveBallId(id)}
+        isLoading={isFoodLoading}
       />
 
     </div>

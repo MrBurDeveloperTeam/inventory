@@ -5,7 +5,6 @@ export const useBallPhysics = (currentRoom: RoomType) => {
     const [ballPos, setBallPos] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
     const [isDraggingBall, setIsDraggingBall] = useState(false);
     const [isBallMoving, setIsBallMoving] = useState(false);
-    
     // Physics refs
     const ballVel = useRef({ vx: 0, vy: 0 });
     const lastDragPos = useRef({ x: 0, y: 0, time: 0 });
@@ -16,7 +15,7 @@ export const useBallPhysics = (currentRoom: RoomType) => {
         const updateBallPhysics = () => {
             if (currentRoom === RoomType.PLAYROOM) {
                 if (isDraggingBall) {
-                     setIsBallMoving(true);
+                    setIsBallMoving(true);
                 } else {
                     setBallPos(prev => {
                         let { x, y } = prev;
@@ -24,22 +23,22 @@ export const useBallPhysics = (currentRoom: RoomType) => {
                         const radius = 30; // Ball radius
                         const floor = window.innerHeight;
                         const walls = window.innerWidth;
-                        
-                        // Air Resistance
-                        vx *= 0.99;
-                        vy *= 0.99;
+
+                        // Air resistance / rolling friction. Lower values make the ball stop sooner.
+                        vx *= 0.990;
+                        vy *= 0.990;
 
                         // Update position
                         x += vx;
                         y += vy;
 
-                        const bounceFactor = -0.9;
+                        const bounceFactor = -0.95;
 
                         // Floor Collision
                         if (y + radius > floor) {
                             y = floor - radius;
                             vy *= bounceFactor;
-                        } 
+                        }
                         // Ceiling Collision
                         else if (y - radius < 0) {
                             y = radius;
@@ -62,7 +61,7 @@ export const useBallPhysics = (currentRoom: RoomType) => {
                     // Check if moving based on velocity
                     // Note: This reads velocity from the previous update cycle which is fine for this check
                     const { vx, vy } = ballVel.current;
-                    const speed = Math.sqrt(vx*vx + vy*vy);
+                    const speed = Math.sqrt(vx * vx + vy * vy);
                     // Threshold for "stopped"
                     setIsBallMoving(speed > 0.5);
                 }
@@ -73,10 +72,10 @@ export const useBallPhysics = (currentRoom: RoomType) => {
         if (currentRoom === RoomType.PLAYROOM) {
             physicsFrameRef.current = requestAnimationFrame(updateBallPhysics);
         } else {
-             // Reset when leaving/entering
-             setBallPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-             ballVel.current = { vx: 0, vy: 0 };
-             setIsBallMoving(false);
+            // Reset when leaving/entering
+            setBallPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+            ballVel.current = { vx: 0, vy: 0 };
+            setIsBallMoving(false);
         }
 
         return () => cancelAnimationFrame(physicsFrameRef.current);

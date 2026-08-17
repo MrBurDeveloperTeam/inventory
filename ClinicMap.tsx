@@ -37,71 +37,27 @@ interface ClinicMapProps {
   syncStatus?: 'synced' | 'syncing' | 'error';
 }
 
-const CAT_QUOTES = [
-  "Meow-lar! Ready to count some floss?",
-  "Purrr-fect inventory management!",
-  "Is it time for a cat-scan?",
-  "Don't forget to brush twice a day!",
-  "Looking for the anesthesia? It's in the red room.",
-  "Inventory looks paw-some today!",
-  "Did someone say... Tuna paste?"
-];
-
-// High-quality static meow sound (respect base path for GH Pages / subfolders)
-const MEOW_SOUND_URL = `${import.meta.env.BASE_URL || '/'}images/cat-meow.mp3`;
-const CAT_IMAGE_URL = `${import.meta.env.BASE_URL || '/'}images/cat.gif`;
-const CAT_WALK_IMAGE_URL = `${import.meta.env.BASE_URL || '/'}images/catwalk.gif`;
-
-// Walking configuration
-const CAT_SPEED = 0.08; // Seconds per % of distance
-
 const ClinicMap: React.FC<ClinicMapProps> = ({
   rooms, blueprint, isLocked, isAddMode, isDeleteMode,
   onSetLocked, onSetAddMode, onSetDeleteMode,
   onAddRoom, onDeleteRoom, onSelectRoom, onUpdateRooms,
   onDragEnd,
   onSelectTemplate,
-  catPosition, onCatPositionChange, onOpenChat, onOpenVirtualPet, readOnly = false,
+  readOnly = false,
   syncStatus = 'synced'
 }) => {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
   const activeTemplate = PRESET_BLUEPRINTS.find(t => t.url === blueprint);
 
-  // Cat Mascot State
-  const [catPos, setCatPos] = useState({ x: catPosition.x, y: catPosition.y });
-  const [isWalking, setIsWalking] = useState(false);
-  const [facingLeft, setFacingLeft] = useState(true);
-  const [showBubble, setShowBubble] = useState(false);
-  const [bubbleText, setBubbleText] = useState("");
-  const [isMeowing, setIsMeowing] = useState(false);
-  const [walkDuration, setWalkDuration] = useState(0.8);
-
   const mapRef = useRef<HTMLDivElement>(null);
   const templateMenuRef = useRef<HTMLDivElement>(null);
-  const walkTimeoutRef = useRef<number | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // High-precision tracking for movement to fix the "slide" bug
-  const lastMoveStartPos = useRef({ x: 20, y: 20 });
-  const lastMoveStartTime = useRef(Date.now());
-  const lastMoveDuration = useRef(0.8);
-  const lastMoveTarget = useRef({ x: 20, y: 20 });
 
   const wasDraggingRef = useRef(false);
   const justDraggedRef = useRef(false);
   const dragStartPosRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    // Only sync from props if we are NOT currently walking to avoid glitching/lag
-    if (!isWalking) {
-      setCatPos({ x: catPosition.x, y: catPosition.y });
-    }
-  }, [catPosition.x, catPosition.y, isWalking]);
-
-  useEffect(() => {
-    audioRef.current = new Audio(MEOW_SOUND_URL);
-
     const handleClickOutside = (event: MouseEvent) => {
       if (templateMenuRef.current && !templateMenuRef.current.contains(event.target as Node)) {
         setShowTemplateMenu(false);
@@ -110,29 +66,6 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const playMeow = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(err => console.log("Audio blocked:", err));
-      setIsMeowing(true);
-      setTimeout(() => setIsMeowing(false), 800);
-    }
-  };
-
-  /**
-   * Calculates the current interpolated visual position of the cat mascot
-   * during an active CSS transition.
-   */
-  const getInterpolatedPos = () => {
-    if (!isWalking) return catPos;
-    const elapsed = (Date.now() - lastMoveStartTime.current) / 1000;
-    const progress = Math.min(elapsed / lastMoveDuration.current, 1);
-    return {
-      x: lastMoveStartPos.current.x + (lastMoveTarget.current.x - lastMoveStartPos.current.x) * progress,
-      y: lastMoveStartPos.current.y + (lastMoveTarget.current.y - lastMoveStartPos.current.y) * progress,
-    };
-  };
 
   const handleMapClick = (e: React.MouseEvent) => {
     if (!mapRef.current) return;
@@ -144,40 +77,6 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
 
     if (isAddMode && onAddRoom && !readOnly) {
       onAddRoom(targetX, targetY);
-    } else if (!isDeleteMode && !isLocked && !readOnly) {
-      const currentVisualPos = getInterpolatedPos();
-      const distance = Math.sqrt(Math.pow(targetX - currentVisualPos.x, 2) + Math.pow(targetY - currentVisualPos.y, 2));
-
-      if (distance < 1) return;
-
-      const calculatedDuration = Math.max(0.3, distance * CAT_SPEED);
-
-      lastMoveStartPos.current = currentVisualPos;
-      lastMoveTarget.current = { x: targetX, y: targetY };
-      lastMoveStartTime.current = Date.now();
-      lastMoveDuration.current = calculatedDuration;
-
-      setFacingLeft(targetX < currentVisualPos.x);
-      setWalkDuration(calculatedDuration);
-      setCatPos({ x: targetX, y: targetY });
-      onCatPositionChange?.({ x: targetX, y: targetY });
-      setIsWalking(true);
-
-      if (walkTimeoutRef.current) clearTimeout(walkTimeoutRef.current);
-      walkTimeoutRef.current = window.setTimeout(() => {
-        setIsWalking(false);
-      }, calculatedDuration * 1000);
-    }
-  };
-
-  const handleCatClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    playMeow();
-    // Prefer virtual pet if handler provided, otherwise fallback to existing behavior or nothing
-    if (onOpenVirtualPet) {
-      onOpenVirtualPet();
-    } else {
-      onOpenChat?.();
     }
   };
 
@@ -230,13 +129,6 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   return (
     <section className="w-full bg-white rounded-none md:rounded-[2rem] shadow-xl overflow-hidden relative border-x-0 md:border border-slate-100 h-[650px] flex flex-col">
       <style>{`
-        @keyframes shadow-breathe {
-          0%, 50%, 100% { transform: scale(1); opacity: 0.15; }
-          25%, 75% { transform: scale(0.85); opacity: 0.1; }
-        }
-        .animate-cat-shadow {
-          animation: shadow-breathe 0.3s infinite ease-in-out;
-        }
         @keyframes sound-wave {
           0% { transform: scale(1); opacity: 0.5; }
           100% { transform: scale(2.5); opacity: 0; }
@@ -347,53 +239,6 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
         onMouseLeave={handleMouseUp}
       >
         {blueprint ? <img src={blueprint} alt="Clinic Blueprint" className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-95 transition-opacity" draggable={false} /> : <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20 pointer-events-none"><ImageIcon className="w-32 h-32 mb-6 text-slate-400" /><p className="text-2xl font-black uppercase tracking-[0.3em] text-slate-400">No Layout Uploaded</p></div>}
-
-        {/* Cat Mascot "Molar" */}
-        <div
-          onClick={handleCatClick}
-          className={`absolute z-30 cursor-pointer hover:scale-110 group`}
-          style={{
-            left: `${catPos.x}%`,
-            top: `${catPos.y}%`,
-            transition: `left ${walkDuration}s linear, top ${walkDuration}s linear, transform 0.2s ease-out`,
-            transform: `translate(-50%, -100%) scaleX(${facingLeft ? -1 : 1})`,
-          }}
-        >
-          {isMeowing && (
-            <div className="absolute inset-0 rounded-full border-2 border-emerald-400 animate-sound" style={{ transform: 'translate(-50%, -50%)' }} />
-          )}
-
-          <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-2 bg-black rounded-[100%] blur-[2px] transition-opacity ${isWalking ? 'animate-cat-shadow' : 'opacity-15'}`} />
-
-          {/* Tooltip - shows on hover */}
-          <div
-            className="absolute bottom-full left-1/2 mb-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-50"
-            style={{ transform: `translateX(-50%) scaleX(${facingLeft ? -1 : 1})` }}
-          >
-            <div className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold whitespace-nowrap shadow-lg">
-              Click to play with me
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45" />
-            </div>
-          </div>
-
-          {showBubble && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-white text-slate-800 px-4 py-2 rounded-2xl shadow-xl border border-slate-100 text-[10px] font-bold whitespace-nowrap animate-in fade-in slide-in-from-bottom-2 duration-300 z-40" style={{ transform: `translateX(-50%) scaleX(${facingLeft ? -1 : 1})` }}>
-              <div className="relative">
-                {bubbleText}
-                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white"></div>
-              </div>
-            </div>
-          )}
-
-          <div className="w-14 h-14 select-none relative z-10 transition-transform duration-200">
-            <img
-              src={isWalking ? CAT_WALK_IMAGE_URL : CAT_IMAGE_URL}
-              alt="Molar the Cat"
-              className="w-full h-full object-contain"
-              draggable={false}
-            />
-          </div>
-        </div>
 
         {rooms.map(room => (
           <div

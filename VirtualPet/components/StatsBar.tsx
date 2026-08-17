@@ -58,8 +58,8 @@ const ProgressBar = ({ value, color, icon, label }: { value: number; color: stri
 
 const StatsBar: React.FC<StatsBarProps> = ({ stats }) => {
   return (
-    <div className="absolute top-6 left-1/2 -translate-x-1/2 w-72 px-5 py-3 bg-white/30 backdrop-blur-md rounded-3xl border border-white/40 shadow-xl z-10 transition-all duration-300">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+    <div className="absolute left-4 right-4 top-[72px] z-30 rounded-2xl border border-white/40 bg-white/30 px-3 py-2 shadow-xl backdrop-blur-md transition-all duration-300 md:left-1/2 md:right-auto md:top-6 md:w-72 md:-translate-x-1/2 md:rounded-3xl md:px-5 md:py-3">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 md:gap-x-6 md:gap-y-3">
         <ProgressBar value={stats.hunger} color="bg-orange-400" icon={<IconHunger />} label="Hunger" />
         <ProgressBar value={stats.energy} color="bg-blue-400" icon={<IconEnergy />} label="Energy" />
         <ProgressBar value={stats.happiness} color="bg-pink-400" icon={<IconHappy />} label="Happy" />

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import {
   X,
@@ -10,6 +9,8 @@ import {
   Edit3,
   ChevronDown,
   FileDown,
+  FileSpreadsheet,
+  FileUp,
   Scan,
   Upload,
   Camera,
@@ -39,6 +40,7 @@ interface RoomModalProps {
   onClose: () => void;
   onUpdateName: (id: string, name: string) => void;
   onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
+  onReceiveBatch?: (roomId: string, items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>) => void;
   onUpdateQty: (roomId: string, itemId: string, delta: number) => void;
   onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
   onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
@@ -48,7 +50,7 @@ interface RoomModalProps {
   readOnly?: boolean;
 }
 
-const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem, onUpdateItem, onUpdateBatch, readOnly = false }) => {
+const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onReceiveBatch, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem, onUpdateItem, onUpdateBatch, readOnly = false }) => {
   const [isReceiving, setIsReceiving] = useState(false);
   const [receiveMode, setReceiveMode] = useState<'existing' | 'new' | 'edit'>('existing');
   const [selectedItemIdx, setSelectedItemIdx] = useState<string>('');
@@ -57,6 +59,28 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   });
   const [receiveQty, setReceiveQty] = useState(0);
   const [receivePrice, setReceivePrice] = useState(0);
+  const [showProductList, setShowProductList] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [deleteProductConfirm, setDeleteProductConfirm] = useState<{name: string, brand: string} | null>(null);
+
+  const handleDeleteGlobalProduct = (name: string, brand: string) => {
+    setDeleteProductConfirm({ name, brand });
+  };
+
+  const confirmDeleteGlobalProduct = () => {
+    if (!deleteProductConfirm) return;
+    const { name, brand } = deleteProductConfirm;
+
+    allRooms.forEach(r => {
+      const itemsToDelete = r.items.filter(i => i.name === name && i.brand === brand);
+      itemsToDelete.forEach(item => {
+        onDeleteItem(r.id, item.id);
+      });
+    });
+    setSelectedItemIdx('');
+    setFormData({ name: '', brand: '', category: 'consumables', uom: 'pcs', code: '', vendor: '', description: '' });
+    setDeleteProductConfirm(null);
+  };
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [expiry, setExpiry] = useState('');
   const [hasExpiry, setHasExpiry] = useState(false);
@@ -129,6 +153,220 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
       (e.target as HTMLInputElement).blur();
     }
   };
+
+  const [isExcelPreviewActive, setIsExcelPreviewActive] = useState(false);
+  const [excelPreviewData, setExcelPreviewData] = useState<(Partial<Item> & { purchaseDate?: string, quantity?: number, price?: number })[]>([]);
+
+  // Excel Helpers
+  const parseExcelNumber = (val: unknown, fallback: number): number => {
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const parsed = parseFloat(val.replace(/[^0-9.-]/g, ''));
+      return isNaN(parsed) ? fallback : parsed;
+    }
+    return fallback;
+  };
+
+  const readExcelValue = (row: any, keys: string[]): any => {
+    for (const key of keys) {
+      if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
+        return row[key];
+      }
+      const lowerKey = key.toLowerCase();
+      const actualKey = Object.keys(row).find(k => k.toLowerCase() === lowerKey);
+      if (actualKey) return row[actualKey];
+    }
+    return undefined;
+  };
+
+  const parseExcelDate = (val: any, XLSX: any): string | null => {
+    if (!val) return null;
+    if (typeof val === 'string') {
+      const parsed = new Date(val);
+      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+      return null;
+    }
+    if (typeof val === 'number') {
+      const date = XLSX.SSF.parse_date_code(val);
+      if (date) {
+        return new Date(Date.UTC(date.y, date.m - 1, date.d)).toISOString().split('T')[0];
+      }
+    }
+    return null;
+  };
+
+  const normalizeExcelCategory = (val: any): Category => {
+    const str = String(val || '').toLowerCase().trim();
+    const match = CATEGORIES.find(c => c.label.toLowerCase() === str || c.id === str);
+    return match ? (match.id as Category) : 'consumables';
+  };
+
+  const normalizeExcelUom = (val: any): UOM => {
+    const str = String(val || '').toLowerCase().trim();
+    if (['box', 'pcs', 'pack', 'bottle', 'roll'].includes(str)) return str as UOM;
+    return 'box';
+  };
+
+  const safeSheetName = (name: string) => name.replace(/[\\/?*[\]]/g, '').substring(0, 31);
+  const safeFileName = (name: string) => name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+  const exportRoomExcel = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const data = room.items.map(item => ({
+        'Product Name': item.name,
+        'Brand': item.brand,
+        'Category': item.category,
+        'Description': item.description,
+        'Quantity': item.quantity,
+        'Unit Price': item.price,
+        'Total Value': item.quantity * item.price,
+        'UOM': item.uom,
+        'Code/SKU': item.code,
+        'Vendor': item.vendor,
+        'Purchase Date': item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
+        'Expiry Date': item.expiryDate || 'N/A'
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName(room.name));
+      XLSX.writeFile(workbook, `${safeFileName(room.name)}_stock_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err) {
+      console.error('Failed to export Excel:', err);
+    }
+  };
+
+  const downloadRoomPDF = async () => {
+    try {
+      const { default: jsPDF } = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+      // Header
+      doc.setFillColor(77, 150, 120);
+      doc.rect(0, 0, doc.internal.pageSize.getWidth(), 20, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text(room.name + ' — Stock Report', 14, 13);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text(today, doc.internal.pageSize.getWidth() - 14, 13, { align: 'right' });
+
+      // Table
+      const rows = room.items.map(item => [
+        item.brand || '-',
+        item.name + (item.description ? `\n${item.description}` : ''),
+        item.code || '-',
+        String(item.quantity),
+        (item.uom || '').toUpperCase(),
+        `$${item.price.toFixed(2)}`,
+        `$${(item.price * item.quantity).toFixed(2)}`,
+        item.vendor || '-',
+        item.category || '-',
+        item.expiryDate || '-',
+      ]);
+
+      autoTable(doc, {
+        head: [['Brand', 'Product', 'Code', 'Qty', 'UOM', 'Unit Price', 'Total', 'Vendor', 'Category', 'Expires']],
+        body: rows,
+        startY: 24,
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [77, 150, 120], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: [245, 250, 248] },
+        columnStyles: {
+          0: { cellWidth: 22 },
+          1: { cellWidth: 50 },
+          2: { cellWidth: 20 },
+          3: { cellWidth: 12, halign: 'center' },
+          4: { cellWidth: 14, halign: 'center' },
+          5: { cellWidth: 20, halign: 'right' },
+          6: { cellWidth: 22, halign: 'right', textColor: [39, 174, 96], fontStyle: 'bold' },
+          7: { cellWidth: 28 },
+          8: { cellWidth: 22 },
+          9: { cellWidth: 22 },
+        },
+      });
+
+      // Footer
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7);
+        doc.setTextColor(160, 160, 160);
+        doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 5, { align: 'center' });
+      }
+
+      doc.save(`${safeFileName(room.name)}_stock_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (err) {
+      console.error('Failed to download PDF:', err);
+    }
+  };
+
+  const importRoomExcel = async (file: File) => {
+    try {
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) throw new Error('The Excel file does not contain a worksheet.');
+
+      const worksheet = workbook.Sheets[firstSheetName];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '', raw: false });
+      const today = new Date().toISOString().split('T')[0];
+      
+      const parsedItems: (Partial<Item> & { purchaseDate?: string, quantity?: number, price?: number })[] = [];
+
+      rows.forEach(row => {
+        const name = String(readExcelValue(row, ['Product', 'Product Name', 'Name', 'Item']) || '').trim();
+        if (!name) return;
+
+        const quantity = Math.max(0, parseExcelNumber(readExcelValue(row, ['Quantity', 'Qty', 'QTY']), 0));
+        if (quantity <= 0) return;
+
+        const explicitUnitPrice = parseExcelNumber(readExcelValue(row, ['Unit Price', 'Price', 'Purchase Price']), NaN);
+        const total = parseExcelNumber(readExcelValue(row, ['Total', 'Total Price', 'Amount']), 0);
+        const unitPrice = Number.isFinite(explicitUnitPrice) ? explicitUnitPrice : quantity > 0 ? total / quantity : 0;
+        const purchaseDate = parseExcelDate(readExcelValue(row, ['Purchase Date', 'Date']), XLSX) || today;
+        const expiryDate = parseExcelDate(readExcelValue(row, ['Expires', 'Expiry', 'Expiry Date', 'Expiration Date']), XLSX) || undefined;
+
+        parsedItems.push({
+          name,
+          brand: String(readExcelValue(row, ['Brand']) || '').trim(),
+          code: String(readExcelValue(row, ['Code', 'SKU', 'Item Code']) || '').trim(),
+          uom: normalizeExcelUom(readExcelValue(row, ['UOM', 'Unit', 'Unit of Measure'])),
+          vendor: String(readExcelValue(row, ['Vendor', 'Supplier']) || '').trim(),
+          category: normalizeExcelCategory(readExcelValue(row, ['Category'])),
+          description: String(readExcelValue(row, ['Description', 'Notes']) || '').trim(),
+          expiryDate,
+          quantity,
+          price: unitPrice,
+          purchaseDate
+        });
+      });
+
+      if (parsedItems.length === 0) {
+        setErrorModal({
+          title: 'No Items Imported',
+          message: 'The Excel file did not contain valid rows. Please include at least Product and Quantity columns.'
+        });
+      } else {
+        setExcelPreviewData(parsedItems);
+        setIsExcelPreviewActive(true);
+      }
+    } catch (err) {
+      console.error('Failed to import room Excel:', err);
+      setErrorModal({
+        title: 'Excel Import Failed',
+        message: err instanceof Error ? err.message : 'Unable to read this Excel file. Please check the file and try again.'
+      });
+    }
+  };
+
+  const excelInputRef = React.useRef<HTMLInputElement>(null);
 
   // OCR State
   const [isOCRActive, setIsOCRActive] = useState(false);
@@ -264,6 +502,23 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     });
     return groups;
   }, [filteredItems]);
+  
+  const globalProducts = useMemo(() => {
+    const products: Item[] = [];
+    const seen = new Set<string>();
+
+    allRooms.forEach(r => {
+      r.items.forEach(item => {
+        const key = `${item.name.toLowerCase()}|${item.brand.toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          products.push(item);
+        }
+      });
+    });
+
+    return products.sort((a, b) => a.name.localeCompare(b.name));
+  }, [allRooms]);
 
 
 
@@ -277,8 +532,15 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
       setReceiveMode('edit');
     } else if (val !== '') {
       setReceiveMode('existing');
-      const item = room.items[parseInt(val)];
-      setFormData({ ...item });
+      // Look in globalProducts first
+      const item = globalProducts[parseInt(val)];
+      if (item) {
+        setFormData({ 
+          ...item,
+          quantity: 0, // Reset quantity for receiving
+          price: item.price // Default to last known price
+        });
+      }
     }
   };
 
@@ -451,7 +713,16 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
             )}
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-sm transition-all border border-white/20">
+            <button
+              onClick={() => { void exportRoomExcel(); }}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-sm transition-all border border-white/20"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Export as Excel</span>
+            </button>
+            <button
+              onClick={() => { void downloadRoomPDF(); }}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-sm transition-all border border-white/20"
+            >
               <FileDown className="w-4 h-4" /> <span className="hidden sm:inline">Download PDF</span>
             </button>
             <button onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition-all border border-white/10">
@@ -463,7 +734,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
         <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-6 custom-scrollbar bg-slate-50/50">
           <div className="flex items-center gap-2">
             {!readOnly && (
-              !isReceiving && !isOCRActive ? (
+              !isReceiving && !isOCRActive && !isExcelPreviewActive ? (
                 <>
                   <button
                     onClick={() => setIsReceiving(true)}
@@ -477,10 +748,27 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                   >
                     <Scan className="w-4 h-4" /> Add via OCR
                   </button>
+                  <button
+                    onClick={() => excelInputRef.current?.click()}
+                    className="bg-[#4d9678] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#407f65] shadow-lg shadow-green-100 transition-all"
+                  >
+                    <FileUp className="w-4 h-4" /> Import Excel
+                  </button>
+                  <input
+                    ref={excelInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                    className="hidden"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (file) await importRoomExcel(file);
+                      event.target.value = '';
+                    }}
+                  />
                 </>
               ) : (
                 <button
-                  onClick={() => { setIsReceiving(false); setIsOCRActive(false); }}
+                  onClick={() => { setIsReceiving(false); setIsOCRActive(false); setIsExcelPreviewActive(false); }}
                   className="bg-[#e74c3c] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#c0392b] shadow-lg shadow-rose-100 transition-all"
                 >
                   <X className="w-4 h-4" /> Cancel
@@ -488,6 +776,117 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
               )
             )}
           </div>
+
+          {isExcelPreviewActive && excelPreviewData && (
+            <div className="bg-[#ebf5fb] border border-[#c4e1f3] rounded-[1rem] p-6 shadow-sm animate-in zoom-in-95 duration-200 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-[#2c78b2] font-black uppercase text-xs tracking-[0.2em] flex items-center gap-2">
+                  <FileUp className="w-4 h-4" /> Excel Import Preview
+                </h4>
+              </div>
+              
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-2 overflow-hidden">
+                  <div className="font-bold text-slate-500 text-[10px] uppercase tracking-widest mb-2">Items to Import ({excelPreviewData.length})</div>
+                  
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-sm max-h-[400px]">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-100">
+                        <tr>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Brand</th>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Product</th>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Code</th>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Qty</th>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">UOM</th>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Unit Price</th>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Total</th>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Vendor</th>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Category</th>
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Expires</th>
+                          <th className="px-2 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {excelPreviewData.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-red-50/30 group">
+                            <td className="px-3 py-2 text-slate-600 text-[11px] whitespace-nowrap">{item.brand || '-'}</td>
+                            <td className="px-3 py-2 text-[11px]">
+                              <div className="font-bold text-slate-700">{item.name}</div>
+                              {item.description && <div className="text-slate-400 text-[10px] mt-0.5">{item.description}</div>}
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 text-[11px]">{item.code || '-'}</td>
+                            <td className="px-3 py-2 text-slate-600 font-semibold text-[11px]">{item.quantity}</td>
+                            <td className="px-3 py-2 text-slate-600 text-[11px]">{item.uom?.toUpperCase()}</td>
+                            <td className="px-3 py-2 text-slate-600 font-semibold text-[11px]">${item.price?.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-[#2ecc71] font-bold text-[11px]">${((item.price || 0) * (item.quantity || 0)).toFixed(2)}</td>
+                            <td className="px-3 py-2 text-slate-600 text-[11px]">{item.vendor || '-'}</td>
+                            <td className="px-3 py-2 text-slate-600 text-[11px]">{CATEGORIES.find(c => c.id === item.category)?.label || item.category}</td>
+                            <td className="px-3 py-2 text-slate-600 text-[11px] whitespace-nowrap">{item.expiryDate || '-'}</td>
+                            <td className="px-2 py-2 text-right">
+                              <button
+                                onClick={() => setExcelPreviewData(prev => prev.filter((_, i) => i !== idx))}
+                                className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                                title="Remove from import"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row-reverse items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      excelPreviewData.forEach(item => {
+                        if (item.name) {
+                          onReceive(
+                            room.id,
+                            {
+                              name: item.name,
+                              brand: item.brand || '',
+                              category: item.category || 'consumables',
+                              uom: item.uom || 'box',
+                              code: item.code || '',
+                              vendor: item.vendor || '',
+                              description: item.description || '',
+                              expiryDate: item.expiryDate || undefined
+                            },
+                            item.quantity || 1,
+                            item.price || 0,
+                            new Date().toISOString().split('T')[0],
+                            item.expiryDate || undefined
+                          );
+                        }
+                      });
+                      setIsExcelPreviewActive(false);
+                      setExcelPreviewData([]);
+                    }}
+                    className={`w-full sm:w-44 py-3 rounded-xl font-black uppercase text-[12px] tracking-widest shadow-lg transition-all flex items-center justify-center gap-2 ${
+                      excelPreviewData.length === 0
+                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        : 'bg-[#3498db] text-white hover:bg-[#2980b9] shadow-blue-100'
+                    }`}
+                    disabled={excelPreviewData.length === 0}
+                  >
+                    Confirm Import
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsExcelPreviewActive(false);
+                      setExcelPreviewData([]);
+                    }}
+                    className="w-full sm:w-44 bg-slate-200 text-slate-500 py-3 rounded-xl font-bold uppercase text-[12px] tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isOCRActive && (
             <div className="bg-emerald-50/50 border border-emerald-100 rounded-[1rem] p-6 shadow-sm animate-in zoom-in-95 duration-200">
@@ -523,10 +922,10 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                   </div>
                   <div className="text-center">
                     <h5 className={`font-bold transition-colors duration-300 ${isDragging ? 'text-emerald-700' : 'text-slate-700'} mb-1`}>
-                      {isDragging ? 'Drop Image Here' : 'Upload Receipt or Label'}
+                      {isDragging ? 'Drop File Here' : 'Upload Receipt or Label'}
                     </h5>
                     <p className="text-xs text-slate-400">
-                      {isDragging ? 'Let go to start extraction' : 'Take a photo, upload or drag and drop an image'}
+                      {isDragging ? 'Let go to start extraction' : 'Take a photo, or drag and drop an image or PDF'}
                     </p>
                   </div>
                   <div className={`flex items-center gap-3 transition-opacity duration-300 ${isDragging ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
@@ -537,14 +936,14 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                       <Camera className="w-4 h-4" /> Take Photo
                     </button>
                     <label className="cursor-pointer">
-                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={async (e) => {
                         if (e.target.files && e.target.files[0]) {
                           const imgs = await filesToImages([e.target.files[0]]);
                           processCapturedImage(imgs[0]);
                         }
                       }} />
                       <span className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold text-xs hover:bg-emerald-700 transition-all shadow-md inline-flex items-center gap-2">
-                        <Upload className="w-4 h-4" /> Select Image
+                        <Upload className="w-4 h-4" /> Select File
                       </span>
                     </label>
                   </div>
@@ -599,7 +998,14 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
               {ocrStep === 'camera_preview' && ocrImage && (
                 <div className="flex flex-col items-center justify-center p-2 gap-6 animate-in zoom-in-95 duration-300">
                   <div className="relative w-full max-w-2xl aspect-[3/4] sm:aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border-4 border-white/20">
-                    <img src={ocrImage} className="w-full h-full object-contain" alt="Captured preview" />
+                    {ocrImage.startsWith('data:application/pdf') ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 text-white gap-4">
+                        <FileText className="w-20 h-20 text-emerald-400" />
+                        <span className="font-bold">PDF Document Selected</span>
+                      </div>
+                    ) : (
+                      <img src={ocrImage} className="w-full h-full object-contain" alt="Captured preview" />
+                    )}
                   </div>
 
                   <div className="flex flex-col sm:flex-row-reverse items-center gap-4 w-full max-w-sm">
@@ -638,9 +1044,16 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
               {ocrStep === 'review' && ocrResult && (
                 <div className="flex flex-col gap-6">
                   <div className="flex flex-col gap-2">
-                    <div className="font-bold text-slate-500 text-[10px] uppercase tracking-widest mb-2">Original Image</div>
+                    <div className="font-bold text-slate-500 text-[10px] uppercase tracking-widest mb-2">Original Document</div>
                     <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm relative mx-auto bg-slate-50 w-fit">
-                      <img src={ocrImage || ''} className="max-h-[320px] w-auto h-auto block" />
+                      {ocrImage?.startsWith('data:application/pdf') ? (
+                        <div className="w-[320px] h-[320px] flex flex-col items-center justify-center bg-slate-100 text-slate-400 gap-2">
+                          <FileText className="w-12 h-12" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">PDF Document</span>
+                        </div>
+                      ) : (
+                        <img src={ocrImage || ''} className="max-h-[320px] w-auto h-auto block" />
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 overflow-hidden">
@@ -988,9 +1401,33 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                   <div className="flex flex-col sm:flex-row-reverse items-center justify-center gap-3 pt-2">
                     <button
                       onClick={() => {
-                        // Bulk Add
-                        ocrResult.forEach(item => {
-                          if (item.name) {
+                        const validItems = ocrResult.filter(item => item.name);
+                        if (validItems.length === 0) return;
+
+                        if (onReceiveBatch) {
+                          // Single batched call — isDirty stays true until ALL items are persisted
+                          onReceiveBatch(
+                            room.id,
+                            validItems.map(item => ({
+                              itemData: {
+                                name: item.name,
+                                brand: item.brand || '',
+                                category: item.category || 'consumables',
+                                uom: item.uom || 'box',
+                                code: item.code || '',
+                                vendor: item.vendor || '',
+                                description: item.description || '',
+                                expiryDate: item.expiryDate || undefined,
+                              },
+                              qty: item.quantity || 1,
+                              price: item.price || 0,
+                              purchaseDate: item.purchaseDate || new Date().toISOString().split('T')[0],
+                              expiry: item.expiryDate || undefined,
+                            }))
+                          );
+                        } else {
+                          // Fallback: individual calls (legacy path)
+                          validItems.forEach(item => {
                             onReceive(
                               room.id,
                               {
@@ -1001,15 +1438,15 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                 code: item.code || '',
                                 vendor: item.vendor || '',
                                 description: item.description || '',
-                                expiryDate: item.expiryDate || undefined
+                                expiryDate: item.expiryDate || undefined,
                               },
                               item.quantity || 1,
                               item.price || 0,
-                              item.purchaseDate || new Date().toISOString().split('T')[0], // Purchase Date
+                              item.purchaseDate || new Date().toISOString().split('T')[0],
                               item.expiryDate || undefined
                             );
-                          }
-                        });
+                          });
+                        }
                         setOcrStep('upload');
                         setIsOCRActive(false);
                       }}
@@ -1039,11 +1476,85 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Select Product *</label>
-                    <select value={selectedItemIdx} onChange={handleProductSelect} className="px-3 py-2 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 text-xs focus:ring-1 focus:ring-[#3498db] outline-none shadow-sm" required>
-                      <option value="">Choose existing product...</option>
-                      <option value="new" className="text-[#3498db] font-bold">⊕ Create New Product...</option>
-                      {room.items.map((item, idx) => <option key={idx} value={idx}>{item.name} ({item.brand})</option>)}
-                    </select>
+                    <div className="relative">
+                      <button 
+                        type="button"
+                        onClick={() => setShowProductList(!showProductList)}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 text-xs focus:ring-1 focus:ring-[#3498db] outline-none shadow-sm h-[38px]"
+                      >
+                        <span className="truncate">
+                          {selectedItemIdx === 'new' ? '⊕ Create New Product...' : 
+                           selectedItemIdx !== '' ? `${globalProducts[parseInt(selectedItemIdx)]?.name} (${globalProducts[parseInt(selectedItemIdx)]?.brand})` : 
+                           'Choose existing product...'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showProductList ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {showProductList && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowProductList(false)} />
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-[300px] overflow-hidden flex flex-col">
+                            <div className="p-2 border-b border-slate-100">
+                              <div className="relative">
+                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                                <input 
+                                  placeholder="Filter products..."
+                                  className="w-full pl-7 pr-3 py-1.5 bg-slate-50 border-none rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-100"
+                                  value={productSearch}
+                                  onChange={e => setProductSearch(e.target.value)}
+                                  onClick={e => e.stopPropagation()}
+                                />
+                              </div>
+                            </div>
+                            <div className="overflow-y-auto custom-scrollbar flex-1 py-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleProductSelect({ target: { value: 'new' } } as any);
+                                  setShowProductList(false);
+                                }}
+                                className="w-full text-left px-3 py-2 text-[#3498db] font-bold text-xs hover:bg-blue-50 transition-colors flex items-center gap-2"
+                              >
+                                <Plus className="w-3 h-3" /> Create New Product...
+                              </button>
+                              
+                              {globalProducts
+                                .map((item, idx) => ({ item, idx }))
+                                .filter(({ item }) => 
+                                  item.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+                                  item.brand.toLowerCase().includes(productSearch.toLowerCase())
+                                )
+                                .map(({ item, idx }) => (
+                                  <div key={idx} className="group relative flex items-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleProductSelect({ target: { value: idx.toString() } } as any);
+                                        setShowProductList(false);
+                                      }}
+                                      className="flex-1 text-left px-3 py-2 text-slate-700 text-xs hover:bg-slate-50 transition-colors pr-10"
+                                    >
+                                      <div className="font-bold">{item.name}</div>
+                                      <div className="text-[10px] text-slate-400">{item.brand}</div>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteGlobalProduct(item.name, item.brand);
+                                      }}
+                                      className="absolute right-2 p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                      title="Delete Product Data"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Quantity to Add *</label>
@@ -1125,9 +1636,15 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                 {selectedExistingItem && (
                   <div className="mt-2 bg-white border border-slate-200 rounded-xl p-4 text-xs text-slate-600 space-y-1 shadow-sm">
                     <div className="font-black text-slate-700 uppercase tracking-[0.15em] mb-1">Price Preview</div>
-                    <div className="flex justify-between"><span>Current Stock:</span><span className="font-bold text-slate-800">{currentQty} {selectedExistingItem.uom} @ ${currentUnitPrice.toFixed(2)} = ${(currentQty * currentUnitPrice).toFixed(2)}</span></div>
+                    <div className="flex justify-between">
+                      <span>Item Status in THIS Room:</span>
+                      <span className="font-bold text-slate-800">
+                        {room.items.find(i => i.name === selectedExistingItem.name && i.brand === selectedExistingItem.brand) 
+                          ? `${room.items.find(i => i.name === selectedExistingItem.name && i.brand === selectedExistingItem.brand)?.quantity} ${selectedExistingItem.uom} existing`
+                          : "New to this room"}
+                      </span>
+                    </div>
                     <div className="flex justify-between"><span>Adding:</span><span className="font-bold text-blue-600">{incomingQty} {selectedExistingItem.uom} @ ${incomingPrice.toFixed(2)} = ${(incomingQty * incomingPrice).toFixed(2)}</span></div>
-                    <div className="flex justify-between border-t border-slate-100 pt-1"><span>After Receive:</span><span className="font-black text-emerald-600">{newQty} {selectedExistingItem.uom} @ ${newAvgPrice.toFixed(2)} avg = ${(newQty * newAvgPrice).toFixed(2)}</span></div>
                   </div>
                 )}
 
@@ -2038,6 +2555,32 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
           </div>
         )
       }
+      {deleteProductConfirm && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-[10200] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 p-8 max-w-sm w-full animate-in zoom-in-95 duration-200">
+            <h4 className="text-xl font-bold text-slate-800 mb-2 leading-tight">
+              Delete "{deleteProductConfirm.name}" {deleteProductConfirm.brand ? `(${deleteProductConfirm.brand})` : ''}?
+            </h4>
+            <p className="text-sm text-slate-500 mb-8 leading-relaxed">
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setDeleteProductConfirm(null)}
+                className="px-6 py-2.5 rounded-full font-bold text-sm text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmDeleteGlobalProduct}
+                className="px-6 py-2.5 rounded-full font-bold text-sm text-white bg-[#e91e63] hover:bg-[#d81b60] shadow-lg shadow-rose-100 transition-all hover:-translate-y-0.5 active:translate-y-0"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 };

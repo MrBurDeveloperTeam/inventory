@@ -1,20 +1,42 @@
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory, UOM, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
 import Header from './Header';
 import ClinicMap from './ClinicMap';
 import RoomModal from './RoomModal';
 import LandingModal from './LandingModal';
+import TutorialVideoModal from './TutorialVideoModal';
 import ProfilePage from './ProfilePage';
 import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
-import { MolarChat } from './MolarChat';
 import { VirtualPetContainer } from './VirtualPet/VirtualPetContainer';
+import CatMascot from './components/CatMascot';
+import MolarAIFloat from './components/MolarAIFloat';
+import {
+  readStoredTheme,
+  writeThemeCookie,
+  writeStoredTheme,
+  applyThemeToDocument,
+  syncThemeFromOdoo,
+  pushThemeToOdoo,
+  readThemeCookie,
+  parseTheme,
+} from './src/utils/themeSync';
 import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
-import { MessageCircle } from 'lucide-react';
+import { api } from './services/api';
+import { logActivityToOdoo } from './services/logActivityToOdoo';
+import PromoBanner from './component/PromoBanner';
+import { usePromotions } from './hooks/usePromotions';
+import { jwtDecode } from 'jwt-decode';
+import {
+  ARCHIVED_LOCATION_LABEL,
+  isPurchaseHistoryForItem,
+  markItemPurchaseHistoryArchived,
+  markRoomPurchaseHistoryArchived
+} from './src/utils/roomDeletion';
+import {useProfileImage} from './hooks/useProfileImage';
 
 type ManagedInventory = {
   userId: string;
@@ -35,11 +57,30 @@ type ProfileRow = {
   company_name?: string | null;
   avatar_url?: string | null;
   background_url?: string | null;
+  segments?: string[] | null;
 };
 
 const PROFILE_IMAGE_STORAGE_PREFIX = 'denta_profile_images_';
 const PROFILE_IMAGE_BUCKET = 'profile-media';
 const PREFERRED_INVENTORY_ID_KEY = 'denta_preferred_inventory_id_';
+const TUTORIAL_VIDEO_SEEN_KEY_PREFIX = 'denta_tutorial_video_seen_';
+
+const hasSeenTutorialVideo = (userId: string) => {
+  try {
+    return localStorage.getItem(`${TUTORIAL_VIDEO_SEEN_KEY_PREFIX}${userId}`) === 'true';
+  } catch (err) {
+    console.error('Failed to read tutorial video flag', err);
+    return false;
+  }
+};
+
+const markTutorialVideoSeen = (userId: string) => {
+  try {
+    localStorage.setItem(`${TUTORIAL_VIDEO_SEEN_KEY_PREFIX}${userId}`, 'true');
+  } catch (err) {
+    console.error('Failed to persist tutorial video flag', err);
+  }
+};
 
 const loadUserImages = (userId: string) => {
   try {
@@ -103,7 +144,7 @@ const ensureBatches = (item: Item): Item => {
   const baseBatches = item.batches && item.batches.length > 0
     ? item.batches.map(b => ({ ...b }))
     : [{
-      id: crypto.randomUUID(),
+      id: generateId(),
       qty: item.quantity,
       unitPrice: item.price,
       expiryDate: item.expiryDate || null
@@ -134,7 +175,7 @@ const mergeBatchAdd = (item: Item, qty: number, price: number, expiry?: string) 
     const newPrice = newQty > 0 ? ((b.qty * b.unitPrice) + (qty * price)) / newQty : price;
     batches[idx] = { ...b, qty: newQty, unitPrice: newPrice, expiryDate: key };
   } else {
-    batches.push({ id: crypto.randomUUID(), qty, unitPrice: price, expiryDate: key });
+    batches.push({ id: generateId(), qty, unitPrice: price, expiryDate: key });
   }
   const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(batches);
   return { ...normalized, batches, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
@@ -144,7 +185,7 @@ const adjustBatchesWithDelta = (item: Item, delta: number) => {
   const normalized = ensureBatches(item);
   let batches = normalized.batches ? normalized.batches.map(b => ({ ...b })) : [];
   if (delta > 0) {
-    if (batches.length === 0) batches.push({ id: crypto.randomUUID(), qty: 0, unitPrice: normalized.price, expiryDate: normalized.expiryDate || null });
+    if (batches.length === 0) batches.push({ id: generateId(), qty: 0, unitPrice: normalized.price, expiryDate: normalized.expiryDate || null });
     batches[0].qty += delta;
   } else if (delta < 0) {
     let remaining = Math.abs(delta);
@@ -163,6 +204,7 @@ const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isCollaboratorModalOpen, setIsCollaboratorModalOpen] = useState(false);
+  const [showTutorialVideo, setShowTutorialVideo] = useState(false);
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
   const [history, setHistory] = useState<PurchaseHistory[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -172,16 +214,20 @@ const App: React.FC = () => {
   const [isBootstrapped, setIsBootstrapped] = useState<boolean>(false);
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [theUser, setTheUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [managedProfiles, setManagedProfiles] = useState<ProfileRow[]>([]);
   const [managedInventories, setManagedInventories] = useState<ManagedInventory[]>([]);
   const [adminDataLoading, setAdminDataLoading] = useState<boolean>(false);
   const [adminDataError, setAdminDataError] = useState<string | null>(null);
+  const [finalProfile, setFinalProfile] = useState<ProfileRow | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'profile'>('dashboard');
 
   const [isLocked, setIsLocked] = useState(false);
   const [isAddMode, setIsAddMode] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
+  const [pendingRoomDeleteId, setPendingRoomDeleteId] = useState<string | null>(null);
+  const [deleteRoomTransferTargetId, setDeleteRoomTransferTargetId] = useState('');
   const [catPosition, setCatPosition] = useState<CatPosition>({ x: 20, y: 20 });
   const isHydrated = useRef(false);
   const syncInFlight = useRef(false);
@@ -191,7 +237,73 @@ const App: React.FC = () => {
   const isDirty = useRef(false);
   const lastLoadRequestId = useRef(0);
   const metaSyncTimer = useRef<number | null>(null);
+  /** Ref always holding the latest TBA virtual room — survives loadInventory resets. */
+  const tbaRoomRef = useRef<Room | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  const [authReady, setAuthReady] = useState(false);
+  const [authInitializing, setAuthInitializing] = useState(true);
+  const { profileImageUrl } = useProfileImage(isAuthenticated);
+
+  // Keep tbaRoomRef always up-to-date so loadInventory can read it synchronously
+  useEffect(() => {
+    const tba = rooms.find(r => r.id === TBA_ROOM_ID) ?? null;
+    tbaRoomRef.current = tba && tba.items.length > 0 ? tba : null;
+  }, [rooms]);
+
+  // ─── Theme state — hybrid: cookie (instant) + Odoo (cross-device) ───────────
+  const [theme, setThemeState] = useState<string>(() => readStoredTheme() || 'light');
+
+  // Apply theme to DOM whenever it changes
+  useEffect(() => {
+    applyThemeToDocument(theme);
+  }, [theme]);
+
+  // Sync from Odoo on mount (cross-device)
+  useEffect(() => {
+    syncThemeFromOdoo((odooTheme) => {
+      setThemeState(odooTheme);
+    });
+  }, []);
+
+  // 1s cookie poll — catches gallery/appointment changing theme on same browser
+  useEffect(() => {
+    let lastCookie = readThemeCookie();
+    const interval = window.setInterval(() => {
+      const current = readThemeCookie();
+      if (current && current !== lastCookie) {
+        lastCookie = current;
+        setThemeState(current);
+      }
+    }, 1000);
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== 'theme') return;
+      const next = parseTheme(e.newValue);
+      if (next) setThemeState(next);
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  // Sync Odoo on auth completion
+  useEffect(() => {
+    if (isAuthenticated) {
+      syncThemeFromOdoo((odooTheme) => setThemeState(odooTheme));
+    }
+  }, [isAuthenticated]);
+
+  const handleSetTheme = (newTheme: string) => {
+    const valid = new Set(['light', 'dark', 'system']);
+    const t = valid.has(newTheme) ? newTheme : 'light';
+    setThemeState(t);
+    writeThemeCookie(t);
+    writeStoredTheme(t);
+    pushThemeToOdoo(t); // fire and forget
+  };
 
   // Virtual Pet State
   const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
@@ -203,19 +315,85 @@ const App: React.FC = () => {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
+  const handleClearChat = () => setChatHistory([]);
 
-  useEffect(() => {
+  //promotions
+  const role = finalProfile?.position || 'staff';
+  const segments = finalProfile?.segments || [];
+
+  const { promotions } = usePromotions('inventory', role, segments);
+
+  const bannerPromos = promotions.filter((p) => p.placement === 'banner');
+
+useEffect(() => {
+  let cancelled = false;
+
+  (async () => {
     try {
-      const baseUrl = import.meta.env.BASE_URL || '/';
-      const audioPath = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}images/cat-meow.mp3`.replace(/\/+/g, '/');
+      // audio init
+      const baseUrl = import.meta.env.BASE_URL || "/";
+      const audioPath = `${baseUrl.endsWith("/") ? baseUrl : baseUrl + "/"}images/cat-meow.mp3`.replace(/\/+/g, "/");
       chatAudioRef.current = new Audio(audioPath);
-      chatAudioRef.current.addEventListener('error', (e) => {
-        console.warn("Failed to load cat audio (this is often a browser cache issue):", e);
-      });
-    } catch (err) {
-      console.error("Audio initialization error:", err);
+
+      // 1) try SSO -> setSession (may fail, that's ok)
+      await checkSession();
+
+      // 2) read session after SSO exchange attempt
+      const { data } = await supabase.auth.getSession();
+
+      if (cancelled) return;
+
+      if (data.session?.user) {
+        await bootstrapUser(data.session.user);
+      } else {
+        setBlueprint(PRESET_BLUEPRINTS[0].url);
+        setIsAuthenticated(false);
+      }
+    } catch (e) {
+      console.error("Auth boot failed:", e);
+      setIsAuthenticated(false);
+      setBlueprint(PRESET_BLUEPRINTS[0].url);
+    } finally {
+      if (!cancelled) setAuthInitializing(false);
     }
-  }, []);
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+useEffect(() => {
+  if (!authReady) return;            // ✅ block until checkSession done
+
+  const fetchSession = async () => {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) await bootstrapUser(data.session.user);
+    else setBlueprint(PRESET_BLUEPRINTS[0].url);
+  };
+
+  fetchSession();
+}, [authReady]);
+
+  const checkSession = async () => {
+    try{
+      const sso = await api.get('/sso/exchange');
+      await supabase.auth.setSession({
+        access_token: sso.data.access_token,
+        refresh_token: sso.data.refresh_token
+      });
+      // Decode the token (no verification)
+      const decoded_token = jwtDecode(sso.data.access_token);
+
+      // Extract the user or partner ID from the 'sub' field
+      const user_id = decoded_token.sub;
+
+      console.log(`User ID: ${user_id}`)
+    } catch (err) {
+      await supabase.auth.signOut();
+      console.error('SSO exchange failed:', err);
+    }
+  };
 
   const playMeowChat = () => {
     if (chatAudioRef.current) {
@@ -229,6 +407,52 @@ const App: React.FC = () => {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [chatHistory, isChatOpen]);
+
+  const getPredefinedChatResponse = async (message: string): Promise<string | null> => {
+    const normalizedMessage = message.toLowerCase();
+
+    const { data: targetApps, error: targetAppsError } = await supabase
+      .from('aiboard_response_target_apps')
+      .select('response_id')
+      .in('app_name', ['Inventory', 'All']);
+
+    if (targetAppsError) {
+      console.error('Failed to fetch response target apps:', targetAppsError);
+      return null;
+    }
+
+    const responseIds = [...new Set((targetApps || []).map((app: any) => app.response_id).filter(Boolean))];
+    if (responseIds.length === 0) return null;
+
+    const { data: keywords, error: keywordsError } = await supabase
+      .from('aiboard_response_keywords')
+      .select('keyword, response_id')
+      .in('response_id', responseIds);
+
+    if (keywordsError) {
+      console.error('Failed to fetch response keywords:', keywordsError);
+      return null;
+    }
+
+    const matchedKeyword = (keywords || [])
+      .filter((item: any) => item.keyword && normalizedMessage.includes(String(item.keyword).toLowerCase()))
+      .sort((a: any, b: any) => String(b.keyword).length - String(a.keyword).length)[0];
+
+    if (!matchedKeyword?.response_id) return null;
+
+    const { data: responseData, error: responseError } = await supabase
+      .from('aiboard_responses')
+      .select('response')
+      .eq('id', matchedKeyword.response_id)
+      .maybeSingle();
+
+    if (responseError) {
+      console.error('Failed to fetch predefined response:', responseError);
+      return null;
+    }
+
+    return responseData?.response || null;
+  };
 
   const handleSendChat = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -291,7 +515,8 @@ const App: React.FC = () => {
       const purchaseHistoryStr = recentPurchases.length ? JSON.stringify(recentPurchases) : undefined;
       const activityLogsStr = recentLogs.length ? JSON.stringify(recentLogs) : undefined;
 
-      const response = await chatWithGemini(chatHistory, userMsg, contextStr, purchaseHistoryStr, activityLogsStr);
+      const response = await getPredefinedChatResponse(userMsg)
+        || await chatWithGemini(chatHistory, userMsg, contextStr, purchaseHistoryStr, activityLogsStr);
 
       let finalResponseText = response;
       const actionMatch = response.match(/<ACTION>(.*?)<\/ACTION>/);
@@ -324,6 +549,18 @@ const App: React.FC = () => {
               actionData.qty,
               actionData.expiry
             );
+          } else if (actionData.type === 'transfer') {
+            const fromRoom = rooms.find(r => r.id === actionData.fromRoomId || r.name === (actionData.fromRoomName || actionData.fromRoom));
+            const toRoom = rooms.find(r => r.id === actionData.toRoomId || r.name === (actionData.toRoomName || actionData.toRoom));
+            if (fromRoom && toRoom) {
+              const item = fromRoom.items.find(i => 
+                i.name.toLowerCase() === actionData.itemName.toLowerCase() &&
+                (actionData.brand ? i.brand.toLowerCase() === actionData.brand.toLowerCase() : true)
+              );
+              if (item) {
+                moveItem(fromRoom.id, toRoom.id, item.id, actionData.qty);
+              }
+            }
           }
           finalResponseText = response.replace(/<ACTION>.*?<\/ACTION>/s, '').trim();
         } catch (err) {
@@ -335,12 +572,12 @@ const App: React.FC = () => {
         ...prev,
         { role: "model", parts: [{ text: finalResponseText }] }
       ]);
-      playMeowChat();
+      // playMeowChat();
     } catch (err) {
       console.error(err);
       setChatHistory([
         ...newHistory,
-        { role: "model", parts: [{ text: "Meow... I coughed up a hairball (error). Try again?" }] }
+        { role: "model", parts: [{ text: "I'm having trouble processing your request at the moment. Please try again shortly." }] }
       ]);
     } finally {
       setIsChatLoading(false);
@@ -363,14 +600,20 @@ const App: React.FC = () => {
     const list: { id: string; name: string; role: string }[] = [{ id: uid, name: 'My Inventory', role: 'owner' }];
 
     // 2. Shared Inventories - get collaborator records
-    const { data: shared, error } = await supabase
-      .from('collaborators')
-      .select('owner_id, role')
-      .eq('user_id', uid);
+    // const shared = await api.get<any>('/collaborators', { params: { uid: uid } }).catch(async err => {
+      const { data: shared, error } = await supabase
+        .from('collaborators')
+        .select('owner_id, role')
+        .eq('user_id', uid);
 
-    if (error) {
-      console.error('Error fetching shared inventories:', error);
-    } else if (shared && shared.length > 0) {
+        if (error) {
+          console.error('Error fetching shared inventories:', error);
+        }
+        // return shared as any
+      // }
+      // );
+      
+      if (shared && shared.length > 0) {
       // Fetch owner profiles separately to avoid FK join issues
       const ownerIds = shared.map((s: any) => s.owner_id);
       const { data: ownerProfiles } = await supabase
@@ -391,6 +634,7 @@ const App: React.FC = () => {
         });
       });
     }
+
 
     setAvailableInventories(list);
     // Determine which ID to use. If currentInventoryOwnerId is already set and valid, keep it. Otherwise default to own.
@@ -413,18 +657,9 @@ const App: React.FC = () => {
 
 
   useEffect(() => {
-    const fetchSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.user) {
-        await bootstrapUser(data.session.user.id);
-      } else {
-        setBlueprint(PRESET_BLUEPRINTS[0].url);
-      }
-    };
-    fetchSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        bootstrapUser(session.user.id);
+        // bootstrapUser(session.user);
       } else {
         setIsAuthenticated(false);
         setSupabaseUserId(null);
@@ -573,7 +808,7 @@ const App: React.FC = () => {
           vendor: h.vendor || '',
           qty: Number(h.qty) || 0,
           unitPrice: Number(h.unit_price) || 0,
-          totalPrice: Number(h.total_price) || 0,
+          totalPrice: h.total_price !== undefined && h.total_price !== null ? Number(h.total_price) : (Number(h.qty) || 0) * (Number(h.unit_price) || 0),
           location: h.location || '',
           category: h.category || 'other',
           roomId: h.room_id || '',
@@ -598,7 +833,14 @@ const App: React.FC = () => {
         logsByUser.set(l.user_id, arr);
       });
 
-      const prepared: ManagedInventory[] = Array.from(metaByUser.keys()).map(userId => {
+      const allActiveUserIds = new Set([
+        ...Array.from(metaByUser.keys()),
+        ...Array.from(roomsByUser.keys()),
+        ...Array.from(historyByUser.keys()),
+        ...Array.from(logsByUser.keys())
+      ]);
+
+      const prepared: ManagedInventory[] = Array.from(allActiveUserIds).map(userId => {
         const metaRow = metaByUser.get(userId);
         return {
           userId,
@@ -619,35 +861,45 @@ const App: React.FC = () => {
     }
   };
 
-  const bootstrapUser = async (userId: string) => {
+  const bootstrapUser = async (sbUser: any) => {
     setIsBootstrapped(false);
+    const userId = sbUser.id;
+    console.log('Bootstrapping user:', userId);
     setSupabaseUserId(userId);
+    const { data: { user } } = await supabase.auth.getUser();
+    setTheUser(user);
 
-    const { data: authUser } = await supabase.auth.getUser();
-    const storedImages = loadUserImages(userId);
+    const { data: prof, error: profError } = await supabase
+       .from('profiles')
+       .select('*')
+       .eq('user_id', userId)
+       .order('updated_at', { ascending: false })
+       .limit(1)
+       .maybeSingle();
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    if (profError && profError.code !== 'PGRST116') {
+      console.error('Profile fetch error', profError);
+    }
+    setFinalProfile(prof);
 
-    if (profileError && profileError.code !== 'PGRST116') {
-      console.error('Profile fetch error', profileError);
+    // Tutorial trigger is intentionally independent of whether a `profiles`
+    // row already exists — signup can provision that row server-side before
+    // the user ever logs in, so "no row yet" is not a reliable first-login
+    // signal. The per-user localStorage flag is the source of truth instead.
+    if (sbUser && !hasSeenTutorialVideo(userId)) {
+      setShowTutorialVideo(true);
+      markTutorialVideoSeen(userId);
     }
 
-    let finalProfile = profile;
-    if (!profile && authUser.user) {
+    if (!prof && sbUser) {
       const fallbackProfile = {
         user_id: userId,
-        email: authUser.user.email || '',
-        name: authUser.user.user_metadata?.name || 'User',
-        account_type: (authUser.user.user_metadata?.account_type as any) || 'individual',
-        phone: authUser.user.user_metadata?.phone || '',
-        position: authUser.user.user_metadata?.position || '',
-        company_name: authUser.user.user_metadata?.company_name || null
+        email: sbUser.email || '',
+        name: sbUser.user_metadata?.name || 'User',
+        account_type: (sbUser.user_metadata?.account_type as any) || 'individual',
+        phone: sbUser.user_metadata?.phone || '',
+        position: sbUser.user_metadata?.position || '',
+        company_name: sbUser.user_metadata?.company_name || null
       };
 
       const { data: insertedProfile, error: insertProfileError } = await supabase
@@ -658,35 +910,38 @@ const App: React.FC = () => {
 
       if (insertProfileError && insertProfileError.code !== '23505') {
         console.error('Profile upsert error', insertProfileError);
-      } else {
-        if (insertedProfile) finalProfile = insertedProfile;
+      } else if (insertedProfile) {
+        setFinalProfile(insertedProfile);
       }
     }
 
     // Final check if user is admin
     if (finalProfile?.account_type === 'admin') {
       setIsAdmin(true);
-      fetchAdminData();
+      fetchAdminData(true);
     }
 
     // Load available inventories
     await fetchAvailableInventories(userId);
 
-    setUser({
-      id: userId,
-      email: finalProfile?.email || authUser.user?.email || '',
-      name: finalProfile?.name || 'User',
-      accountType: finalProfile?.account_type as any || 'individual',
-      phone: finalProfile?.phone || '',
-      position: finalProfile?.position || '',
-      clinicName: finalProfile?.company_name || undefined,
-      avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
-      backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
-    });
-
     setIsAuthenticated(true);
     setIsBootstrapped(true);
   };
+
+  useEffect(() => {
+        const storedImages = loadUserImages(supabaseUserId);
+        setUser({
+          id: supabaseUserId,
+          email: finalProfile?.email || '',
+          name: theUser?.user_metadata?.name || theUser?.user_metadata?.full_name || finalProfile?.name || 'User',
+          accountType: finalProfile?.account_type as any || 'individual',
+          phone: finalProfile?.phone || '',
+          position: finalProfile?.position || '',
+          clinicName: finalProfile?.company_name || undefined,
+          avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
+          backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
+        });
+  },[finalProfile, theUser])
 
   const loadInventory = useCallback(async () => {
     if (!currentInventoryOwnerId) return;
@@ -706,37 +961,45 @@ const App: React.FC = () => {
     }
 
     try {
-      const { data: meta } = await supabase
+      let meta = null, roomsData = null, itemsData = null, historyData = null, logData = null;
+        const { data:metadata } = await supabase
         .from('inventory_meta')
         .select('*')
-        .eq('user_id', currentInventoryOwnerId)
+        .eq('user_id', currentInventoryOwnerId) 
         .maybeSingle();
 
-      const { data: roomsData, error: roomsError } = await supabase
-        .from('inventory_rooms')
-        .select('id, name, pos_x, pos_y')
-        .eq('user_id', currentInventoryOwnerId);
+      meta = metadata;
+
+      
+      const { data:roomdata, error: roomsError } = await supabase
+      .from('inventory_rooms')
+      .select('id, name, pos_x, pos_y')
+      .eq('user_id', currentInventoryOwnerId);
+
+      roomsData = roomdata;
       if (roomsError) {
         console.error('Rooms fetch error', roomsError);
       }
+    
 
       const roomIds = (roomsData || []).map((r: any) => r.id);
-      const { data: itemsData } = roomIds.length
+      const { data: itemData } = roomIds.length
         ? await supabase.from('inventory_items').select('*, item_batches:inventory_item_batches(*)').in('room_id', roomIds)
         : { data: [] as any[] };
-
-      const { data: historyData } = await supabase
+      itemsData = itemData;
+      const { data: historiesData } = await supabase
         .from('inventory_purchase_history')
         .select('*')
         .eq('user_id', currentInventoryOwnerId)
         .order('occurred_at', { ascending: false })
         .order('created_at', { ascending: false });
-
-      const { data: logData } = await supabase
+      historyData = historiesData;
+      const { data: logsData } = await supabase
         .from('inventory_activity_logs')
         .select('*, actor:actor_id(name, email)')
         .eq('user_id', currentInventoryOwnerId)
         .order('created_at', { ascending: false });
+        logData = logsData;
 
       const itemsByRoom: Record<string, Item[]> = {};
       (itemsData || []).forEach((row: any) => {
@@ -777,9 +1040,28 @@ const App: React.FC = () => {
           console.log('Discarding stale inventory load result');
           return;
         }
+        // isDirty/lastLocalMutation are only checked once, at the very top of
+        // this function, before these queries were fired. If a local mutation
+        // (receiveStock, deleteItem, etc.) started AFTER this reload began but
+        // BEFORE it resolved, this snapshot predates that mutation — applying
+        // it would silently overwrite the newer optimistic state with stale
+        // data (e.g. a just-restored item vanishing from view even though it
+        // persisted correctly to Supabase). Re-check right before applying.
+        if (isDirty.current) {
+          console.log('loadInventory: local mutation started mid-reload, discarding stale snapshot');
+          setIsLoadingMain(false);
+          setIsReloading(false);
+          setSyncStatus('synced');
+          return;
+        }
         console.log(`Inventory loaded successfully for ${currentInventoryOwnerId}. Found ${hydratedRooms.length} rooms.`);
         isHydrated.current = true;
-        setRooms(hydratedRooms);
+
+        // Preserve TBA virtual room — it only lives in local state and must
+        // survive full reloads triggered by Realtime or other mutations.
+        // Use tbaRoomRef (always current) instead of prev to avoid stale closures.
+        const currentTba = tbaRoomRef.current;
+        setRooms(currentTba ? [...hydratedRooms, currentTba] : hydratedRooms);
       }
       setHistory(
         (historyData || []).map((h: any) => ({
@@ -1011,7 +1293,7 @@ const App: React.FC = () => {
           if (Date.now() - lastLocalMutation.current < 800) return;
           console.log('Realtime History Change:', payload.eventType);
 
-          if (payload.eventType === 'INSERT') {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             if (payload.new.user_id !== currentInventoryOwnerId) return;
             const h = payload.new;
             const newEntry: PurchaseHistory = {
@@ -1028,10 +1310,13 @@ const App: React.FC = () => {
               category: h.category || 'other',
               roomId: h.room_id || '',
               uom: h.uom || 'pcs',
-              expiryDate: h.expiry_date || null
+              expiryDate: h.expiry_date || null,
+              description: h.description || ''
             };
             setHistory(prev => {
-              if (prev.find(x => x.id === newEntry.id)) return prev;
+              if (prev.find(x => x.id === newEntry.id)) {
+                return prev.map(x => x.id === newEntry.id ? newEntry : x);
+              }
               return [newEntry, ...prev].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             });
           } else if (payload.eventType === 'DELETE') {
@@ -1081,7 +1366,7 @@ const App: React.FC = () => {
 
   const handleLogin = async (userProfile: UserProfile) => {
     const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id || null;
+    const userId = userData?.user?.id || null;
     if (userId) setSupabaseUserId(userId);
     const storedImages = userId ? loadUserImages(userId) : {};
 
@@ -1090,6 +1375,14 @@ const App: React.FC = () => {
     setIsAuthenticated(true);
     setCurrentView('dashboard');
     if (userId) {
+      // Tutorial trigger relies solely on the per-user localStorage flag —
+      // not on whether a `profiles` row exists yet, since that row can be
+      // provisioned server-side during signup before the user ever logs in.
+      if (!hasSeenTutorialVideo(userId)) {
+        setShowTutorialVideo(true);
+        markTutorialVideoSeen(userId);
+      }
+
       const { error } = await supabase.from('profiles').upsert({
         user_id: userId,
         email: userProfile.email,
@@ -1102,12 +1395,15 @@ const App: React.FC = () => {
         background_url: storedImages.backgroundUrl || null
       });
       if (error) console.error('Profile upsert error', error);
-      await bootstrapUser(userId);
+      await bootstrapUser(userData?.user);
     }
   };
 
-  const handleLogout = async () => {
+const handleLogout = async () => {
+  try {
+    await api.post('/logout');
     await supabase.auth.signOut();
+
     setIsAuthenticated(false);
     setIsBootstrapped(false);
     setUser(null);
@@ -1120,7 +1416,19 @@ const App: React.FC = () => {
     setRooms([]);
     setHistory([]);
     setLogs([]);
-  };
+
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(
+        { type: 'SSO_LOGOUT', source: 'miniapp' },
+        'https://app.snabbb.com'
+      );
+    }
+  } catch (error) {
+    console.error('Logout failed:', error);
+  } finally {
+    window.location.href = 'https://app.snabbb.com';
+  }
+};
 
   const handleUpdateUserImages = async (payload: { type: 'avatar' | 'background'; file: File; previewUrl: string }) => {
     if (!supabaseUserId) throw new Error('User is not authenticated.');
@@ -1172,7 +1480,7 @@ const App: React.FC = () => {
     }
   };
 
-  const addRoom = async (x: number, y: number) => {
+  const addRoom = async (x: number, y: number, forceName?: string): Promise<string | null> => {
     console.log('addRoom initiated:', { x, y });
     lastLocalMutation.current = Date.now();
 
@@ -1189,7 +1497,7 @@ const App: React.FC = () => {
     const newRoomId = generateId();
     const newRoom: Room = {
       id: newRoomId,
-      name: `Room ${nextNumber}`,
+      name: forceName || `Room ${nextNumber}`,
       x,
       y,
       items: [],
@@ -1197,11 +1505,15 @@ const App: React.FC = () => {
 
     // 1. Optimistic Update
     setRooms(prev => [...prev, newRoom]);
-    addActivity(newRoomId, newRoom.name, 'add', `Created "${newRoom.name}"`);
     setIsAddMode(false);
     isDirty.current = true;
 
-    // 2. Direct Persistence
+    // 2. Direct Persistence — insert the room itself first. The activity
+    // log below references this room's id via a foreign key
+    // (inventory_activity_logs_room_id_fkey), so the room row must exist
+    // before we try to log against it — logging first (fire-and-forget)
+    // was racing this insert and intermittently losing.
+    let roomPersisted = true;
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
@@ -1215,55 +1527,140 @@ const App: React.FC = () => {
       if (error) {
         console.error('Failed to persist new room:', error);
         setSyncStatus('error');
+        roomPersisted = false;
       } else {
         setSyncStatus('synced');
       }
       isDirty.current = false;
       syncInFlight.current = false;
     }
+
+    // Only log once we know the room row exists (or no remote persistence
+    // is in play at all, in which case addActivity's own Supabase write is
+    // skipped too via the same currentInventoryOwnerId check).
+    if (roomPersisted) {
+      await addActivity(newRoomId, newRoom.name, 'add', `Created "${newRoom.name}"`);
+    }
+
+    return newRoomId;
   };
 
-  const deleteRoom = async (id: string) => {
+  const requestDeleteRoom = (id: string) => {
+    const room = rooms.find(r => r.id === id);
+    if (!room) return;
+    setPendingRoomDeleteId(id);
+    setDeleteRoomTransferTargetId(rooms.find(r => r.id !== id)?.id || '');
+  };
+
+  const deleteRoom = async (id: string, itemAction: 'delete' | 'transfer', targetRoomId?: string) => {
     console.log('deleteRoom initiated:', id);
     const room = rooms.find(r => r.id === id);
+    const targetRoom = targetRoomId ? rooms.find(r => r.id === targetRoomId) : undefined;
+    if (!room) return;
+    if (itemAction === 'transfer' && (!targetRoom || targetRoom.id === id)) return;
     lastLocalMutation.current = Date.now();
 
+    // Snapshot items before deletion so a genuine (non-transfer) delete can
+    // be restored later via the "Restore Room" button in Recent Global
+    // Activity. Not needed for the transfer case — those items aren't lost,
+    // they're already sitting in targetRoom. (This mirrors what deleteRoom
+    // used to do before the transfer option was added — restoring here
+    // fixes the Restore Room button, which stopped working when that
+    // change dropped beforeValue/afterValue from the activity log.)
+    const itemSnapshot = itemAction !== 'transfer' && room.items?.length
+      ? JSON.stringify(room.items.map(i => ({
+          name: i.name,
+          brand: i.brand,
+          code: i.code,
+          quantity: i.quantity,
+          price: i.price,
+          uom: i.uom,
+          vendor: i.vendor,
+          category: i.category,
+          description: i.description,
+          expiryDate: i.expiryDate,
+        })))
+      : undefined;
+
     // 1. Optimistic Update
-    setRooms(prev => prev.filter(r => r.id !== id));
-    if (room) {
-      addActivity(id, room.name, 'delete', `Deleted room "${room.name}"`);
-    }
+    setRooms(prev => prev
+      .filter(r => r.id !== id)
+      .map(r => {
+        if (itemAction !== 'transfer' || r.id !== targetRoomId) return r;
+        return { ...r, items: [...r.items, ...room.items] };
+      }));
+    setHistory(prev => itemAction === 'delete'
+      ? markRoomPurchaseHistoryArchived(prev, id)
+      : prev.map(h => h.roomId === id && targetRoom ? { ...h, roomId: targetRoom.id, location: targetRoom.name } : h));
+    // Awaited (unlike other addActivity call sites) because this log
+    // references the room's own id, and that room row is about to be
+    // deleted for real a few lines below. Without awaiting, the log's
+    // Supabase insert can lose the race and land after the room DELETE,
+    // violating inventory_activity_logs_room_id_fkey.
+    await addActivity(
+      id,
+      room.name,
+      'delete',
+      itemAction === 'transfer' && targetRoom
+        ? `Deleted room "${room.name}" and transferred items to "${targetRoom.name}"`
+        : `Deleted room "${room.name}" and archived its items`,
+      itemAction !== 'transfer'
+        ? { beforeValue: itemSnapshot, afterValue: String(room.items?.length ?? 0) }
+        : undefined
+    );
     isDirty.current = true;
 
-    // 2. Direct Persistence
+    // 2. Direct Persistence:
+    //    - Update orphaned items' room_id to NULL in Supabase (preserve items)
+    //    - Then delete the room
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
-        // Since we might not have server-side CASCADE, we perform a manual cascade delete logic.
-        // Identify all items in this room
-        const { data: itemsToDelete } = await supabase
-          .from('inventory_items')
-          .select('id')
-          .eq('room_id', id);
-
-        if (itemsToDelete && itemsToDelete.length > 0) {
-          const itemIds = itemsToDelete.map(i => i.id);
-
-          // Delete batches for those items first
-          await supabase
-            .from('inventory_item_batches')
-            .delete()
-            .in('item_id', itemIds);
-
-          // Delete the items
+        if (itemAction === 'transfer' && targetRoom) {
           await supabase
             .from('inventory_items')
-            .delete()
-            .in('id', itemIds);
+            .update({ room_id: targetRoom.id, user_id: currentInventoryOwnerId })
+            .eq('user_id', currentInventoryOwnerId)
+            .eq('room_id', id);
+
+          await supabase
+            .from('inventory_purchase_history')
+            .update({ room_id: targetRoom.id, location: targetRoom.name })
+            .eq('user_id', currentInventoryOwnerId)
+            .eq('room_id', id);
+        } else {
+          await supabase
+            .from('inventory_purchase_history')
+            .update({ room_id: null, location: ARCHIVED_LOCATION_LABEL })
+            .eq('user_id', currentInventoryOwnerId)
+            .eq('room_id', id);
+
+          // Since we might not have server-side CASCADE, we perform a manual cascade delete logic.
+          // Identify all items in this room
+          const { data: itemsToDelete } = await supabase
+            .from('inventory_items')
+            .select('id')
+            .eq('room_id', id);
+
+          if (itemsToDelete && itemsToDelete.length > 0) {
+            const itemIds = itemsToDelete.map(i => i.id);
+
+            // Delete batches for those items first
+            await supabase
+              .from('inventory_item_batches')
+              .delete()
+              .in('item_id', itemIds);
+
+            // Delete the items
+            await supabase
+              .from('inventory_items')
+              .delete()
+              .in('id', itemIds);
+          }
         }
 
-        // Finally, delete the room
+        // Delete the room (cascade will only delete items still pointing to it)
         const { error } = await supabase
           .from('inventory_rooms')
           .delete()
@@ -1272,7 +1669,7 @@ const App: React.FC = () => {
         if (error) throw error;
         setSyncStatus('synced');
       } catch (err) {
-        console.error('Failed to delete room with manual cascade:', err);
+        console.error('Failed to delete room:', err);
         setSyncStatus('error');
       } finally {
         isDirty.current = false;
@@ -1281,32 +1678,194 @@ const App: React.FC = () => {
     }
   };
 
-  const updateRoomName = async (id: string, name: string) => {
-    lastLocalMutation.current = Date.now();
-    // 1. Optimistic Update
-    let oldName = '';
-    setRooms(prev => prev.map(r => {
-      if (r.id === id) {
-        oldName = r.name;
-        return { ...r, name };
-      }
-      return r;
-    }));
-    if (oldName && oldName !== name) {
-      addActivity(id, name, 'edit', `Renamed room "${oldName}" to "${name}"`, { beforeValue: oldName, afterValue: name });
-    }
+  /**
+   * Assign a TBA (unassigned) item to a real room.
+   * Moves it out of the virtual TBA room and persists room_id to Supabase.
+   */
+  const assignTbaItemToRoom = async (itemId: string, toRoomId: string) => {
+    const tbaRoom = rooms.find(r => r.id === TBA_ROOM_ID);
+    const item = tbaRoom?.items.find(i => i.id === itemId);
+    const targetRoom = rooms.find(r => r.id === toRoomId);
+    if (!item || !targetRoom) return;
 
-    // 2. Direct Persistence
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+
+    // Optimistic update — move item from TBA to target room
+    setRooms(prev => prev
+      .map(r => {
+        if (r.id === TBA_ROOM_ID) {
+          const remaining = r.items.filter(i => i.id !== itemId);
+          return { ...r, items: remaining };
+        }
+        if (r.id === toRoomId) {
+          return { ...r, items: [...r.items, { ...item, tba: false }] };
+        }
+        return r;
+      })
+      // Remove TBA room if it's now empty
+      .filter(r => !(r.id === TBA_ROOM_ID && r.items.length === 0))
+    );
+
+    addActivity(toRoomId, targetRoom.name, 'transfer_in',
+      `Assigned "${item.name}" from TBA to "${targetRoom.name}"`
+    );
+
+    // Persist
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
-      const { error } = await supabase.from('inventory_rooms').update({ name, user_id: currentInventoryOwnerId }).eq('id', id);
-      if (error) {
-        console.error('Failed to update room name in DB:', error);
-        setSyncStatus('error');
-      } else {
+      try {
+        const { error } = await supabase
+          .from('inventory_items')
+          .upsert({
+            id: item.id,
+            room_id: toRoomId,
+            user_id: currentInventoryOwnerId,
+            name: item.name,
+            brand: item.brand,
+            code: item.code,
+            quantity: item.quantity,
+            price: item.price,
+            uom: normalizeUom(item.uom),
+            vendor: item.vendor,
+            category: normalizeCategory(item.category),
+            description: item.description,
+            expiry_date: item.expiryDate,
+          });
+        if (error) throw error;
         setSyncStatus('synced');
+      } catch (err) {
+        console.error('assignTbaItemToRoom: failed to persist', err);
+        setSyncStatus('error');
+      } finally {
+        isDirty.current = false;
+        syncInFlight.current = false;
       }
+    }
+  };
+
+  /**
+   * restoreRoom — recreates a deleted room and re-adds all its items atomically.
+   * Keeps isDirty=true throughout so Realtime reloads don't overwrite mid-restore.
+   */
+  const restoreRoom = async (roomName: string, itemSnapshot?: string) => {
+    if (!currentInventoryOwnerId) return;
+
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+
+    try {
+      // 1. Create the room in Supabase directly (bypass addRoom to keep isDirty locked)
+      const newRoomId = generateId();
+      const x = 20 + Math.random() * 40;
+      const y = 20 + Math.random() * 40;
+
+      const { error: roomErr } = await supabase.from('inventory_rooms').insert({
+        id: newRoomId,
+        user_id: currentInventoryOwnerId,
+        name: roomName,
+        pos_x: x,
+        pos_y: y,
+      });
+      if (roomErr) throw roomErr;
+
+      // Optimistic update — add room to local state
+      const restoredRoom: Room = { id: newRoomId, name: roomName, x, y, items: [] };
+      setRooms(prev => [...prev, restoredRoom]);
+      addActivity(newRoomId, roomName, 'add', `Restored room "${roomName}"`);
+
+      // 2. Re-add items if snapshot exists
+      if (itemSnapshot) {
+        const items = JSON.parse(itemSnapshot) as Array<{
+          id?: string; name: string; brand: string; code: string; quantity: number;
+          price: number; uom: string; vendor: string; category: string;
+          description: string; expiryDate: string | null;
+        }>;
+
+        const today = new Date().toISOString().split('T')[0];
+        let restoredItems: Item[] = [];
+
+        for (const item of items) {
+          const newItem: Item = {
+            id: generateId(),
+            name: item.name,
+            brand: item.brand || '',
+            code: item.code || '',
+            quantity: item.quantity,
+            price: item.price,
+            uom: normalizeUom(item.uom),
+            vendor: item.vendor || '',
+            category: normalizeCategory(item.category) as any,
+            description: item.description || '',
+            expiryDate: item.expiryDate || null,
+            createdAt: new Date().toISOString(),
+            batches: [{ id: generateId(), qty: item.quantity, unitPrice: item.price, expiryDate: item.expiryDate || null }],
+          };
+          restoredItems.push(newItem);
+
+          // Persist item to Supabase
+          const { error: itemErr } = await supabase.from('inventory_items').upsert({
+            id: newItem.id,
+            room_id: newRoomId,
+            user_id: currentInventoryOwnerId,
+            name: newItem.name,
+            brand: newItem.brand,
+            code: newItem.code,
+            quantity: newItem.quantity,
+            price: newItem.price,
+            uom: newItem.uom,
+            vendor: newItem.vendor,
+            category: newItem.category,
+            description: newItem.description,
+            expiry_date: newItem.expiryDate,
+          });
+          if (itemErr) throw itemErr;
+
+          await supabase.from('inventory_item_batches').upsert({
+            id: newItem.batches![0].id,
+            item_id: newItem.id,
+            qty: newItem.quantity,
+            unit_price: newItem.price,
+            expiry_date: newItem.expiryDate,
+          });
+        }
+
+        // Optimistic update — add all items to the new room at once
+        // AND remove them from the TBA virtual room (they are now assigned)
+        setRooms(prev => prev
+          .map(r => {
+            if (r.id === newRoomId) return { ...r, items: restoredItems };
+            if (r.id === TBA_ROOM_ID) {
+              // Remove exactly the items that belong to this restored room,
+              // matched by their original snapshot id (set during deleteRoom).
+              // Falls back to name|brand only for old snapshots that predate the id field.
+              const snapshotIds = new Set(items.map(i => i.id).filter(Boolean));
+              const snapshotNameBrand = new Set(items.map(i => `${i.name}|${i.brand}`));
+              const remaining = snapshotIds.size > 0
+                ? r.items.filter(i => !snapshotIds.has(i.id))
+                : r.items.filter(i => !snapshotNameBrand.has(`${i.name}|${i.brand}`));
+              return { ...r, items: remaining };
+            }
+            return r;
+          })
+          // Remove TBA room if it's now empty
+          .filter(r => !(r.id === TBA_ROOM_ID && r.items.length === 0))
+        );
+
+        addActivity(newRoomId, roomName, 'receive',
+          `Restored ${restoredItems.length} item${restoredItems.length !== 1 ? 's' : ''} to "${roomName}"`
+        );
+      }
+
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('restoreRoom failed:', err);
+      setSyncStatus('error');
+    } finally {
+      isDirty.current = false;
       syncInFlight.current = false;
     }
   };
@@ -1354,6 +1913,43 @@ const App: React.FC = () => {
       if (error) console.error('Failed to persist activity log:', error);
       syncInFlight.current = false;
     }
+
+    // Best-effort sync to Odoo. Never awaited by callers and never allowed
+    // to throw — Odoo being slow/unreachable must not block the UI or the
+    // Supabase write above, which remains the source of truth locally.
+    logActivityToOdoo({
+      logId: newLogId,
+      actorEmail: user?.email || null,
+      supabaseUserId: supabaseUserId || null,
+      actorName: user?.name || null,
+      action,
+      roomId,
+      roomName,
+      details,
+      beforeValue: options?.beforeValue,
+      afterValue: options?.afterValue,
+      occurredAt: timestamp,
+    }).catch((err) => console.error('logActivityToOdoo threw unexpectedly:', err));
+  };
+
+  const updateRoomName = async (id: string, name: string) => {
+    lastLocalMutation.current = Date.now();
+    let oldName = '';
+    setRooms(prev => prev.map(r => {
+      if (r.id === id) { oldName = r.name; return { ...r, name }; }
+      return r;
+    }));
+    if (oldName && oldName !== name) {
+      addActivity(id, name, 'edit', `Renamed room "${oldName}" to "${name}"`, { beforeValue: oldName, afterValue: name });
+    }
+    if (currentInventoryOwnerId) {
+      setSyncStatus('syncing');
+      syncInFlight.current = true;
+      const { error } = await supabase.from('inventory_rooms').update({ name }).eq('id', id);
+      if (error) { console.error('Failed to update room name in DB:', error); setSyncStatus('error'); }
+      else { setSyncStatus('synced'); }
+      syncInFlight.current = false;
+    }
   };
 
   const updateRoomPosition = async (id: string, x: number, y: number) => {
@@ -1363,11 +1959,12 @@ const App: React.FC = () => {
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       try {
-        const { error } = await supabase
+        console.log(`Updating position for room ${id} to (${x}, ${y})`);
+        // await api.patch('/inventory/rooms/position', { id, pos_x: x, pos_y: y }).catch(async err => {
+         await supabase
           .from('inventory_rooms')
           .update({ pos_x: x, pos_y: y })
           .eq('id', id);
-        if (error) throw error;
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to update room position in DB:', err);
@@ -1401,7 +1998,7 @@ const App: React.FC = () => {
         const normalized = ensureBatches(existingItem);
         const batches = normalized.batches ? [...normalized.batches] : [];
         batches.push({
-          id: crypto.randomUUID(),
+          id: generateId(),
           qty,
           unitPrice: price,
           expiryDate: expiry || null
@@ -1420,9 +2017,9 @@ const App: React.FC = () => {
         code: itemData.code || '',
         quantity: qty,
         price: price,
-        uom: itemData.uom || 'pcs',
+        uom: normalizeUom(itemData.uom),
         vendor: itemData.vendor || '',
-        category: itemData.category || 'other',
+        category: normalizeCategory(itemData.category) as any,
         description: itemData.description || '',
         expiryDate: expiry || null,
         createdAt: new Date().toISOString(),
@@ -1457,7 +2054,7 @@ const App: React.FC = () => {
       ? new Date(`${purchaseDate}T${new Date().toTimeString().split(' ')[0]}`).toISOString()
       : new Date().toISOString();
     const historyEntry: PurchaseHistory = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       timestamp: historyTimestamp,
       productName: itemData.name || '',
       brand: itemData.brand || '',
@@ -1490,9 +2087,9 @@ const App: React.FC = () => {
           code: itm.code,
           quantity: itm.quantity,
           price: itm.price,
-          uom: itm.uom,
+          uom: normalizeUom(itm.uom),
           vendor: itm.vendor,
-          category: itm.category,
+          category: normalizeCategory(itm.category),
           description: itm.description,
           expiry_date: itm.expiryDate
         });
@@ -1526,8 +2123,7 @@ const App: React.FC = () => {
           location: historyEntry.location,
           category: historyEntry.category,
           uom: historyEntry.uom,
-          expiry_date: historyEntry.expiryDate,
-          description: historyEntry.description
+          expiry_date: historyEntry.expiryDate || null,
         });
         if (historyErr) throw historyErr;
 
@@ -1539,6 +2135,187 @@ const App: React.FC = () => {
         isDirty.current = false;
         syncInFlight.current = false;
       }
+    }
+  };
+
+  const VALID_CATEGORIES = new Set(['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other']);
+  const VALID_UOMS = new Set(['pcs', 'box', 'unit', 'kit']);
+
+  const normalizeCategory = (cat?: string): string => {
+    if (!cat) return 'other';
+    const lower = cat.trim().toLowerCase();
+    return VALID_CATEGORIES.has(lower) ? lower : 'other';
+  };
+
+  const normalizeUom = (uom?: string): UOM => {
+    if (!uom) return 'pcs';
+    const lower = uom.trim().toLowerCase();
+    return (VALID_UOMS.has(lower) ? lower : 'pcs') as UOM;
+  };
+
+  /**
+   * receiveStockBatch — persists multiple items atomically.
+   *
+   * Unlike calling receiveStock() N times in a forEach (which creates N
+   * concurrent async operations each independently clearing isDirty),
+   * this function keeps isDirty = true until ALL items are upserted,
+   * preventing the Realtime subscription from triggering loadInventory
+   * mid-batch and overwriting items that haven't been saved yet.
+   */
+  const receiveStockBatch = async (
+    roomId: string,
+    items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>
+  ) => {
+    if (!items.length) return;
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) { isDirty.current = false; syncInFlight.current = false; return; }
+
+    const roomNameForLog = room.name;
+    const affectedItems: Item[] = [];
+    const historyEntries: PurchaseHistory[] = [];
+    let currentItems = [...room.items];
+
+    // Build the full new state for each item sequentially (so merges are correct)
+    for (const { itemData, qty, price, purchaseDate, expiry } of items) {
+      if (!itemData.name) continue;
+
+      const existingItem = currentItems.find(i =>
+        i.name.toLowerCase() === itemData.name!.toLowerCase() &&
+        (itemData.brand ? i.brand.toLowerCase() === itemData.brand.toLowerCase() : true)
+      );
+
+      let newItem: Item;
+      if (existingItem) {
+        newItem = mergeBatchAdd(existingItem, qty, price, expiry);
+        currentItems = currentItems.map(i => i.id === existingItem.id ? newItem : i);
+      } else {
+        newItem = {
+          id: generateId(),
+          name: itemData.name || '',
+          brand: itemData.brand || '',
+          code: itemData.code || '',
+          quantity: qty,
+          price,
+          uom: normalizeUom(itemData.uom),
+          vendor: itemData.vendor || '',
+          category: normalizeCategory(itemData.category) as any,
+          description: itemData.description || '',
+          expiryDate: expiry || null,
+          createdAt: new Date().toISOString(),
+          batches: [{ id: generateId(), qty, unitPrice: price, expiryDate: expiry || null }],
+        };
+        currentItems = [...currentItems, newItem];
+      }
+      affectedItems.push(newItem);
+
+      // Activity log
+      addActivity(
+        roomId, roomNameForLog, 'receive',
+        `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" @ $${price.toFixed(2)}`,
+        { beforeValue: String(existingItem?.quantity ?? 0), afterValue: String(newItem.quantity) }
+      );
+
+      // History
+      const historyEntry: PurchaseHistory = {
+        id: generateId(),
+        timestamp: purchaseDate
+          ? new Date(`${purchaseDate}T${new Date().toTimeString().split(' ')[0]}`).toISOString()
+          : new Date().toISOString(),
+        productName: itemData.name || '',
+        brand: itemData.brand || '',
+        code: itemData.code || '',
+        vendor: itemData.vendor || '',
+        qty,
+        unitPrice: price,
+        totalPrice: qty * price,
+        location: roomNameForLog,
+        category: itemData.category || 'other',
+        roomId,
+        uom: itemData.uom || existingItem?.uom || 'pcs',
+        expiryDate: expiry,
+        description: itemData.description || existingItem?.description || '',
+      };
+      setHistory(h => [historyEntry, ...h]);
+      historyEntries.push(historyEntry);
+    }
+
+    // Optimistic update — apply all at once
+    setRooms(prev => prev.map(r => r.id === roomId ? { ...r, items: currentItems } : r));
+
+    if (!currentInventoryOwnerId) {
+      isDirty.current = false;
+      syncInFlight.current = false;
+      return;
+    }
+
+    try {
+      // Persist ALL items before clearing isDirty
+      for (const itm of affectedItems) {
+        const { error: itemErr } = await supabase.from('inventory_items').upsert({
+          id: itm.id,
+          room_id: roomId,
+          user_id: currentInventoryOwnerId,
+          name: itm.name,
+          brand: itm.brand,
+          code: itm.code,
+          quantity: itm.quantity,
+          price: itm.price,
+          uom: normalizeUom(itm.uom),
+          vendor: itm.vendor,
+          category: normalizeCategory(itm.category),
+          description: itm.description,
+          expiry_date: itm.expiryDate,
+        });
+        if (itemErr) throw itemErr;
+
+        if (itm.batches) {
+          for (const b of itm.batches) {
+            await supabase.from('inventory_item_batches').upsert({
+              id: b.id,
+              item_id: itm.id,
+              qty: b.qty,
+              unit_price: b.unitPrice,
+              expiry_date: b.expiryDate,
+            });
+          }
+        }
+      }
+
+      // Persist all history entries to Supabase
+      for (const h of historyEntries) {
+        const { error: histErr } = await supabase.from('inventory_purchase_history').insert({
+          id: h.id,
+          user_id: currentInventoryOwnerId,
+          room_id: h.roomId,
+          occurred_at: h.timestamp,
+          product_name: h.productName,
+          brand: h.brand,
+          code: h.code,
+          vendor: h.vendor,
+          qty: h.qty,
+          unit_price: h.unitPrice,
+          total_price: h.totalPrice,
+          location: h.location,
+          category: normalizeCategory(h.category),
+          uom: normalizeUom(h.uom as string),
+          expiry_date: h.expiryDate || null,
+        });
+        if (histErr) console.error('receiveStockBatch: failed to persist history entry', histErr);
+      }
+
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('receiveStockBatch: failed to persist items', err);
+      setSyncStatus('error');
+    } finally {
+      // Only NOW is it safe to clear isDirty — all items are in Supabase
+      isDirty.current = false;
+      syncInFlight.current = false;
     }
   };
 
@@ -1724,7 +2501,6 @@ const App: React.FC = () => {
           quantity: itm.quantity,
           price: itm.price,
           expiry_date: itm.expiryDate,
-          user_id: currentInventoryOwnerId
         }).eq('id', itm.id);
 
         if (error) throw error;
@@ -1830,7 +2606,6 @@ const App: React.FC = () => {
           quantity: itm.quantity,
           price: itm.price,
           expiry_date: itm.expiryDate,
-          user_id: currentInventoryOwnerId
         }).eq('id', itm.id);
 
         if (itemUpdateError) throw itemUpdateError;
@@ -1894,7 +2669,7 @@ const App: React.FC = () => {
     } else {
       // Create a batch if missing
       updatedItem.batches = [{
-        id: crypto.randomUUID(),
+        id: generateId(),
         qty: updatedItem.quantity,
         unitPrice: updatedItem.price,
         expiryDate: updatedItem.expiryDate || null
@@ -1921,14 +2696,13 @@ const App: React.FC = () => {
           name: updatedItem.name,
           brand: updatedItem.brand,
           code: updatedItem.code,
-          uom: updatedItem.uom,
+          uom: normalizeUom(updatedItem.uom),
           vendor: updatedItem.vendor,
-          category: updatedItem.category,
+          category: normalizeCategory(updatedItem.category),
           description: updatedItem.description,
           expiry_date: updatedItem.expiryDate,
           quantity: updatedItem.quantity,
           price: updatedItem.price,
-          user_id: currentInventoryOwnerId
         }).eq('id', itemId);
         if (error) throw error;
 
@@ -2015,7 +2789,6 @@ const App: React.FC = () => {
           quantity: updatedItem.quantity,
           price: updatedItem.price,
           expiry_date: updatedItem.expiryDate,
-          user_id: currentInventoryOwnerId
         }).eq('id', itemId);
         if (itemErr) throw itemErr;
 
@@ -2038,6 +2811,11 @@ const App: React.FC = () => {
     let roomName = '';
     let itemName = '';
     let beforeQty = '0';
+    const room = rooms.find(r => r.id === roomId);
+    const itemToDelete = room?.items.find(i => i.id === itemId) || null;
+    const archivedHistoryIds = itemToDelete
+      ? history.filter(h => isPurchaseHistoryForItem(h, roomId, itemToDelete)).map(h => h.id)
+      : [];
 
     setRooms(prev => prev.map(r => {
       if (r.id !== roomId) return r;
@@ -2049,15 +2827,47 @@ const App: React.FC = () => {
       }
       return { ...r, items: r.items.filter(i => i.id !== itemId) };
     }));
+    if (itemToDelete) {
+      setHistory(prev => markItemPurchaseHistoryArchived(prev, roomId, itemToDelete));
+    }
 
     if (itemName) {
-      addActivity(roomId, roomName, 'delete', `Deleted "${itemName}"`, { beforeValue: beforeQty, afterValue: '0' });
+      // Snapshot the full item (not just its quantity) so the "Restore Item"
+      // button in Recent Global Activity can bring back its real category,
+      // brand, code, vendor, description, and expiry — not just the name and
+      // qty. Older log entries (from before this change) only ever stored a
+      // plain quantity number in beforeValue; the restore button's
+      // JSON.parse falls back gracefully for those.
+      const itemSnapshot = itemToDelete
+        ? JSON.stringify({
+            name: itemToDelete.name,
+            brand: itemToDelete.brand,
+            code: itemToDelete.code,
+            quantity: itemToDelete.quantity,
+            price: itemToDelete.price,
+            uom: itemToDelete.uom,
+            vendor: itemToDelete.vendor,
+            category: itemToDelete.category,
+            description: itemToDelete.description,
+            expiryDate: itemToDelete.expiryDate,
+          })
+        : beforeQty;
+      addActivity(roomId, roomName, 'delete', `Deleted "${itemName}"`, { beforeValue: itemSnapshot, afterValue: '0' });
     }
 
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       syncInFlight.current = true;
       try {
+        if (archivedHistoryIds.length > 0) {
+          const { error: historyErr } = await supabase
+            .from('inventory_purchase_history')
+            .update({ room_id: null, location: ARCHIVED_LOCATION_LABEL })
+            .eq('user_id', currentInventoryOwnerId)
+            .in('id', archivedHistoryIds);
+          if (historyErr) throw historyErr;
+        }
+
         const { error } = await supabase.from('inventory_items').delete().eq('id', itemId);
         if (error) throw error;
         setSyncStatus('synced');
@@ -2157,7 +2967,7 @@ const App: React.FC = () => {
     const { kept, moved } = (typeof batchIndex === 'number')
       ? {
         kept: item.batches?.map((b, idx) => idx === batchIndex ? { ...b, qty: Math.max(0, b.qty - quantity) } : b).filter(b => b.qty > 0) || [],
-        moved: [{ ...item.batches![batchIndex], qty: quantity, id: crypto.randomUUID() }]
+        moved: [{ ...item.batches![batchIndex], qty: quantity, id: generateId() }]
       }
       : splitBatchesForTransfer(item.batches, quantity);
 
@@ -2165,7 +2975,7 @@ const App: React.FC = () => {
     const updatedFromItem = { ...item, batches: kept, quantity: keptSummary.totalQty, price: keptSummary.avgPrice, expiryDate: keptSummary.earliestExpiry };
 
     const movedSummary = summarizeBatches(moved);
-    const movedItemTemplate = { ...item, id: crypto.randomUUID(), batches: moved, quantity: movedSummary.totalQty, price: movedSummary.avgPrice, expiryDate: movedSummary.earliestExpiry, roomId: toRoomId };
+    const movedItemTemplate = { ...item, id: generateId(), batches: moved, quantity: movedSummary.totalQty, price: movedSummary.avgPrice, expiryDate: movedSummary.earliestExpiry, roomId: toRoomId };
 
     let finalMovedItem: Item = movedItemTemplate;
     const existingInTarget = toRoom.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
@@ -2201,7 +3011,6 @@ const App: React.FC = () => {
             quantity: updatedFromItem.quantity,
             price: updatedFromItem.price,
             expiry_date: updatedFromItem.expiryDate,
-            user_id: currentInventoryOwnerId
           }).eq('id', updatedFromItem.id);
 
           // Update batches for source
@@ -2224,8 +3033,8 @@ const App: React.FC = () => {
           room_id: toRoomId,
           name: finalMovedItem.name,
           brand: finalMovedItem.brand,
-          category: finalMovedItem.category,
-          uom: finalMovedItem.uom,
+          category: normalizeCategory(finalMovedItem.category),
+          uom: normalizeUom(finalMovedItem.uom),
           quantity: finalMovedItem.quantity,
           price: finalMovedItem.price,
           expiry_date: finalMovedItem.expiryDate,
@@ -2252,9 +3061,16 @@ const App: React.FC = () => {
     }
   };
 
+  const navigatetoSnabbb = () => {
+    window.open('https://app.snabbb.com', '_self');
+  }
+
   const activeRoom = useMemo(() => rooms.find(r => r.id === activeRoomId), [rooms, activeRoomId]);
+  const pendingRoomDelete = useMemo(() => rooms.find(r => r.id === pendingRoomDeleteId), [rooms, pendingRoomDeleteId]);
+  const roomDeleteTransferTargets = useMemo(() => rooms.filter(r => r.id !== pendingRoomDeleteId), [rooms, pendingRoomDeleteId]);
 
   const userInitials = useMemo(() => {
+    console.log('user',user)
     if (!user) return 'U';
     return user.name.split(' ').map(n => n[0]).join('').toUpperCase();
   }, [user]);
@@ -2273,8 +3089,25 @@ const App: React.FC = () => {
   const canManageStructure = currentRole === 'owner' || currentRole === 'admin';
   const canEditItems = currentRole === 'owner' || currentRole === 'admin' || currentRole === 'editor';
 
+  if (authInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-700 font-medium">Checking session...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
-    return <LandingModal onLogin={handleLogin} />;
+    return (
+      <LandingModal
+        onLogin={handleLogin}
+        theme={theme}
+        onThemeToggle={() => handleSetTheme(theme === 'dark' ? 'light' : 'dark')}
+      />
+    );
   }
 
   if (isAuthenticated && isAdmin && user) {
@@ -2295,18 +3128,22 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col select-none bg-slate-50">
+    <div className={`min-h-screen flex flex-col select-none ${theme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       <Header
         onProfileClick={() => setCurrentView('profile')}
-        onDashboardClick={() => setCurrentView('dashboard')}
+        onDashboardClick={() => navigatetoSnabbb()}
+        // onDashboardClick={() => setCurrentView('dashboard')}
         onLogout={handleLogout}
         onAddCollaborator={currentRole === 'owner' ? () => setIsCollaboratorModalOpen(true) : undefined}
+        onWatchTutorial={() => setShowTutorialVideo(true)}
         user={user}
         userInitials={userInitials}
-        userAvatarUrl={user?.avatarUrl}
+        userAvatarUrl={profileImageUrl}
         availableInventories={availableInventories}
         currentInventoryId={currentInventoryOwnerId}
         onSwitchInventory={setCurrentInventoryOwnerId}
+        theme={theme}
+        onSetTheme={handleSetTheme}
       />
 
       <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-8 px-0 md:px-16 lg:px-32 py-8">
@@ -2327,6 +3164,9 @@ const App: React.FC = () => {
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Syncing...</span>
                 </div>
               )}
+              {bannerPromos.map((promo) => (
+                <PromoBanner key={promo.id} appCode="inventory" promo={promo} />
+              ))}
               <ClinicMap
                 rooms={rooms}
                 blueprint={blueprint}
@@ -2337,7 +3177,7 @@ const App: React.FC = () => {
                 onSetAddMode={setIsAddMode}
                 onSetDeleteMode={setIsDeleteMode}
                 onAddRoom={addRoom}
-                onDeleteRoom={deleteRoom}
+                onDeleteRoom={requestDeleteRoom}
                 onSelectRoom={setActiveRoomId}
                 onDragEnd={canManageStructure ? updateRoomPosition : undefined}
                 onUpdateRooms={canManageStructure ? (newRooms) => {
@@ -2406,6 +3246,8 @@ const App: React.FC = () => {
                 onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
+                onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
+                onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
                 readOnly={!canEditItems || isLoadingMain}
               />
             </>
@@ -2430,6 +3272,7 @@ const App: React.FC = () => {
           onClose={() => setActiveRoomId(null)}
           onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateRoomName(id, name); }}
           onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
+          onReceiveBatch={(rid, items) => receiveStockBatch(rid, items)}
           onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
           onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
@@ -2440,43 +3283,114 @@ const App: React.FC = () => {
         />
       )}
 
+      {pendingRoomDelete && (
+        <div
+          data-cat-ignore="true"
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/45 backdrop-blur-sm p-4"
+        >
+          <div
+            data-cat-ignore="true"
+            className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden"
+          >
+            <div className="p-6 border-b border-slate-100">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-rose-500 mb-2">Delete room</p>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                Delete "{pendingRoomDelete.name}"?
+              </h3>
+              <p className="mt-2 text-sm font-medium text-slate-500 leading-6">
+                This room contains {pendingRoomDelete.items.length} SKU. Choose what should happen to the items before the room is removed from the clinic map.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <button
+                onClick={() => {
+                  deleteRoom(pendingRoomDelete.id, 'delete');
+                  setPendingRoomDeleteId(null);
+                }}
+                className="w-full text-left rounded-2xl border border-rose-100 bg-rose-50/60 p-4 hover:bg-rose-50 transition-colors"
+              >
+                <span className="block text-sm font-black text-rose-600">Delete items with room</span>
+                <span className="mt-1 block text-xs font-medium text-slate-500 leading-5">
+                  Items will be removed from inventory. Purchase history for this room will show Archived in the Location column.
+                </span>
+              </button>
+
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <label className="block text-sm font-black text-slate-700 mb-2">Transfer items to another room</label>
+                <select
+                  data-cat-ignore="true"
+                  value={deleteRoomTransferTargetId}
+                  onChange={e => setDeleteRoomTransferTargetId(e.target.value)}
+                  disabled={roomDeleteTransferTargets.length === 0}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 outline-none disabled:bg-slate-50 disabled:text-slate-300"
+                >
+                  {roomDeleteTransferTargets.length === 0 ? (
+                    <option value="">No other room available</option>
+                  ) : (
+                    roomDeleteTransferTargets.map(room => (
+                      <option key={room.id} value={room.id}>{room.name}</option>
+                    ))
+                  )}
+                </select>
+                <button
+                  onClick={() => {
+                    if (!deleteRoomTransferTargetId) return;
+                    deleteRoom(pendingRoomDelete.id, 'transfer', deleteRoomTransferTargetId);
+                    setPendingRoomDeleteId(null);
+                  }}
+                  disabled={!deleteRoomTransferTargetId || roomDeleteTransferTargets.length === 0}
+                  className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400"
+                >
+                  Transfer and delete room
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
+              <button
+                onClick={() => setPendingRoomDeleteId(null)}
+                className="rounded-xl px-4 py-2 text-sm font-black text-slate-500 hover:bg-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <CollaboratorModal
         isOpen={isCollaboratorModalOpen}
         onClose={() => setIsCollaboratorModalOpen(false)}
         currentUser={user}
       />
 
-      {/* Global Molar AI Chat */}
-      {!isChatOpen && !isVirtualPetOpen && (
-        <button
-          onClick={() => setIsChatOpen(true)}
-          className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-[9999]"
-        >
-          <div className="relative w-full h-full rounded-full overflow-hidden p-2">
-            <img
-              src="/images/MolarAI.png"
-              alt="Molar AI"
-              className="w-full h-full object-contain scale-[1.6] translate-y-[0.35rem]"
-            />
-          </div>
-          {/* Tooltip */}
-          <div className="absolute right-full mr-4 bg-slate-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            Chat with Molar AI
-          </div>
-        </button>
-      )}
+      <TutorialVideoModal
+        isOpen={showTutorialVideo}
+        onClose={() => setShowTutorialVideo(false)}
+      />
 
       {!isVirtualPetOpen && (
-        <MolarChat
+        <>
+        <CatMascot onCatClick={() => setIsVirtualPetOpen(true)} disabled={!isAuthenticated} />
+        <MolarAIFloat
           isOpen={isChatOpen}
+          onOpen={() => setIsChatOpen(true)}
           onClose={() => setIsChatOpen(false)}
           chatHistory={chatHistory}
           isChatLoading={isChatLoading}
           chatInput={chatInput}
           setChatInput={setChatInput}
           onSendMessage={handleSendChat}
+          onClearChat={handleClearChat}
           chatEndRef={chatEndRef}
+          onPetToggle={() => {
+            setIsChatOpen(false);
+            setIsVirtualPetOpen(true);
+          }}
+          disabled={!isAuthenticated}
         />
+        </>
       )}
 
       <VirtualPetContainer isOpen={isVirtualPetOpen} onClose={() => setIsVirtualPetOpen(false)} />

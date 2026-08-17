@@ -1,215 +1,407 @@
-
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Apple,
+  ArrowLeft,
+  BedDouble,
+  Candy,
+  Coffee,
+  Coins,
+  CupSoda,
+  Drumstick,
+  Gamepad2,
+  Lock,
+  ShoppingBag,
+  Smile,
+  Utensils,
+  X,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
 import { FoodItem } from '../types';
-
-// Icons for stats
-const IconHunger = () => (
-  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
-    <path d="M7 2v20" />
-    <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
-  </svg>
-);
-
-const IconHappy = () => (
-  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-    <line x1="9" y1="9" x2="9.01" y2="9" />
-    <line x1="15" y1="9" x2="15.01" y2="9" />
-  </svg>
-);
+import { useGameState } from '../hooks/useGameState';
+import { TOY_ITEMS } from '../constants';
+import { AiOutlineShop } from 'react-icons/ai';
 
 interface ShopModalProps {
   isOpen: boolean;
   onClose: () => void;
   items: FoodItem[];
   inventory: Record<string, number>;
+  activeBedId: string | null;
+  activeBallId: string;
   coins: number;
   currentLevel: number;
   onBuy: (item: FoodItem) => void;
+  onBuyBed: (bed: FoodItem) => void;
+  onSelectBed: (id: string) => void;
+  onBuyToy: (item: FoodItem) => void;
+  onSelectToy: (id: string) => void;
+  isLoading?: boolean;
 }
 
-const CATEGORY_STYLES: Record<string, { icon: string; bg: string; border: string; text: string }> = {
-  'Breakfast': { icon: '🍳', bg: 'bg-yellow-100', border: 'border-yellow-200', text: 'text-yellow-700' },
-  'Healthy': { icon: '🥗', bg: 'bg-green-100', border: 'border-green-200', text: 'text-green-700' },
-  'Meals': { icon: '🍔', bg: 'bg-orange-100', border: 'border-orange-200', text: 'text-orange-700' },
-  'Drinks': { icon: '🥤', bg: 'bg-blue-100', border: 'border-blue-200', text: 'text-blue-700' },
-  'Sweets': { icon: '🍩', bg: 'bg-pink-100', border: 'border-pink-200', text: 'text-pink-700' },
-  'Default': { icon: '🍱', bg: 'bg-slate-100', border: 'border-slate-200', text: 'text-slate-700' }
+const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+  Healthy: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', accent: 'bg-emerald-100' },
+  Breakfast: { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-700', accent: 'bg-yellow-100' },
+  Meals: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', accent: 'bg-orange-100' },
+  Drinks: { bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-700', accent: 'bg-sky-100' },
+  Sweets: { bg: 'bg-pink-50', border: 'border-pink-200', text: 'text-pink-700', accent: 'bg-pink-100' },
+  Toys: { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700', accent: 'bg-slate-100' },
+  Beds: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', accent: 'bg-indigo-100' },
+  Default: { bg: 'bg-stone-50', border: 'border-stone-200', text: 'text-stone-700', accent: 'bg-stone-100' },
 };
 
-const ShopModal: React.FC<ShopModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  items, 
-  inventory, 
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  Healthy: Apple,
+  Breakfast: Coffee,
+  Meals: Drumstick,
+  Drinks: CupSoda,
+  Sweets: Candy,
+  Toys: Gamepad2,
+  Beds: BedDouble,
+  Default: ShoppingBag,
+};
+
+const CATEGORY_ORDER = ['Healthy', 'Breakfast', 'Meals', 'Drinks', 'Sweets', 'Toys', 'Beds'];
+
+const SHOP_BUTTONS = {
+  buy: 'bg-orange-500 text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600 active:scale-95',
+  select: 'bg-orange-200 text-amber-800 border-2 border-amber-700 shadow-lg hover:bg-orange-300 active:scale-95',
+  active: 'border-2 border-orange-400 cursor-default bg-amber-100 shadow-lg text-orange-600',
+  disabled: 'cursor-not-allowed bg-slate-100 text-slate-400',
+  locked: 'cursor-not-allowed bg-slate-200 text-slate-500',
+};
+
+const findToyByShopItem = (item: Pick<FoodItem, 'id' | 'label'>) => {
+  const normalizedLabel = item.label.toLowerCase();
+  const normalizedId = item.id.toLowerCase();
+
+  return TOY_ITEMS.find((toy) =>
+    toy.id.toLowerCase() === normalizedId ||
+    toy.label.toLowerCase() === normalizedLabel ||
+    toy.label.toLowerCase().replace(/\s+/g, '_') === normalizedId
+  );
+};
+
+const ToyVisual = ({ item, size = 'large' }: { item: FoodItem; size?: 'small' | 'large' }) => {
+  const toy = findToyByShopItem(item);
+  if (!toy) {
+    return <span className={size === 'large' ? 'text-6xl drop-shadow-sm' : 'text-4xl drop-shadow-sm'}>{item.icon}</span>;
+  }
+
+  if (toy.icon) {
+    return <span className={`${size === 'large' ? 'text-[64px]' : 'text-4xl'} leading-none drop-shadow-md select-none`}>{toy.icon}</span>;
+  }
+
+  return (
+    <span
+      className={`${size === 'large' ? 'h-16 w-16' : 'h-11 w-11'} rounded-full border-2 border-white/50 shadow-inner`}
+      style={{ background: toy.color }}
+    />
+  );
+};
+
+const ShopModal: React.FC<ShopModalProps> = ({
+  isOpen,
+  onClose,
+  items,
+  inventory,
+  activeBedId,
+  activeBallId,
   coins,
-  currentLevel, 
-  onBuy 
+  currentLevel,
+  onBuy,
+  onBuyBed,
+  onSelectBed,
+  onBuyToy,
+  onSelectToy,
+  isLoading = false
 }) => {
+  const { currencyCode, currencyRate } = useGameState();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // Extract unique categories from items
+  const formatPrice = (baseUSD: number) => {
+    const converted = baseUSD * currencyRate;
+    return converted % 1 === 0 ? converted.toFixed(0) : converted.toFixed(2).replace(/\.?0+$/, '');
+  };
+
   const categories = useMemo(() => {
-    return Array.from(new Set(items.map(item => item.category)));
+    const available = new Set(items.map(item => item.category));
+    available.delete('Soap');
+    return [
+      ...CATEGORY_ORDER.filter(category => available.has(category)),
+      ...Array.from(available).filter(category => !CATEGORY_ORDER.includes(category)),
+    ];
   }, [items]);
 
-  // Filter items based on selection
   const filteredItems = useMemo(() => {
-    if (!selectedCategory) return [];
+    if (!selectedCategory || selectedCategory === 'Beds') return [];
     return items.filter(item => item.category === selectedCategory);
   }, [items, selectedCategory]);
 
-  // Reset category when modal is closed/opened
+  const bedItems = useMemo(() => items.filter((item) => item.category === 'Beds'), [items]);
+
   useEffect(() => {
     if (!isOpen) {
-        // slight delay to avoid flicker during close animation
-        const t = setTimeout(() => setSelectedCategory(null), 300);
-        return () => clearTimeout(t);
+      const t = setTimeout(() => setSelectedCategory(null), 300);
+      return () => clearTimeout(t);
     }
   }, [isOpen]);
 
-  const handleClose = () => {
-    onClose();
-  };
-
   if (!isOpen) return null;
 
+  const selectedStyle = CATEGORY_STYLES[selectedCategory || 'Default'] || CATEGORY_STYLES.Default;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[788px] h-[85vh] flex flex-col overflow-hidden transform transition-all scale-100 border-4 border-orange-100">
-        
-        {/* Header */}
-        <div className="p-5 bg-orange-400 text-white flex justify-between items-center shadow-md z-10 shrink-0">
-          <div className="flex items-center gap-3">
-            {selectedCategory ? (
-                <button 
-                    onClick={() => setSelectedCategory(null)}
-                    className="p-1 hover:bg-white/20 rounded-full transition-colors mr-1"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-[30px] border-4 border-orange-100 bg-white shadow-2xl">
+        <div className="relative overflow-hidden bg-gradient-to-r from-orange-400 to-amber-400 px-5 py-4 text-white">
+          <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/15" />
+          <div className="absolute left-40 bottom-0 h-14 w-14 translate-y-1/2 rounded-full bg-white/10" />
+          <div className="relative z-10 flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              {selectedCategory ? (
+                <button
+                  onClick={() => setSelectedCategory(null)}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/20 active:scale-95"
+                  aria-label="Back to categories"
                 >
-                     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  <ArrowLeft className="h-7 w-7" strokeWidth={3} />
                 </button>
-            ) : (
-                <span className="text-3xl">🏪</span>
-            )}
-            <h2 className="text-2xl font-black tracking-wide">
-                {selectedCategory ? selectedCategory : "Food Market"}
-            </h2>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="bg-black/20 px-4 py-1.5 rounded-full flex items-center gap-2">
-                <span className="text-xl">💰</span>
-                <span className="font-bold font-mono text-lg">{coins}</span>
+              ) : (
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 shadow-inner">
+                  <AiOutlineShop className="h-9 w-9" strokeWidth={10} />
+                </div>
+              )}
+              <div className="min-w-0">
+                <h2 className="truncate text-2xl font-black tracking-wide text-slate-900">
+                  {selectedCategory || 'Shop'}
+                </h2>
+                <p className="text-sm font-bold text-orange-950/70">
+                  {selectedCategory ? `${selectedCategory === 'Beds' ? bedItems.length : filteredItems.length} items available` : 'Pick a shelf, then buy supplies'}
+                </p>
+              </div>
             </div>
-            <button onClick={handleClose} className="p-2 hover:bg-white/20 rounded-full transition-colors" aria-label="Close">
-                <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 6 6 18"/>
-                  <path d="M6 6 18 18"/>
-                </svg>
-            </button>
+            <div className="flex shrink-0 items-center gap-3">
+              <div className="flex items-center gap-2 rounded-full bg-orange-900/20 px-4 py-2 text-white shadow-inner">
+                <div className="text-xl drop-shadow-sm filter">💰</div>
+                <span className="font-black text-xl tracking-wide">{coins}</span>
+              </div>
+              <button
+                onClick={onClose}
+                className="flex h-11 w-11 items-center justify-center rounded-full transition-colors hover:bg-white/20 active:scale-95"
+                aria-label="Close market"
+              >
+                <X className="h-7 w-7" strokeWidth={3} />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 bg-orange-50 no-scrollbar">
-          
-          {/* CATEGORY VIEW */}
-          {!selectedCategory && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 h-full content-start animate-in slide-in-from-left-4 fade-in duration-300">
-                  {categories.map(cat => {
-                      const style = CATEGORY_STYLES[cat] || CATEGORY_STYLES['Default'];
-                      return (
-                          <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat)}
-                            className={`flex flex-col items-center justify-center p-8 rounded-3xl border-4 transition-all duration-200 shadow-lg hover:-translate-y-1 hover:shadow-xl active:scale-95 ${style.bg} ${style.border} h-48 sm:h-64`}
-                          >
-                              <div className="text-7xl mb-4 drop-shadow-md filter">{style.icon}</div>
-                              <div className={`text-2xl font-black tracking-wide uppercase ${style.text}`}>{cat}</div>
-                              <div className="mt-2 text-sm font-bold opacity-60 text-slate-700">
-                                  {items.filter(i => i.category === cat).length} items
-                              </div>
-                          </button>
-                      );
-                  })}
-              </div>
+        <div className="flex-1 overflow-y-auto bg-gradient-to-b from-orange-50 to-white p-5 no-scrollbar">
+          {isLoading && (
+            <div className="flex h-full flex-col items-center justify-center gap-4">
+              <div className="h-12 w-12 rounded-full border-4 border-orange-200 border-t-orange-500 animate-spin" />
+              <p className="text-lg font-black text-orange-600">Loading items...</p>
+            </div>
           )}
 
-          {/* ITEM VIEW */}
-          {selectedCategory && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in slide-in-from-right-8 fade-in duration-300">
-                {filteredItems.map((item) => {
-                const ownedCount = inventory[item.id] || 0;
+          {!isLoading && !selectedCategory && (
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+              {categories.map((cat) => {
+                const style = CATEGORY_STYLES[cat] || CATEGORY_STYLES.Default;
+                const categoryItems = cat === 'Beds' ? [] : items.filter(item => item.category === cat);
+                const Icon = CATEGORY_ICONS[cat] || CATEGORY_ICONS.Default;
+                const itemCount = cat === 'Beds' ? bedItems.length : categoryItems.length;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`group relative min-h-40 overflow-hidden rounded-[28px] border-2 ${style.border} ${style.bg} p-5 text-left shadow-lg shadow-orange-900/5 transition-all hover:-translate-y-1 hover:shadow-xl active:scale-95`}
+                  >
+                    <div className={`pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full ${style.accent} opacity-60 transition-transform duration-300 group-hover:scale-110`} />
+                    <div className="relative z-10 flex h-full flex-col justify-between gap-7">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${style.accent} shadow-inner`}>
+                          <Icon className={`h-8 w-8 ${style.text}`} strokeWidth={2.2} />
+                        </div>
+                        <span className="rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm">
+                          {itemCount} items
+                        </span>
+                      </div>
+                      <div>
+                        <div className={`text-2xl font-black uppercase tracking-wide ${style.text}`}>{cat}</div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {!isLoading && selectedCategory === 'Beds' && (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {bedItems.map((bed) => {
+                const isOwned = bed.price === 0 || (inventory[bed.id] || 0) > 0;
+                const isActive = activeBedId === bed.id;
+                const isLocked = (bed.levelReq || 1) > currentLevel;
+                const actualPrice = bed.price * currencyRate;
+                const canAfford = coins >= actualPrice;
+
+                return (
+                  <div
+                    key={bed.id}
+                    className={`relative flex min-h-56 flex-col rounded-[26px] border ${selectedStyle.border} bg-white p-4 text-center shadow-lg shadow-orange-900/5 transition-all ${
+                      isLocked ? 'opacity-65 grayscale' : 'hover:-translate-y-1 hover:shadow-xl'
+                    }`}
+                  >
+                    {isOwned && !isLocked && (
+                      <div className="absolute right-3 top-3 z-10 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-black text-white shadow">
+                        Owned
+                      </div>
+                    )}
+
+                    {isLocked && (
+                      <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[26px] bg-white/55">
+                        <div className="flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1 text-xs font-black text-white shadow-md">
+                          <Lock className="h-3.5 w-3.5" strokeWidth={3} />
+                          Lvl {bed.levelReq}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-2 flex h-20 items-center justify-center">
+                      <img src={bed.imageSrc} alt="" draggable={false} className="h-20 w-28 object-contain drop-shadow-md" />
+                    </div>
+                    <div className="mt-3 truncate text-base font-black text-slate-700">{bed.label}</div>
+
+                    <div className="my-3 flex min-h-8 flex-wrap items-center justify-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-xs font-black text-indigo-700">
+                        <Zap className="h-3.5 w-3.5" strokeWidth={3} />
+                        +{bed.energyGain || 1}% sleep
+                      </span>
+                    </div>
+
+                    {isOwned ? (
+                      <button
+                        onClick={() => !isActive && onSelectBed(bed.id)}
+                        disabled={isActive}
+                        className={`mt-auto rounded-2xl px-3 py-2.5 text-sm font-black transition-all ${
+                          isActive
+                            ? SHOP_BUTTONS.active
+                            : SHOP_BUTTONS.select
+                        }`}
+                      >
+                        {isActive ? 'Active' : 'Select'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => !isLocked && canAfford && onBuyBed(bed)}
+                        disabled={isLocked || !canAfford}
+                        className={`mt-auto rounded-2xl px-3 py-2.5 text-sm font-black transition-all ${
+                          !isLocked && canAfford
+                            ? SHOP_BUTTONS.buy
+                            : SHOP_BUTTONS.disabled
+                        }`}
+                      >
+                        {isLocked ? 'Locked' : `${currencyCode} ${formatPrice(bed.price)}`}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {!isLoading && selectedCategory && selectedCategory !== 'Beds' && (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {filteredItems.map((item) => {
+                const toy = findToyByShopItem(item);
+                const isToy = !!toy;
+                const toyId = toy?.id || item.id;
+                const ownedCount = isToy ? Math.min(1, inventory[toyId] || inventory[item.id] || 0) : inventory[item.id] || 0;
+                const isActiveToy = isToy && activeBallId === toyId;
+                const isOwnedToy = isToy && (ownedCount > 0 || item.price === 0);
                 const isLocked = (item.levelReq || 1) > currentLevel;
-                const canAfford = coins >= item.price;
+                const actualPrice = item.price * currencyRate;
+                const canAfford = coins >= actualPrice;
                 const isDisabled = isLocked || !canAfford;
 
                 return (
-                    <div 
-                    key={item.id} 
-                    className={`relative flex flex-col items-center p-2 rounded-2xl border-2 transition-all duration-200 bg-white border-orange-100 shadow-lg ${isLocked ? 'grayscale opacity-70' : 'hover:-translate-y-1'}`}
-                    >
-                        {/* Owned Badge in Shop */}
-                        {ownedCount > 0 && !isLocked && (
-                            <div className="absolute top-2 right-2 bg-green-100 text-green-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-green-200 shadow-sm z-10">
-                                x{ownedCount}
-                            </div>
-                        )}
+                  <div
+                    key={item.id}
+                    className={`relative flex min-h-56 flex-col rounded-[26px] border ${selectedStyle.border} bg-white p-4 text-center shadow-lg shadow-orange-900/5 transition-all ${
+                      isLocked ? 'opacity-65 grayscale' : 'hover:-translate-y-1 hover:shadow-xl'
+                    }`}
+                  >
+                    {ownedCount > 0 && !isLocked && !isToy && (
+                      <div className="absolute right-3 top-3 z-10 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-black text-white shadow">
+                        x{ownedCount}
+                      </div>
+                    )}
+                    {isOwnedToy && !isLocked && (
+                      <div className="absolute right-3 top-3 z-10 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-black text-white shadow">
+                        Owned
+                      </div>
+                    )}
 
-                        {/* Level Lock Overlay */}
-                        {isLocked && (
-                            <div className="absolute inset-0 bg-slate-100/40 z-20 flex items-center justify-center rounded-2xl pointer-events-none">
-                                <div className="bg-slate-800 text-white px-3 py-1 rounded-full text-xs font-bold shadow-md flex items-center gap-1">
-                                    <span>🔒</span> Lvl {item.levelReq}
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="text-6xl mb-2 mt-1 drop-shadow-sm">{item.icon}</div>
-                        <div className="text-base font-bold text-slate-700 mb-0">{item.label}</div>
-                        
-                        {/* Stats Display */}
-                        <div className="flex flex-wrap justify-center gap-1 mb-2 w-full px-1">
-                            {item.hunger > 0 && (
-                                <div className="flex items-center gap-1 text-black px-1 py-1 rounded-lg text-[14px] font-semibold tracking-wider" title="Hunger">
-                                    <IconHunger /> +{item.hunger}%
-                                </div>
-                            )}
-                            {item.happiness && item.happiness > 0 && (
-                                <div className="flex items-center gap-1 text-black px-2 py-1 rounded-lg text-[14px] font-semibold tracking-wider" title="Happiness">
-                                    <IconHappy /> +{item.happiness}%
-                                </div>
-                            )}
+                    {isLocked && (
+                      <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[26px] bg-white/55">
+                        <div className="flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1 text-xs font-black text-white shadow-md">
+                          <Lock className="h-3.5 w-3.5" strokeWidth={3} />
+                          Lvl {item.levelReq}
                         </div>
+                      </div>
+                    )}
 
-                        <button
-                        onClick={() => !isDisabled && onBuy(item)}
-                        disabled={isDisabled}
-                        className={`mt-auto w-full py-1.5 rounded-2xl flex items-center justify-center gap-0.5 transition-colors ${
-                            isLocked 
-                             ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                             : canAfford 
-                                ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-md active:scale-95' 
-                                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                        }`}
-                        >
-                        {isLocked ? (
-                             <span className="font-semibold text-sm">Locked</span>
-                        ) : (
-                            <>
-                                {/* SVG Dollar Icon */}
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
-                                </svg>
-                                
-                                <span className="font-semibold text-lg">{item.price}</span>
-                            </>
-                        )}
-                    </button>
+                    <div className="mt-2 flex h-20 items-center justify-center">
+                      <ToyVisual item={item} />
                     </div>
+                    <div className="mt-3 truncate text-base font-black text-slate-700">{item.label}</div>
+
+                    <div className="my-3 flex min-h-8 flex-wrap items-center justify-center gap-2">
+                      {item.hunger > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-1 text-xs font-black text-orange-700">
+                          <Utensils className="h-3.5 w-3.5" strokeWidth={2.8} />
+                          +{item.hunger}%
+                        </span>
+                      )}
+                      {!!item.happiness && item.happiness > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2 py-1 text-xs font-black text-pink-700">
+                          <Smile className="h-3.5 w-3.5" strokeWidth={2.8} />
+                          +{item.happiness}%
+                        </span>
+                      )}
+                    </div>
+
+                    {isToy && isOwnedToy ? (
+                      <button
+                        onClick={() => !isActiveToy && onSelectToy(toyId)}
+                        disabled={isActiveToy}
+                        className={`mt-auto rounded-2xl px-3 py-2.5 text-sm font-black transition-all ${
+                          isActiveToy
+                            ? SHOP_BUTTONS.active
+                            : SHOP_BUTTONS.select
+                        }`}
+                      >
+                        {isActiveToy ? 'Active' : 'Select'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => !isDisabled && (isToy ? onBuyToy(item) : onBuy(item))}
+                        disabled={isDisabled}
+                        className={`mt-auto rounded-2xl px-3 py-2.5 text-sm font-black transition-all ${
+                          isLocked
+                            ? SHOP_BUTTONS.locked
+                            : canAfford
+                              ? SHOP_BUTTONS.buy
+                              : SHOP_BUTTONS.disabled
+                        }`}
+                      >
+                        {isLocked ? 'Locked' : `${currencyCode} ${formatPrice(item.price)}`}
+                      </button>
+                    )}
+                  </div>
                 );
-                })}
+              })}
             </div>
           )}
         </div>

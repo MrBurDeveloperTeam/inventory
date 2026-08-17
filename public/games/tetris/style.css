@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
 :root {
     --cell: 28px;
     --cols: 10;
@@ -8,7 +9,7 @@ html,
 body {
     min-height: 100%;
     margin: 0;
-    font-family: Inter, system-ui, Arial;
+    font-family: 'Fredoka', system-ui, sans-serif;
     background: linear-gradient(180deg, #0f172a, #071024);
     color: #e6eef8;
     overflow-x: hidden;
@@ -34,7 +35,7 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 10px;
-    font-family: 'Press Start 2P', cursive;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-size: 34px;
     pointer-events: none;
     z-index: 1001;
@@ -59,12 +60,6 @@ body {
     align-items: center
 }
 
-@media(max-width:900px) {
-    .board {
-        grid-template-columns: 1fr;
-        justify-items: center
-    }
-}
 
 .game {
     background: #061025;
@@ -122,18 +117,18 @@ canvas#tetris {
 .overlay h2 {
     margin: 0;
     margin-bottom: 10px;
-    font-family: 'Press Start 2P', cursive;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-size: 26px;
     color: #00f0f0;
     text-shadow: 0 0 15px rgba(0, 240, 240, 0.5);
 }
 
 .overlay h2.huge-title {
-    font-size: 28px;
+    font-size: 80px;
     margin-bottom: 20px;
     text-transform: uppercase;
-    color: #ff3333;
-    text-shadow: 0 0 20px rgba(255, 51, 51, 0.6);
+    color: #ffffff;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
     text-align: center;
     width: 100%;
     white-space: nowrap;
@@ -198,7 +193,7 @@ canvas#tetris {
     color: #fff;
     font-size: 20px;
     font-weight: 700;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Fredoka', system-ui, sans-serif;
 }
 
 .control-list {
@@ -266,7 +261,7 @@ canvas#tetris {
 #overlay-help {
     border: none;
     padding: 14px 32px;
-    font-family: 'Press Start 2P', cursive;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-size: 11px;
     color: #fff;
     border-radius: 12px;
@@ -383,34 +378,109 @@ canvas#tetris {
     box-shadow: 0 2px 0 #3730a3, 0 4px 8px rgba(99, 102, 241, 0.3);
 }
 
-/* Side panel pause button */
+/*
+ * Pause button stays outside the scaled stage.
+ * Place it at the top center of the iframe so it
+ * cannot be clipped on narrow mobile screens.
+ */
 #btn-pause {
-    position: absolute;
-    top: -58px;
-    right: 10px;
-    width: 50px;
-    height: 50px;
-    font-size: 22px;
+    position: fixed;
+
+    top:
+        max(
+            10px,
+            env(safe-area-inset-top, 0px)
+        );
+
+    left: 50%;
+    right: auto;
+
+    width:
+        clamp(
+            40px,
+            8vmin,
+            46px
+        );
+
+    height:
+        clamp(
+            40px,
+            8vmin,
+            46px
+        );
+
+    margin: 0;
+    padding: 0;
+
+    transform:
+        translateX(-50%);
+
+    font-size:
+        clamp(
+            15px,
+            3vmin,
+            18px
+        );
+
     color: #fff;
-    background: linear-gradient(180deg, #00b4ff, #0050f0);
-    border: none;
-    border-radius: 16px;
-    box-shadow: 0 4px 0 #003a8c, 0 10px 20px rgba(0, 180, 255, 0.2);
+
+    background:
+        rgba(7, 18, 37, 0.78);
+
+    backdrop-filter:
+        blur(8px);
+
+    -webkit-backdrop-filter:
+        blur(8px);
+
+    border:
+        1px solid
+        rgba(255, 255, 255, 0.3);
+
+    border-radius: 12px;
+
+    box-shadow:
+        0 6px 18px
+        rgba(0, 0, 0, 0.35);
+
     cursor: pointer;
-    display: flex;
+
     align-items: center;
     justify-content: center;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1000;
+
+    z-index: 6200;
+
+    touch-action: manipulation;
+
+    -webkit-tap-highlight-color:
+        transparent;
+
+    transition:
+        transform 0.2s ease,
+        background 0.2s ease,
+        border-color 0.2s ease;
 }
 
 #btn-pause:hover {
-    transform: translateY(-2px);
-    background: linear-gradient(180deg, #33c1ff, #1a75ff);
+    transform:
+        translateX(-50%)
+        translateY(-2px);
+
+    background:
+        rgba(30, 41, 59, 0.94);
+
+    border-color:
+        rgba(255, 255, 255, 0.5);
 }
 
 #btn-pause:active {
-    transform: translateY(2px);
+    transform:
+        translateX(-50%)
+        translateY(1px)
+        scale(0.96);
+
+    background:
+        rgba(7, 18, 37, 0.9);
 }
 
 .side {
@@ -418,7 +488,7 @@ canvas#tetris {
 }
 
 h1 {
-    font-family: 'Press Start 2P', cursive;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-size: 46px;
     margin: 30px 0 30px 0;
     text-align: center;
@@ -453,7 +523,7 @@ h1 {
 }
 
 .panel-title {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-weight: 700;
     font-size: 14px;
     color: #94a3b8;
@@ -487,14 +557,15 @@ h1 {
 }
 
 .stat-value {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-weight: 700;
     font-size: 20px;
     color: #f8fafc;
     text-shadow: 0 0 20px rgba(248, 250, 252, 0.2);
 }
 
-.highscore-value {
+.highscore-value {letter-spacing: 0.14em;
+    
     font-size: 32px;
     color: #fcd34d;
     /* Golden color for high score */
@@ -536,7 +607,7 @@ h1 {
 }
 
 .preview-label {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Fredoka', system-ui, sans-serif;
     font-weight: 700;
     font-size: 18px;
     color: #f8fafc;
@@ -704,13 +775,585 @@ footer {
     opacity: 0.3
 }
 
-@media(max-width:900px) {
-    .board {
-        grid-template-columns: 1fr
+
+/*
+ * Tetris responsive landscape viewport.
+ * Keep one fixed three-column design and scale the
+ * complete stage uniformly on every device.
+ */
+:root {
+    --tetris-scale: 1;
+    --tetris-stage-width: 870px;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+
+    margin: 0;
+    padding: 0;
+
+    overflow: hidden !important;
+    overscroll-behavior: none;
+
+    background: #071225;
+}
+
+html {
+    position: fixed;
+    inset: 0;
+}
+
+body {
+    position: fixed;
+    inset: 0;
+
+    touch-action: none;
+
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/*
+ * GamePage.tsx already reserves the upper toolbar area.
+ * This viewport only keeps a small safe margin around
+ * the Tetris stage.
+ */
+#tetris-viewport {
+    position: fixed !important;
+    inset: 0 !important;
+
+    width: 100% !important;
+    height: 100% !important;
+
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    margin: 0 !important;
+
+    padding-top:
+        max(
+            8px,
+            env(safe-area-inset-top, 0px)
+        ) !important;
+
+    padding-right:
+        max(
+            12px,
+            env(safe-area-inset-right, 0px)
+        ) !important;
+
+    padding-bottom:
+        max(
+            8px,
+            env(safe-area-inset-bottom, 0px)
+        ) !important;
+
+    padding-left:
+        max(
+            12px,
+            env(safe-area-inset-left, 0px)
+        ) !important;
+
+    display: block !important;
+
+    box-sizing: border-box;
+
+    overflow: hidden !important;
+}
+
+/*
+ * Use one fixed desktop-style stage on every device.
+ * JavaScript scales this complete 870 × 590 layout.
+ */
+#tetris-stage {
+    position: absolute !important;
+
+    left: 50% !important;
+    top: 50% !important;
+
+    width:
+        var(--tetris-stage-width) !important;
+
+    /*
+    * Allow the stage height to follow the tallest column.
+    * The main game canvas still guarantees a minimum height
+    * of 590px.
+    */
+    height: auto !important;
+
+    min-width:
+        var(--tetris-stage-width) !important;
+
+    min-height: 590px !important;
+
+    max-width: none !important;
+    max-height: none !important;
+
+    margin: 0 !important;
+
+    display: grid !important;
+
+    grid-template-columns:
+        260px
+        310px
+        260px !important;
+
+    /*
+    * Let the grid row grow when either side panel is taller
+    * than the main game canvas.
+    */
+    grid-template-rows:
+        max-content !important;
+
+    gap: 20px !important;
+
+    overflow: visible !important;
+
+    align-items: center !important;
+    justify-items: stretch !important;
+
+    transform:
+        translate(-50%, -50%)
+        scale(var(--tetris-scale)) !important;
+
+    transform-origin:
+        center center !important;
+
+    will-change: transform;
+}
+
+/*
+ * Keep both side panels at their original dimensions.
+ */
+#tetris-stage > .side {
+    width: 260px !important;
+    max-width: none !important;
+}
+
+/*
+ * The game section contains:
+ * 280px canvas
+ * + 6px canvas border
+ * + 24px game padding
+ * = 310px total width.
+ */
+#tetris-stage > .game {
+    width: 286px !important;
+    max-width: none !important;
+
+    box-sizing: content-box;
+}
+
+/*
+ * Prevent browser scrolling, zoom gestures and text selection
+ * while the user controls Tetris.
+ */
+#tetris-viewport,
+#tetris-stage,
+#tetris {
+    touch-action: none;
+
+    user-select: none;
+    -webkit-user-select: none;
+
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Mobile replacement for the keyboard C key.
+ *
+ * The button is outside #tetris-stage, so it does not become
+ * too small when the complete game layout is scaled.
+ */
+#mobile-hold-button {
+    position: fixed;
+
+    right:
+        max(
+            10px,
+            env(safe-area-inset-right, 0px)
+        );
+
+    bottom:
+        max(
+            10px,
+            env(safe-area-inset-bottom, 0px)
+        );
+
+    z-index: 6000;
+
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    width:
+        clamp(
+            54px,
+            11vmin,
+            70px
+        );
+
+    aspect-ratio: 1;
+
+    margin: 0;
+    padding: 6px;
+
+    border:
+        2px solid
+        rgba(255, 255, 255, 0.55);
+
+    border-radius: 50%;
+
+    color: #ffffff;
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(99, 102, 241, 0.96),
+            rgba(79, 70, 229, 0.96)
+        );
+
+    box-shadow:
+        0 5px 0 #312e81,
+        0 10px 24px
+            rgba(0, 0, 0, 0.4);
+
+    font-family:
+        'Fredoka',
+        system-ui,
+        sans-serif;
+
+    font-size:
+        clamp(
+            10px,
+            2.4vmin,
+            13px
+        );
+
+    font-weight: 800;
+    line-height: 1;
+
+    letter-spacing: 0.06em;
+
+    cursor: pointer;
+
+    touch-action: manipulation;
+
+    user-select: none;
+    -webkit-user-select: none;
+
+    -webkit-tap-highlight-color:
+        transparent;
+}
+
+#mobile-hold-button small {
+    margin-top: 4px;
+
+    font-size: 0.72em;
+    font-weight: 700;
+
+    opacity: 0.72;
+}
+
+#mobile-hold-button:active {
+    transform:
+        translateY(3px)
+        scale(0.96);
+
+    box-shadow:
+        0 2px 0 #312e81,
+        0 5px 12px
+            rgba(0, 0, 0, 0.35);
+}
+
+/*
+ * Show the HOLD button only on devices whose primary
+ * input is touch-oriented.
+ */
+@media (hover: none) and (pointer: coarse) {
+    #mobile-hold-button.is-gameplay-visible {
+        display: flex;
+    }
+}
+
+/*
+ * Mobile Tetris guide.
+ * The button only appears on touch devices.
+ */
+#mobile-guide-button {
+    position: fixed;
+    left: max(10px, env(safe-area-inset-left, 0px));
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    z-index: 6100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 46px;
+    padding: 0 14px;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 999px;
+    color: #fff;
+    background: linear-gradient(180deg, #0ea5e9, #0284c7);
+    box-shadow: 0 5px 0 #075985, 0 10px 24px rgba(0, 0, 0, 0.4);
+    font-family: 'Fredoka', system-ui, sans-serif;
+    font-size: clamp(10px, 2.4vmin, 13px);
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#mobile-guide-button i {
+    font-size: 1.15em;
+}
+
+#mobile-guide-button:active {
+    transform: translateY(3px) scale(0.97);
+    box-shadow: 0 2px 0 #075985, 0 5px 12px rgba(0, 0, 0, 0.35);
+}
+
+.mobile-guide-modal[hidden] {
+    display: none !important;
+}
+
+.mobile-guide-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 7000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding:
+        max(14px, env(safe-area-inset-top, 0px))
+        max(14px, env(safe-area-inset-right, 0px))
+        max(14px, env(safe-area-inset-bottom, 0px))
+        max(14px, env(safe-area-inset-left, 0px));
+    box-sizing: border-box;
+    touch-action: manipulation;
+}
+
+.mobile-guide-backdrop {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgba(2, 6, 23, 0.8);
+    backdrop-filter: blur(5px);
+    cursor: pointer;
+}
+
+.mobile-guide-card {
+    position: relative;
+    z-index: 1;
+    width: min(430px, 92vw);
+    max-height: calc(100dvh - 28px);
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: clamp(16px, 4vmin, 24px);
+    border: 2px solid rgba(125, 211, 252, 0.65);
+    border-radius: 18px;
+    color: #e6eef8;
+    background: linear-gradient(180deg, #10223d, #071225);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.mobile-guide-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.mobile-guide-kicker {
+    margin-bottom: 5px;
+    color: #7dd3fc;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+}
+
+.mobile-guide-header h2 {
+    margin: 0;
+    color: #fff;
+    font-size: clamp(22px, 5vmin, 30px);
+    line-height: 1.1;
+}
+
+.mobile-guide-close {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 18px;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.mobile-guide-intro {
+    margin: 12px 0 14px;
+    color: #b9d3ed;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.mobile-guide-list {
+    display: grid;
+    gap: 8px;
+}
+
+.mobile-guide-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.045);
+}
+
+.mobile-guide-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    color: #fff;
+    background: rgba(14, 165, 233, 0.22);
+    font-size: 16px;
+}
+
+.mobile-guide-row div {
+    min-width: 0;
+}
+
+.mobile-guide-row strong,
+.mobile-guide-row small {
+    display: block;
+}
+
+.mobile-guide-row strong {
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.2;
+}
+
+.mobile-guide-row small {
+    margin-top: 3px;
+    color: #9fc6e8;
+    font-size: 11px;
+    line-height: 1.25;
+}
+
+.mobile-guide-done {
+    width: 100%;
+    margin-top: 14px;
+    padding: 12px 18px;
+    border: 0;
+    border-radius: 11px;
+    color: #fff;
+    background: linear-gradient(180deg, #10b981, #059669);
+    box-shadow: 0 4px 0 #065f46;
+    font-family: 'Fredoka', system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.mobile-guide-done:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #065f46;
+}
+
+/* GUIDE only appears on touch-oriented devices. */
+@media (hover: none) and (pointer: coarse) {
+    #mobile-guide-button {
+        display: flex;
+    }
+}
+
+/* Make the instructions more compact in mobile landscape. */
+@media (max-height: 470px) and (orientation: landscape) {
+    .mobile-guide-card {
+        width: min(620px, 88vw);
+        padding: 14px 16px;
     }
 
-    .side {
-        width: 100%;
-        max-width: 400px
+    .mobile-guide-intro {
+        margin: 8px 0 10px;
+    }
+
+    .mobile-guide-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+    }
+
+    .mobile-guide-row {
+        padding: 8px 10px;
+    }
+
+    .mobile-guide-row:last-child {
+        grid-column: 1 / -1;
+    }
+
+    .mobile-guide-done {
+        margin-top: 10px;
+        padding: 10px 16px;
+    }
+}
+
+/*
+ * Keep pause at the top center on touch
+ * devices so it stays independent from the
+ * back, wallet and close controls.
+ */
+@media (hover: none) and (pointer: coarse) {
+    #btn-pause {
+        top:
+            max(
+                8px,
+                env(
+                    safe-area-inset-top,
+                    0px
+                )
+            );
+
+        left: 50%;
+        right: auto;
+
+        width: 36px;
+        height: 36px;
+
+        transform:
+            translateX(-50%);
+    }
+
+    #btn-pause:hover {
+        transform:
+            translateX(-50%);
+    }
+
+    #btn-pause:active {
+        transform:
+            translateX(-50%)
+            translateY(1px)
+            scale(0.96);
     }
 }
