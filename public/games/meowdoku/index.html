@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,viewport-fit=cover"
+  >
+  <meta name="theme-color" content="#faf6f2">
+  <title>Meowdoku</title>
+  <link
+    rel="preload"
+    as="image"
+    href="cat-149-blink-spritesheet.png"
+  >
+  <link
+    rel="stylesheet"
+    href="style.css?v=20260817-color-contrast-v1"
+  >
+</head>
+<body> 
+  <main id="app"> 
+    <section id="level-screen" class="screen active">
+      <header class="hero">
+        <div class="logo-cat">🐱</div>
+        <div class="brand-copy">
+          <p class="eyebrow">A cozy logic puzzle</p>
+          <h1><span>Meow</span><em>doku</em></h1>
+          <p class="brand-tagline">Find one cat in every color. <strong>No guessing needed.</strong></p>
+        </div>
+      </header>
+
+      <div class="rules-card">
+        <article class="rule-card color-rule">
+          <span class="rule-icon" aria-hidden="true">◉</span>
+          <div>
+            <small>COLOR CODE</small>
+            <strong>One cat per color</strong>
+            <p>Every color hides exactly one cat.</p>
+          </div>
+        </article>
+
+        <article class="rule-card line-rule">
+          <span class="rule-icon" aria-hidden="true">↔</span>
+          <div>
+            <small>LINE LOGIC</small>
+            <strong>Rows &amp; columns</strong>
+            <p>Never place two cats on one line.</p>
+          </div>
+        </article>
+
+        <article class="rule-card touch-rule">
+          <span class="rule-icon" aria-hidden="true">✦</span>
+          <div>
+            <small>SAFE SPACE</small>
+            <strong>Keep them apart</strong>
+            <p>Cats cannot touch, even diagonally.</p>
+          </div>
+        </article>
+      </div>
+
+      <section class="level-board">
+        <div class="level-heading">
+          <div>
+            <small>PUZZLE BOARD</small>
+            <h2>Choose a level</h2>
+          </div>
+          <span id="progress-label"></span>
+        </div>
+
+        <div id="level-grid" class="level-grid"></div>
+      </section>
+    </section> 
+
+    <section id="game-screen" class="screen"> 
+      <header class="game-header">
+        <button
+          id="back-btn"
+          class="round-btn"
+          aria-label="Back to levels"
+        >←</button>
+
+        <div class="top-metric">
+          <small>LEVEL</small>
+          <strong id="level-title"></strong>
+        </div>
+
+        <div class="top-metric">
+          <small>SCORE</small>
+          <strong id="score">0</strong>
+        </div>
+
+        <button
+          id="settings-btn"
+          class="round-btn"
+          aria-label="Open tutorial"
+        ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.25c2.65-.78 5.45-.27 8.5 1.54v12.02c-3.05-1.81-5.85-2.32-8.5-1.54V5.25Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M20.5 5.25c-2.65-.78-5.45-.27-8.5 1.54v12.02c3.05-1.81 5.85-2.32 8.5-1.54V5.25Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 6.79v12.02" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+      </header> 
+
+      <div class="status-row">
+        <div class="pill cat-progress">
+          <span class="status-cat-icon" aria-hidden="true"><i></i></span>
+          <b id="found-count"></b>
+        </div>
+
+        <div id="time-pill" class="pill timer-pill" aria-label="Elapsed time">
+          <span class="timer-icon" aria-hidden="true">⏱</span>
+          <b id="time-display">0:00</b>
+        </div>
+
+        <div class="pill lives" aria-label="Lives">
+          <b id="lives"></b>
+        </div>
+      </div>
+
+      <div class="rules-strip">
+        <div><span id="color-demo" class="visual-grid"></span><b>One cat in<br>each color</b></div>
+        <div><span id="line-demo" class="visual-grid"></span><b>At most one per<br>row and column</b></div>
+        <div><span id="touch-demo" class="visual-grid"></span><b>Cats cannot<br>touch</b></div>
+      </div> 
+
+      <div class="board-wrap">
+        <div
+          id="board"
+          class="board"
+          aria-label="Meowdoku puzzle board"
+        ></div>
+      </div> 
+
+      <div id="coach" class="coach" aria-live="polite">
+        <b id="coach-title"></b>
+        <span id="coach-copy"></span>
+        <button id="coach-next">Continue</button>
+      </div>
+
+      <div class="bottom-bar">
+        <button id="restart-btn" class="tool-btn"><span>↻</span><b>Restart</b></button>
+        <p class="control-help"><b>Tap</b> to mark ×<br><b>Double-tap</b> to place a cat</p>
+        <button id="hint-btn" class="tool-btn hint-tool"><span>💡</span><b>Hint <i id="hint-cost"></i></b></button>
+      </div>
+
+      <div id="message" class="message" role="status"></div> 
+    </section>
+  </main> 
+
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div id="modal-icon" class="modal-icon">🎉</div>
+      <h2 id="modal-title"></h2>
+      <p id="modal-copy"></p>
+      <div id="modal-stats" class="modal-stats"></div>
+      <button id="modal-primary" class="primary-btn"></button>
+      <button id="modal-secondary" class="text-btn"></button>
+    </div>
+  </div> 
+
+  <div id="tutorial-modal" class="modal" aria-hidden="true">
+    <div class="modal-card tutorial-card">
+      <div id="tutorial-icon" class="modal-icon">🎨</div>
+      <small>TUTORIAL <span id="tutorial-step">1 / 4</span></small>
+      <h2 id="tutorial-title"></h2>
+      <p id="tutorial-copy"></p>
+      <div id="tutorial-demo" class="tutorial-demo"></div>
+      <button id="tutorial-next" class="primary-btn">Next</button>
+      <button id="tutorial-skip" class="text-btn">Skip tutorial</button>
+    </div>
+  </div> 
+
+  <link
+    rel="stylesheet"
+    href="tutorial-fixes.css?v=20260817-color-contrast-v1"
+  >
+  <script src="game.js?v=20260817-color-contrast-v1"></script>
+</body>
+</html>
