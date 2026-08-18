@@ -23,13 +23,18 @@ import {
   readThemeCookie,
   parseTheme,
 } from './src/utils/themeSync';
-import { chatWithGemini } from './services/geminiService';
+import { chatWithGemini, chatWithGroundedInventoryFacts } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { api } from './services/api';
 import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
 import { useInventoryPersonalizedInsight } from './aiExperience/hooks/useInventoryPersonalizedInsight';
 import PersonalizedInsight from './aiExperience/components/PersonalizedInsight';
+import { isInventoryMutationRequest } from './aiExperience/dataChat/router/isInventoryMutationRequest';
+import { classifyInventoryDataIntent } from './aiExperience/dataChat/router/classifyInventoryDataIntent';
+import { resolveInventoryDataQuery } from './aiExperience/dataChat/resolver/resolveInventoryDataQuery';
+import { formatGroundedInventoryFallback } from './aiExperience/dataChat/utils/formatGroundedInventoryFallback';
+import { buildUnsupportedParameterMessage } from './aiExperience/dataChat/utils/unsupportedParameterMessage';
 import { jwtDecode } from 'jwt-decode';
 import {
   ARCHIVED_LOCATION_LABEL,
@@ -473,6 +478,81 @@ useEffect(() => {
     setIsChatLoading(true);
 
     try {
+      // ── Phase-3 Data-Driven Chat (read-only pilot) ──────────────────
+      // Runs BEFORE the existing predefined-response/General Chat
+      // pipeline below, and is fully separate from it: a matched request
+      // here never builds `simpleInventory`/purchase-history/activity-log
+      // context, never calls `getPredefinedChatResponse`/`chatWithGemini`,
+      // and never touches the `<ACTION>` mutation parser further down.
+      // See aiExperience/dataChat/ for the deterministic router/provider/
+      // resolver pipeline this reuses.
+
+      // 1. Explicit inventory MUTATION requests are intercepted with a
+      // deterministic refusal — zero Gemini calls, zero mutation. The
+      // existing General Chat's own <ACTION>-block execution path is
+      // untouched below for anything that doesn't match this guard.
+      if (isInventoryMutationRequest(userMsg)) {
+        setChatHistory([
+          ...newHistory,
+          {
+            role: "model",
+            parts: [{ text: "This data chat can check inventory information, but it can't make inventory changes." }],
+          },
+        ]);
+        return;
+      }
+
+      // 2. Deterministic LOCAL intent classification (no Gemini call).
+      const dataRoute = classifyInventoryDataIntent(userMsg);
+
+      // 2a. A message that matched an approved intent's keywords but ALSO
+      // carried an explicit user-supplied threshold/window override
+      // ("below 5", "within 7 days") is answered deterministically here —
+      // ZERO Gemini calls, and it does NOT fall through to General Chat
+      // (which would let the user bypass grounding entirely just by
+      // adding a number) and does NOT silently answer using the fixed
+      // rule as if that matched what was actually asked.
+      if (dataRoute.kind === 'unsupported_parameter') {
+        setChatHistory([
+          ...newHistory,
+          { role: "model", parts: [{ text: buildUnsupportedParameterMessage(dataRoute.intent) }] },
+        ]);
+        return;
+      }
+
+      // 2b. Approved standard data intent -> grounded provider -> grounded response.
+      if (dataRoute.kind === 'matched') {
+        const result = resolveInventoryDataQuery(dataRoute.intent, rooms, isLoadingMain);
+
+        let dataChatResponseText: string;
+        if (result.status === 'unavailable') {
+          // Unknown/unavailable inventory state is never reinterpreted as
+          // a zero-result answer, and a matched grounded intent owns this
+          // request even when its provider is temporarily unavailable —
+          // it does not fall through to General Chat.
+          dataChatResponseText = "I couldn't check your inventory data right now.";
+        } else {
+          try {
+            // 3. Grounded Gemini phrasing — receives ONLY the question,
+            // the approved intent, and the already-minimized facts. Plain
+            // text only; never scanned for <ACTION> blocks.
+            dataChatResponseText = await chatWithGroundedInventoryFacts(userMsg, result.intent, result.facts);
+          } catch (groundedErr) {
+            // Mandatory deterministic fallback — never falls through to
+            // General Chat on a Gemini failure at this stage.
+            console.error('Grounded inventory response failed:', groundedErr);
+            dataChatResponseText = formatGroundedInventoryFallback(result.intent, result.facts);
+          }
+        }
+
+        setChatHistory([
+          ...newHistory,
+          { role: "model", parts: [{ text: dataChatResponseText }] },
+        ]);
+        return;
+      }
+      // ── End Phase-3 Data-Driven Chat ────────────────────────────────
+
       const simpleInventory = rooms.map(r => ({
         id: r.id,
         room: r.name,

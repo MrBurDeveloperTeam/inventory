@@ -265,3 +265,70 @@ export const chatWithGemini = async (
     return "I'm having trouble connecting to the Snabbb Assistant Intelligent servers right now. Please try again shortly.";
   }
 };
+
+// ─────────────────────────────────────────────────────────────
+// DATA-DRIVEN CHAT — grounded response phrasing ONLY.
+//
+// Architecturally SEPARATE from `chatWithGemini` above: this function is
+// called only AFTER a deterministic local intent router + deterministic
+// Inventory data provider have already produced minimized structured
+// facts (see aiExperience/dataChat/). Gemini here NEVER decides which
+// records are expired/low-stock/expiring-soon, never computes counts,
+// never picks the intent, and never receives the full inventory/purchase-
+// history/activity-log context `chatWithGemini` does — only the user's
+// question, the approved intent name, and the already-computed facts.
+//
+// CRITICAL: unlike `chatWithGemini`, this function THROWS on failure
+// (network error, empty response) rather than swallowing it into a
+// friendly fallback string — the caller (App.tsx) needs to distinguish
+// success from failure so it can render a deterministic
+// facts-only fallback instead (see
+// aiExperience/dataChat/utils/formatGroundedInventoryFallback.ts) rather
+// than ever falling through to the full General Chat pipeline.
+//
+// The returned text is plain assistant text ONLY. It is never scanned
+// for `<ACTION>` blocks and the system instruction explicitly forbids
+// emitting any — this function has no path to `receiveStock`/
+// `removeStock`/`moveItem` or any other mutation, even if the model
+// unexpectedly tried to emit one.
+export const chatWithGroundedInventoryFacts = async (
+  question: string,
+  intent: string,
+  facts: unknown,
+): Promise<string> => {
+  const systemInstruction = `
+    You are answering ONE specific Inventory data question using ONLY the structured facts provided below.
+
+    Approved intent: ${intent}
+    Facts (JSON, already computed by deterministic code — do not recompute or second-guess any number):
+    ${JSON.stringify(facts)}
+
+    Rules — follow ALL of these exactly:
+    - Only state facts present in the JSON above. Do not invent item names, room names, quantities, expiry dates, or reasons.
+    - Do not calculate, estimate, or infer any new count, total, or date beyond what is given.
+    - Do not infer or suggest purchasing/reordering actions.
+    - Do not claim any database change occurred — you cannot make changes, only report data.
+    - Do NOT output an <ACTION> block or any similar machine-readable tag under any circumstance.
+    - If the JSON's "count" is greater than "shownCount", you MUST clearly say only some matching items are shown (e.g. "Showing 5 of 12").
+    - If "count" (or the relevant total) is 0, clearly state that no matching items were found — do not imply otherwise.
+    - Be concise — a few sentences at most, plus a short list of the shown items if the facts include one.
+  `;
+
+  const contents = [
+    { role: "system", parts: [{ text: systemInstruction }] },
+    { role: "user", parts: [{ text: question }] },
+  ];
+
+  const response = await ai.models.generateContent({
+    model: modelId,
+    contents: contents,
+    config: {
+      responseMimeType: "text/plain",
+    },
+  });
+
+  const text = response.text;
+  if (!text || !text.trim()) throw new Error("Empty grounded response from Gemini");
+
+  return text.trim();
+};

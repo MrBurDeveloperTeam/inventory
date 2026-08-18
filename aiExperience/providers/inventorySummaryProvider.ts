@@ -29,7 +29,7 @@ export interface InventorySummaryFacts {
   expiringSoonCount: number;
 }
 
-type StatusBucket = 'ANOMALY' | 'EXPIRED' | 'OUT_OF_STOCK' | 'LOW_STOCK' | 'EXPIRING_SOON' | 'HEALTHY';
+export type StatusBucket = 'ANOMALY' | 'EXPIRED' | 'OUT_OF_STOCK' | 'LOW_STOCK' | 'EXPIRING_SOON' | 'HEALTHY';
 
 /**
  * Ordered, mutually-exclusive classification — matches the exact priority
@@ -41,8 +41,12 @@ type StatusBucket = 'ANOMALY' | 'EXPIRED' | 'OUT_OF_STOCK' | 'LOW_STOCK' | 'EXPI
  * so a negative quantity is neither "out of stock" nor "healthy"; it's
  * tracked separately so the caller can refuse to produce a false positive
  * summary rather than mask the anomaly as good news.
+ *
+ * Exported (Phase-3 addition — purely additive, no behavior change) so
+ * aiExperience/dataChat/providers/summaryDataProvider.ts can reuse this
+ * exact classification instead of reimplementing a second copy of it.
  */
-function classifyItem(item: InventorySnapshotItem, todayKey: string): StatusBucket {
+export function classifyItem(item: InventorySnapshotItem, todayKey: string): StatusBucket {
   if (item.usableQuantity < 0) return 'ANOMALY';
   if (item.usableQuantity > 0 && item.expiredBatch !== null) return 'EXPIRED';
   if (item.usableQuantity === 0) return 'OUT_OF_STOCK';
