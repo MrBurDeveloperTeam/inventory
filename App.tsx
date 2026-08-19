@@ -246,6 +246,19 @@ const App: React.FC = () => {
    * visibilitychange listeners never capture a stale closure.
    */
   const sendSessionEndRef = useRef<(useBeacon?: boolean) => void>(() => {});
+  /** The currentView value ('dashboard' | 'profile') currently being timed. Null when not tracking. */
+  const currentPageRef = useRef<string | null>(null);
+  /** Wall-clock timestamp (ms) when the user entered currentPageRef.current. Null when not tracking. */
+  const pageStartRef = useRef<number | null>(null);
+  /** Guards the page-view tracking effect against re-firing when currentView hasn't actually changed. */
+  const prevTrackedViewRef = useRef<string | null>(null);
+  /**
+   * Always holds the latest sendPageView implementation so pagehide /
+   * visibilitychange listeners never capture a stale closure. Same pattern
+   * as sendSessionEndRef above, one level down: session = whole login,
+   * page = time on 'dashboard' vs. 'profile' within that session.
+   */
+  const sendPageViewRef = useRef<(useBeacon?: boolean) => void>(() => {});
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
@@ -690,9 +703,21 @@ useEffect(() => {
   // sendSessionEndRef.current is updated on every render so the handler always
   // closes over the latest user/session state without needing to be in deps.
   useEffect(() => {
-    const handlePageHide = () => sendSessionEndRef.current(true);
+    const handlePageHide = () => {
+      sendPageViewRef.current(true);
+      sendSessionEndRef.current(true);
+    };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') sendSessionEndRef.current(true);
+      if (document.visibilityState === 'hidden') {
+        sendPageViewRef.current(true);
+        sendSessionEndRef.current(true);
+      } else if (document.visibilityState === 'visible' && currentPageRef.current && !pageStartRef.current) {
+        // Resume the page timer so backgrounding the tab and coming back
+        // doesn't silently drop the time spent after returning. (The
+        // session timer intentionally does NOT resume this way — that's
+        // existing behavior above, unchanged.)
+        pageStartRef.current = Date.now();
+      }
     };
     window.addEventListener('pagehide', handlePageHide);
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -701,6 +726,31 @@ useEffect(() => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+
+  // Page-view duration tracking: start/stop the timer whenever currentView
+  // changes ('dashboard' <-> 'profile' — the app's only two top-level
+  // views), and whenever the user logs in/out. Mirrors session_end one
+  // level down: session = the whole login, page = time on one view within
+  // it. See sendPageViewRef.current below for what gets sent.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      if (prevTrackedViewRef.current) {
+        sendPageViewRef.current();
+      }
+      prevTrackedViewRef.current = null;
+      currentPageRef.current = null;
+      pageStartRef.current = null;
+      return;
+    }
+    if (prevTrackedViewRef.current !== currentView) {
+      if (prevTrackedViewRef.current) {
+        sendPageViewRef.current(); // flush time spent on the previous view
+      }
+      currentPageRef.current = currentView;
+      pageStartRef.current = Date.now();
+      prevTrackedViewRef.current = currentView;
+    }
+  }, [currentView, isAuthenticated]);
 
   // Invitation Logic
   useEffect(() => {
@@ -1490,8 +1540,62 @@ sendSessionEndRef.current = (useBeacon = false) => {
   }
 };
 
+// ─── Page-view duration tracking ─────────────────────────────────────────────
+// Assign on every render so event listeners always close over the latest state.
+sendPageViewRef.current = (useBeacon = false) => {
+  if (!pageStartRef.current || !currentPageRef.current) return; // nothing in progress
+  const pagePath = currentPageRef.current;
+  const durationSeconds = Math.round((Date.now() - pageStartRef.current) / 1000);
+  pageStartRef.current = null; // zero out to prevent double-send
+  if (durationSeconds < 1) return; // ignore instant navigations (e.g. accidental double-click)
+
+  const details = `Viewed ${pagePath} for ${durationSeconds}s`;
+  const logId = generateId();
+  const timestamp = new Date().toISOString();
+
+  // Odoo sync only — unlike session_end, page views are pure analytics
+  // (not an inventory operation), so they're intentionally NOT mirrored
+  // into the local Supabase inventory_activity_logs audit trail that
+  // clinic staff see in the app's own Activity Log / History UI.
+  const odooPayload = {
+    external_ref: `activity-${logId}`,
+    actor_email: user?.email || null,
+    actor_name: user?.name || null,
+    supabase_user_id: supabaseUserId || null,
+    action: 'page_view',
+    room_id: 'page',
+    room_name: pagePath,
+    details,
+    occurred_at: timestamp,
+    page_path: pagePath,
+    page_duration_seconds: durationSeconds,
+  };
+
+  if (useBeacon && navigator.sendBeacon) {
+    navigator.sendBeacon(
+      '/api/inventory/activity',
+      new Blob([JSON.stringify(odooPayload)], { type: 'application/json' })
+    );
+  } else {
+    logActivityToOdoo({
+      logId,
+      actorEmail: user?.email || null,
+      supabaseUserId: supabaseUserId || null,
+      actorName: user?.name || null,
+      action: 'page_view',
+      roomId: 'page',
+      roomName: pagePath,
+      details,
+      occurredAt: timestamp,
+      pagePath,
+      pageDurationSeconds: durationSeconds,
+    }).catch((err: any) => console.error('logActivityToOdoo threw unexpectedly:', err));
+  }
+};
+
 const handleLogout = async () => {
-  // Record session duration before signing out
+  // Record page + session duration before signing out
+  sendPageViewRef.current();
   sendSessionEndRef.current();
   try {
     await api.post('/logout');

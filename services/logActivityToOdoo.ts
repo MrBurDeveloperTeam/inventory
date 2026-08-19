@@ -40,6 +40,11 @@ export interface ActivityOdooPayload {
   after_value?: string | null;
   occurred_at: string;            // ISO timestamp
   session_duration_seconds?: number; // populated only on session_end events
+  page_path?: string;                // populated only on page_view events — the in-app
+                                      // route/screen this event is about (e.g. 'dashboard',
+                                      // 'profile'), not an Odoo URL
+  page_duration_seconds?: number;    // populated only on page_view events — seconds spent
+                                      // on page_path before navigating away / backgrounding
 }
 
 export async function logActivityToOdoo(params: {
@@ -55,6 +60,8 @@ export async function logActivityToOdoo(params: {
   afterValue?: string | null;
   occurredAt: string;
   sessionDurationSeconds?: number; // optional — only pass on session_end events
+  pagePath?: string;               // optional — only pass on page_view events
+  pageDurationSeconds?: number;    // optional — only pass on page_view events
 }): Promise<boolean> {
   if (!params.actorEmail) {
     // Nothing to resolve the Odoo partner by — skip rather than send a
@@ -77,6 +84,12 @@ export async function logActivityToOdoo(params: {
     occurred_at: params.occurredAt,
     ...(params.sessionDurationSeconds !== undefined && {
       session_duration_seconds: params.sessionDurationSeconds,
+    }),
+    ...(params.pagePath !== undefined && {
+      page_path: params.pagePath,
+    }),
+    ...(params.pageDurationSeconds !== undefined && {
+      page_duration_seconds: params.pageDurationSeconds,
     }),
   };
 
