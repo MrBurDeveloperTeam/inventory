@@ -45,6 +45,10 @@ export interface ActivityOdooPayload {
                                       // 'profile'), not an Odoo URL
   page_duration_seconds?: number;    // populated only on page_view events — seconds spent
                                       // on page_path before navigating away / backgrounding
+  source_tab?: string;               // which MasterInventory tab (All Inventory, Receive
+                                      // Stock, Purchase History, Usage Stats, Expiring Items)
+                                      // the user was on when this event fired — lets activity
+                                      // be filtered per tab in Odoo, not just per room
 }
 
 export async function logActivityToOdoo(params: {
@@ -62,6 +66,7 @@ export async function logActivityToOdoo(params: {
   sessionDurationSeconds?: number; // optional — only pass on session_end events
   pagePath?: string;               // optional — only pass on page_view events
   pageDurationSeconds?: number;    // optional — only pass on page_view events
+  sourceTab?: string;              // optional — which app tab this event happened on
 }): Promise<boolean> {
   if (!params.actorEmail) {
     // Nothing to resolve the Odoo partner by — skip rather than send a
@@ -90,6 +95,9 @@ export async function logActivityToOdoo(params: {
     }),
     ...(params.pageDurationSeconds !== undefined && {
       page_duration_seconds: params.pageDurationSeconds,
+    }),
+    ...(params.sourceTab !== undefined && {
+      source_tab: params.sourceTab,
     }),
   };
 

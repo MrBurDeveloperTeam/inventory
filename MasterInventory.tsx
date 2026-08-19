@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Package,
@@ -47,6 +47,14 @@ interface MasterInventoryProps {
   onUpdateBatch?: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
   onRestoreRoom?: (roomName: string, itemSnapshot?: string) => void;
   onAssignTbaItem?: (itemId: string, toRoomId: string) => void;
+  /**
+   * Fired whenever the internal tab bar (All Inventory / Receive Stock /
+   * Purchase History / Usage Stats / Expiring Items) changes, including the
+   * initial mount. Lets the parent (App.tsx) attribute page-view duration
+   * and activity-log events to the specific tab the user is on, without
+   * lifting activeTab's actual state management out of this component.
+   */
+  onTabChange?: (tab: 'all' | 'receive' | 'history' | 'expiring' | 'analytics') => void;
   readOnly?: boolean;
 }
 
@@ -63,10 +71,18 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   onUpdateBatch,
   onRestoreRoom,
   onAssignTbaItem,
+  onTabChange,
   readOnly = false
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Report every tab change (including the initial mount) up to the parent
+  // so it can track per-tab page-view duration and tag activity logs with
+  // the tab they happened on. See onTabChange prop doc above.
+  useEffect(() => {
+    onTabChange?.(activeTab);
+  }, [activeTab]);
 
   // History Filter State
   const [historyCategory, setHistoryCategory] = useState('all');

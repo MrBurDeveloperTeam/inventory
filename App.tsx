@@ -200,6 +200,19 @@ const adjustBatchesWithDelta = (item: Item, delta: number) => {
   return { ...normalized, batches, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
 };
 
+/**
+ * Human-readable labels for MasterInventory's internal tabs, matching what's
+ * actually printed on each tab button. Used to build readable page_path /
+ * source_tab values for Odoo activity tracking instead of raw keys like 'all'.
+ */
+const DASHBOARD_TAB_LABELS: Record<string, string> = {
+  all: 'All Inventory',
+  receive: 'Receive Stock',
+  history: 'Purchase History',
+  analytics: 'Usage Stats',
+  expiring: 'Expiring Items',
+};
+
 const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -222,6 +235,15 @@ const App: React.FC = () => {
   const [adminDataError, setAdminDataError] = useState<string | null>(null);
   const [finalProfile, setFinalProfile] = useState<ProfileRow | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'profile'>('dashboard');
+  /**
+   * Which tab is active inside MasterInventory's own internal tab bar
+   * (All Inventory / Receive Stock / Purchase History / Usage Stats /
+   * Expiring Items). Lifted up here — via the onTabChange prop passed to
+   * <MasterInventory> below — purely so page-view duration tracking and
+   * activity logging can see it; MasterInventory still owns the actual
+   * activeTab state and UI.
+   */
+  const [dashboardTab, setDashboardTab] = useState<string>('all');
 
   const [isLocked, setIsLocked] = useState(false);
   const [isAddMode, setIsAddMode] = useState(false);
@@ -727,11 +749,19 @@ useEffect(() => {
     };
   }, []);
 
-  // Page-view duration tracking: start/stop the timer whenever currentView
-  // changes ('dashboard' <-> 'profile' — the app's only two top-level
-  // views), and whenever the user logs in/out. Mirrors session_end one
-  // level down: session = the whole login, page = time on one view within
-  // it. See sendPageViewRef.current below for what gets sent.
+  // Page-view duration tracking: start/stop the timer whenever the
+  // "effective page" changes, and whenever the user logs in/out. Mirrors
+  // session_end one level down: session = the whole login, page = time on
+  // one view within it. See sendPageViewRef.current below for what gets sent.
+  //
+  // The effective page is currentView ('dashboard' <-> 'profile') further
+  // split by dashboardTab while on 'dashboard', so each of MasterInventory's
+  // own tabs (All Inventory / Receive Stock / Purchase History / Usage
+  // Stats / Expiring Items) is tracked as its own page rather than all
+  // being lumped into one 'dashboard' entry.
+  const effectivePage = currentView === 'dashboard'
+    ? `Inventory / ${DASHBOARD_TAB_LABELS[dashboardTab] || dashboardTab}`
+    : 'Profile';
   useEffect(() => {
     if (!isAuthenticated) {
       if (prevTrackedViewRef.current) {
@@ -742,15 +772,15 @@ useEffect(() => {
       pageStartRef.current = null;
       return;
     }
-    if (prevTrackedViewRef.current !== currentView) {
+    if (prevTrackedViewRef.current !== effectivePage) {
       if (prevTrackedViewRef.current) {
-        sendPageViewRef.current(); // flush time spent on the previous view
+        sendPageViewRef.current(); // flush time spent on the previous page
       }
-      currentPageRef.current = currentView;
+      currentPageRef.current = effectivePage;
       pageStartRef.current = Date.now();
-      prevTrackedViewRef.current = currentView;
+      prevTrackedViewRef.current = effectivePage;
     }
-  }, [currentView, isAuthenticated]);
+  }, [effectivePage, isAuthenticated]);
 
   // Invitation Logic
   useEffect(() => {
@@ -2114,6 +2144,10 @@ const handleLogout = async () => {
     // Best-effort sync to Odoo. Never awaited by callers and never allowed
     // to throw — Odoo being slow/unreachable must not block the UI or the
     // Supabase write above, which remains the source of truth locally.
+    // sourceTab is Odoo-only (like pagePath/sessionDurationSeconds below) —
+    // it records which MasterInventory tab the user was on when this action
+    // happened, so activity can be filtered per tab in Odoo, not just per
+    // room. Not mirrored into the local Supabase audit trail above.
     logActivityToOdoo({
       logId: newLogId,
       actorEmail: user?.email || null,
@@ -2127,6 +2161,7 @@ const handleLogout = async () => {
       afterValue: options?.afterValue,
       occurredAt: timestamp,
       sessionDurationSeconds: options?.sessionDurationSeconds,
+      sourceTab: currentView === 'dashboard' ? (DASHBOARD_TAB_LABELS[dashboardTab] || dashboardTab) : undefined,
     }).catch((err) => console.error('logActivityToOdoo threw unexpectedly:', err));
   };
 
@@ -3446,6 +3481,7 @@ const handleLogout = async () => {
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
+                onTabChange={setDashboardTab}
                 readOnly={!canEditItems || isLoadingMain}
               />
             </>
