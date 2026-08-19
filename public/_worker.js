@@ -16,7 +16,7 @@ const ODOO_THEME_URL = 'https://mrbur.odoo.com/api/user/theme';
 // repo) — it must be installed on the mrbur.odoo.com database before this
 // URL will work. See ACTIVITY_TRACKER_ODOO_SYNC.md for install steps.
 const ODOO_ACTIVITY_URL = 'https://mrbur.odoo.com/api/inventory/activity';
-const ACTIVITY_ACTIONS = new Set(['add', 'remove', 'delete', 'transfer_out', 'transfer_in', 'edit', 'receive', 'session_end']);
+const ACTIVITY_ACTIONS = new Set(['add', 'remove', 'delete', 'transfer_out', 'transfer_in', 'edit', 'receive', 'session_end', 'page_view']);
 const COOKIE_NAME    = 'snabbb-theme';
 const COOKIE_DOMAIN  = '.snabbb.com';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
