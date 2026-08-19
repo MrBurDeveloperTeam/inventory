@@ -239,6 +239,13 @@ const App: React.FC = () => {
   const metaSyncTimer = useRef<number | null>(null);
   /** Ref always holding the latest TBA virtual room — survives loadInventory resets. */
   const tbaRoomRef = useRef<Room | null>(null);
+  /** Wall-clock timestamp (ms) when the current user session started. Null when logged out. */
+  const sessionStartRef = useRef<number | null>(null);
+  /**
+   * Always holds the latest sendSessionEnd implementation so pagehide /
+   * visibilitychange listeners never capture a stale closure.
+   */
+  const sendSessionEndRef = useRef<(useBeacon?: boolean) => void>(() => {});
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
@@ -679,6 +686,22 @@ useEffect(() => {
     };
   }, []);
 
+  // Send a session_end event when the user navigates away or closes the tab.
+  // sendSessionEndRef.current is updated on every render so the handler always
+  // closes over the latest user/session state without needing to be in deps.
+  useEffect(() => {
+    const handlePageHide = () => sendSessionEndRef.current(true);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') sendSessionEndRef.current(true);
+    };
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   // Invitation Logic
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -926,6 +949,8 @@ useEffect(() => {
 
     setIsAuthenticated(true);
     setIsBootstrapped(true);
+    // Record when the session started so we can compute duration on logout/close.
+    sessionStartRef.current = Date.now();
   };
 
   useEffect(() => {
@@ -1399,7 +1424,75 @@ useEffect(() => {
     }
   };
 
+// ─── Session-end tracking ────────────────────────────────────────────────────
+// Assign on every render so event listeners always close over the latest state.
+sendSessionEndRef.current = (useBeacon = false) => {
+  if (!sessionStartRef.current) return; // no session or already sent
+  const durationSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
+  sessionStartRef.current = null; // zero out to prevent double-send
+
+  const h = Math.floor(durationSeconds / 3600);
+  const m = Math.floor((durationSeconds % 3600) / 60);
+  const s = durationSeconds % 60;
+  const durationStr = h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+  const details = `Session ended after ${durationStr}`;
+  const logId = generateId();
+  const timestamp = new Date().toISOString();
+
+  // Persist to Supabase (skip on page-close — fetch is unreliable there)
+  if (!useBeacon && currentInventoryOwnerId) {
+    supabase.from('inventory_activity_logs').insert({
+      id: logId,
+      user_id: currentInventoryOwnerId,
+      room_id: 'session',
+      room_name: 'Session',
+      action: 'session_end',
+      details,
+      created_at: timestamp,
+      actor_id: supabaseUserId || null,
+    }).then(({ error }: { error: any }) => {
+      if (error) console.error('Failed to persist session_end log:', error);
+    });
+  }
+
+  // Best-effort Odoo sync — use sendBeacon on page close, fetch otherwise
+  const odooPayload = {
+    external_ref: `activity-${logId}`,
+    actor_email: user?.email || null,
+    actor_name: user?.name || null,
+    supabase_user_id: supabaseUserId || null,
+    action: 'session_end',
+    room_id: 'session',
+    room_name: 'Session',
+    details,
+    occurred_at: timestamp,
+    session_duration_seconds: durationSeconds,
+  };
+
+  if (useBeacon && navigator.sendBeacon) {
+    navigator.sendBeacon(
+      '/api/inventory/activity',
+      new Blob([JSON.stringify(odooPayload)], { type: 'application/json' })
+    );
+  } else {
+    logActivityToOdoo({
+      logId,
+      actorEmail: user?.email || null,
+      supabaseUserId: supabaseUserId || null,
+      actorName: user?.name || null,
+      action: 'session_end',
+      roomId: 'session',
+      roomName: 'Session',
+      details,
+      occurredAt: timestamp,
+      sessionDurationSeconds: durationSeconds,
+    }).catch((err: any) => console.error('logActivityToOdoo threw unexpectedly:', err));
+  }
+};
+
 const handleLogout = async () => {
+  // Record session duration before signing out
+  sendSessionEndRef.current();
   try {
     await api.post('/logout');
     await supabase.auth.signOut();
@@ -1875,7 +1968,7 @@ const handleLogout = async () => {
     roomName: string,
     action: ActivityLog['action'],
     details: string,
-    options?: { beforeValue?: string; afterValue?: string }
+    options?: { beforeValue?: string; afterValue?: string; sessionDurationSeconds?: number }
   ) => {
     const timestamp = new Date().toISOString();
     const newLogId = generateId();
@@ -1929,6 +2022,7 @@ const handleLogout = async () => {
       beforeValue: options?.beforeValue,
       afterValue: options?.afterValue,
       occurredAt: timestamp,
+      sessionDurationSeconds: options?.sessionDurationSeconds,
     }).catch((err) => console.error('logActivityToOdoo threw unexpectedly:', err));
   };
 

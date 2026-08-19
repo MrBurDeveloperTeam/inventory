@@ -16,7 +16,7 @@ const ODOO_THEME_URL = 'https://mrbur.odoo.com/api/user/theme';
 // repo) — it must be installed on the mrbur.odoo.com database before this
 // URL will work. See ACTIVITY_TRACKER_ODOO_SYNC.md for install steps.
 const ODOO_ACTIVITY_URL = 'https://mrbur.odoo.com/api/inventory/activity';
-const ACTIVITY_ACTIONS = new Set(['add', 'remove', 'delete', 'transfer_out', 'transfer_in', 'edit', 'receive']);
+const ACTIVITY_ACTIONS = new Set(['add', 'remove', 'delete', 'transfer_out', 'transfer_in', 'edit', 'receive', 'session_end']);
 const COOKIE_NAME    = 'snabbb-theme';
 const COOKIE_DOMAIN  = '.snabbb.com';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
@@ -393,13 +393,19 @@ async function handleActivityRequest(request) {
     before_value = null,
     after_value = null,
     occurred_at,
+    session_duration_seconds = 0,
   } = body;
 
-  if (!external_ref || !action || !room_id || !details || !occurred_at) {
+  if (!external_ref || !action || !details || !occurred_at) {
     return jsonResponse(
       { ok: false, error: 'Missing required field(s): external_ref, action, room_id, details, occurred_at' },
       400
     );
+  }
+
+  // room_id is required for all actions except session_end
+  if (action !== 'session_end' && !room_id) {
+    return jsonResponse({ ok: false, error: 'Missing required field: room_id' }, 400);
   }
 
   if (!ACTIVITY_ACTIONS.has(action)) {
@@ -428,12 +434,13 @@ async function handleActivityRequest(request) {
         supabase_user_id,
         actor_name,
         action,
-        room_id,
+        room_id: room_id || null,
         room_name: room_name || null,
         details,
         before_value,
         after_value,
         occurred_at,
+        session_duration_seconds,
       }),
     });
 

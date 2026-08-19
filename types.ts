@@ -43,7 +43,7 @@ export interface ActivityLog {
   timestamp: string;
   roomId: string;
   roomName: string;
-  action: 'add' | 'remove' | 'delete' | 'transfer_out' | 'transfer_in' | 'edit' | 'receive';
+  action: 'add' | 'remove' | 'delete' | 'transfer_out' | 'transfer_in' | 'edit' | 'receive' | 'session_end';
   details: string;
   actorId?: string;
   actorName?: string;

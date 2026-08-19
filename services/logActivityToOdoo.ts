@@ -28,8 +28,8 @@ import type { ActivityLog } from '../types';
 const ACTIVITY_ENDPOINT = '/api/inventory/activity';
 
 export interface ActivityOdooPayload {
-  external_ref: string;       // idempotency key so retries don't double-log in Odoo
-  actor_email: string | null; // used by snabbb-worker/Odoo to resolve the partner
+  external_ref: string;           // idempotency key so retries don't double-log in Odoo
+  actor_email: string | null;     // used by snabbb-worker/Odoo to resolve the partner
   actor_name: string | null;
   supabase_user_id: string | null;
   action: ActivityLog['action'];
@@ -38,7 +38,8 @@ export interface ActivityOdooPayload {
   details: string;
   before_value?: string | null;
   after_value?: string | null;
-  occurred_at: string;        // ISO timestamp
+  occurred_at: string;            // ISO timestamp
+  session_duration_seconds?: number; // populated only on session_end events
 }
 
 export async function logActivityToOdoo(params: {
@@ -53,6 +54,7 @@ export async function logActivityToOdoo(params: {
   beforeValue?: string | null;
   afterValue?: string | null;
   occurredAt: string;
+  sessionDurationSeconds?: number; // optional — only pass on session_end events
 }): Promise<boolean> {
   if (!params.actorEmail) {
     // Nothing to resolve the Odoo partner by — skip rather than send a
@@ -73,6 +75,9 @@ export async function logActivityToOdoo(params: {
     before_value: params.beforeValue ?? null,
     after_value: params.afterValue ?? null,
     occurred_at: params.occurredAt,
+    ...(params.sessionDurationSeconds !== undefined && {
+      session_duration_seconds: params.sessionDurationSeconds,
+    }),
   };
 
   try {
