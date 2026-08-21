@@ -76,12 +76,8 @@ function compareForSelection(a: ExpiringSoonSource, b: ExpiringSoonSource): numb
   return a.item.itemId < b.item.itemId ? -1 : a.item.itemId > b.item.itemId ? 1 : 0;
 }
 
-export function evaluateExpiringSoon(
-  snapshot: InventorySnapshotItem[],
-  now: Date = new Date()
-): InsightCandidate<ExpiringSoonInventoryFacts> | null {
+function collectSources(snapshot: InventorySnapshotItem[], now: Date): ExpiringSoonSource[] {
   const todayKey = toCalendarDateKey(now);
-
   const sources: ExpiringSoonSource[] = [];
   for (const item of snapshot) {
     // Explicit — `upcomingExpiryBatch !== null` only proves at least one
@@ -102,10 +98,10 @@ export function evaluateExpiringSoon(
 
     sources.push({ item, daysRemaining });
   }
+  return sources;
+}
 
-  if (sources.length === 0) return null;
-
-  const winner = [...sources].sort(compareForSelection)[0];
+function buildCandidateFromSource(winner: ExpiringSoonSource): InsightCandidate<ExpiringSoonInventoryFacts> {
   const upcoming = winner.item.upcomingExpiryBatch as NonNullable<InventorySnapshotItem['upcomingExpiryBatch']>;
   const safeName = safeItemName(winner.item.itemName);
   const message = buildMessage(safeName, winner.daysRemaining);
@@ -127,8 +123,31 @@ export function evaluateExpiringSoon(
     facts,
     messageTemplate: '{itemName} will expire in {daysRemaining} days.',
     message,
+    action: { label: 'View Expiring Soon', view: 'inventory_expiring' },
     dedupeKey: `inventory_expiring_soon:${winner.item.itemId}:batch:${upcoming.batchId}:${upcoming.expiryDate}:window${EXPIRING_SOON_WINDOW_DAYS}`,
     sourceRecordId: winner.item.itemId,
     evaluatedAt: new Date().toISOString(),
   };
+}
+
+export function evaluateExpiringSoon(
+  snapshot: InventorySnapshotItem[],
+  now: Date = new Date()
+): InsightCandidate<ExpiringSoonInventoryFacts> | null {
+  const sources = collectSources(snapshot, now);
+  if (sources.length === 0) return null;
+
+  const winner = [...sources].sort(compareForSelection)[0];
+  return buildCandidateFromSource(winner);
+}
+
+/** Additive ordered pool — see expiredInventoryProvider.ts's
+ *  evaluateExpiredInventoryCandidates for the same design intent.
+ *  `evaluateExpiringSoonCandidates(snapshot)[0]` is always identical to
+ *  `evaluateExpiringSoon(snapshot)` (same `now`/window/exclusions). */
+export function evaluateExpiringSoonCandidates(
+  snapshot: InventorySnapshotItem[],
+  now: Date = new Date()
+): InsightCandidate<ExpiringSoonInventoryFacts>[] {
+  return [...collectSources(snapshot, now)].sort(compareForSelection).map(buildCandidateFromSource);
 }

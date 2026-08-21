@@ -3,6 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, ChevronLeft, X } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { getPetOption, normalizePetId } from '../VirtualPet/petOptions';
+import {
+  markDialogueDismissed,
+  buildDialogueDismissalKey,
+} from '../aiExperience/petDialogue/sessionDedupe';
+import { selectFirstEligibleDialogueCandidate } from '../aiExperience/petDialogue/selectDialogueCandidate';
 
 const MALLOW_FRAME_WIDTH = 192;
 const MALLOW_FRAME_HEIGHT = 208;
@@ -124,7 +129,7 @@ function MallowMascotSprite({
   );
 }
 
-export default function CatMascot({ onCatClick, disabled = false }) {
+export default function CatMascot({ onCatClick, disabled = false, personalizedInsightState = null }) {
   const restoredMascotStateRef = useRef(readMascotSessionState());
   const [catPos, setCatPos] = useState(() => {
     const restored = restoredMascotStateRef.current;
@@ -152,6 +157,19 @@ export default function CatMascot({ onCatClick, disabled = false }) {
   // Post-Login Intro no longer permanently blocks the Welcome Back dialog, or vice versa.
   const currentDialogType = useRef(null);
   const dismissedDialogs = useRef(new Set());
+  // In-memory, mount-scoped ONLY — never persisted (sessionStorage
+  // survives a same-tab reload, which was the bug this replaces: a
+  // candidate merely SHOWN, never explicitly Closed, must reappear on the
+  // next reload, not be silently suppressed forever). Purpose is
+  // otherwise unchanged from the old sessionStorage "seen" mark: prevent
+  // the SAME candidate from repeatedly reopening within this one
+  // activation (e.g. a source re-render/refresh re-triggering
+  // arbitration) — see tryActivateDialog's own comment. Resets to empty
+  // on every fresh mount, which a full page reload always is. Explicit
+  // dismissal (Close) remains in localStorage via markDialogueDismissed/
+  // isDialogueDismissed — that persistence is unaffected and still
+  // correctly survives reload.
+  const shownCandidateKeysRef = useRef(new Set());
   // Holds the auto-close duration for a prepared 'welcomeBack' dialog, set when
   // its content is fetched but only ever consumed by tryActivateDialog() at the
   // moment it actually shows — see the comment on tryActivateDialog for why.
@@ -177,6 +195,46 @@ export default function CatMascot({ onCatClick, disabled = false }) {
   // previous session can never apply its result (dialog steps, dialog type)
   // to a later session or a different user.
   const initDialogRequestIdRef = useRef(0);
+  // The already-resolved Phase-2 candidate (from App.tsx via the
+  // personalizedInsightState prop) while it's the active dialogue —
+  // mirrored into React state (below) for render-time reads, following the
+  // same ref+state split already used for isDialogActive.
+  const activeCandidateRef = useRef(null);
+  const [activeCandidate, setActiveCandidate] = useState(null);
+  // App.tsx's existing action handler (view/tab navigation only — see
+  // handleInventoryInsightAction) for the candidate actually adopted,
+  // captured at adoption time (not a fresh read of the prop), since the
+  // dialogue persists even if personalizedInsightState has since gone back
+  // to null/not_ready or moved on to a different candidate.
+  const activeOnActionRef = useRef(null);
+  // Synchronous snapshot of the personalizedInsightState prop's current
+  // value. Props are already synchronously current inside effects/
+  // handlers, but this ref exists so the REACTIVE arbitration effect below
+  // (which fires independently of initDialog, whenever the prop changes)
+  // and initDialog()'s own one-shot async closure both read from one
+  // place, matching the structural pattern of the other five
+  // implementations. Three-way: null (no candidate published — e.g. the
+  // very first render before App.tsx's own state settles) |
+  // {status:'not_ready'} (App.tsx's isLoadingMain is still true) |
+  // {status:'ready', candidate} (loading finished; candidate may itself be
+  // null if the resolver legitimately found nothing).
+  const personalizedInsightStateRef = useRef(personalizedInsightState);
+  useEffect(() => {
+    personalizedInsightStateRef.current = personalizedInsightState;
+  }, [personalizedInsightState]);
+  // initDialog()'s fetched session metadata, cached here so the REACTIVE
+  // arbitration effect (which runs independently of initDialog, whenever
+  // the personalizedInsightState prop changes) can reuse it for Welcome
+  // Back's [name] placeholder without a second supabase.auth.getSession()
+  // call.
+  const userMetaRef = useRef(null);
+  const userEmailRef = useRef(null);
+  // Guards against arbitrateReturningUser being entered twice concurrently
+  // — set as soon as a path is actually committed to. Reset alongside
+  // dismissedDialogs/currentDialogType on the logged-out -> logged-in
+  // session boundary below, since that's a genuinely new activation cycle
+  // for this never-unmounted component instance.
+  const arbitrationStartedRef = useRef(false);
 
   const clearWelcomeBackAutoCloseTimer = () => {
     if (autoCloseTimerRef.current !== null) {
@@ -276,13 +334,33 @@ export default function CatMascot({ onCatClick, disabled = false }) {
     }
   };
 
-  const closeDialog = () => {
+  // persistDismissal defaults to true (Close button and Cat-click-while-open
+  // both count as this tab actually finishing with the dialogue, so they
+  // write the cross-tab localStorage dismissal for a 'personalized'
+  // dialogue). The one caller that must NOT write again is the cross-tab
+  // `storage` event listener below — the dismissal key is already present
+  // in shared localStorage (that's what triggered the event), so
+  // re-writing it here would be a pointless redundant write;
+  // persistDismissal: false keeps that handler a pure local-UI suppression.
+  const closeDialog = (options) => {
+    const persistDismissal = options?.persistDismissal ?? true;
     const dialogType = currentDialogType.current;
     if (dialogType) {
       dismissedDialogs.current.add(dialogType);
     }
+    if (persistDismissal && dialogType === 'personalized') {
+      const candidate = activeCandidateRef.current;
+      if (candidate && currentUserId) {
+        markDialogueDismissed(currentUserId, candidate.dedupeKey);
+      }
+    }
     isDialogActiveRef.current = false;
     setIsDialogActive(false);
+    if (dialogType === 'personalized') {
+      activeCandidateRef.current = null;
+      activeOnActionRef.current = null;
+      setActiveCandidate(null);
+    }
     saveMascotSessionState({
       ...catPos,
       facingLeft,
@@ -316,8 +394,149 @@ export default function CatMascot({ onCatClick, disabled = false }) {
 
     if (dialogType === 'welcomeBack') {
       startWelcomeBackAutoCloseTimer();
+    } else if (dialogType === 'personalized') {
+      // Show-time mark: in-memory, THIS MOUNT ONLY (see
+      // shownCandidateKeysRef's own doc — never sessionStorage). Merely
+      // displaying the candidate must never suppress it in another tab,
+      // nor survive a reload — only an explicit Close does either (see
+      // closeDialog above, which persists to localStorage).
+      const candidate = activeCandidateRef.current;
+      if (candidate) {
+        shownCandidateKeysRef.current.add(candidate.dedupeKey);
+      }
     }
   };
+
+  // Deterministic returning-user arbitration — the actual Personalized vs
+  // Welcome Back decision. Reads the personalizedInsightState prop's
+  // explicit three-way value (never treats a bare `null`/`not_ready`
+  // candidate as proof of readiness) and only ever decides once per
+  // activation, regardless of data-fetch speed:
+  //
+  //   state === null             -> no candidate published yet (very first
+  //                                  render before App.tsx's own state has
+  //                                  settled) — don't wait, proceed to
+  //                                  Welcome Back now via
+  //                                  prepareWelcomeBackDialog (already
+  //                                  extracted, reused verbatim).
+  //   state.status === 'not_ready' -> App.tsx's isLoadingMain is still
+  //                                  true — leave the decision unresolved;
+  //                                  this function will be called again by
+  //                                  the reactive effect below once the
+  //                                  prop changes.
+  //   state.status === 'ready'   -> inventory has genuinely finished
+  //                                  loading:
+  //     candidate exists & eligible (not seen/dismissed) -> Personalized.
+  //     candidate is null, OR exists but already seen/dismissed
+  //                                -> existing Welcome Back, unchanged.
+  //
+  // Called both from initDialog()'s three "intro is not due" call sites
+  // (already-shown-intro, and the two same-login "intro resolved to
+  // nothing" fallbacks) using whatever's on the prop at that exact moment,
+  // and reactively whenever the prop value changes. Takes explicit
+  // userMeta/userEmail/requestId params (rather than closing over
+  // initDialog's locals) for the same staleness-safety reason
+  // prepareWelcomeBackDialog itself already does — see its own header.
+  const arbitrateReturningUser = async (uid, userMeta, userEmail, requestId) => {
+    if (disabled || !uid) return;
+    if (currentDialogType.current) return;
+    if (arbitrationStartedRef.current) return;
+    if (initDialogRequestIdRef.current !== requestId) return;
+
+    const state = personalizedInsightStateRef.current;
+
+    if (state === null || state === undefined) {
+      arbitrationStartedRef.current = true;
+      await prepareWelcomeBackDialog(uid, userMeta, userEmail, requestId);
+      return;
+    }
+
+    if (state.status === 'not_ready') {
+      // Genuinely unresolved — do nothing yet. Not a decision, so
+      // arbitrationStartedRef stays false and this may be called again.
+      return;
+    }
+
+    // status === 'ready'
+    //
+    // Dismissal-aware pool scan (starvation fix): state.candidates is the
+    // ordered pool across all record-specific families plus Inventory
+    // Summary (see App.tsx / buildInventoryDialoguePool.ts), in the exact
+    // same family-priority order the pure business resolver already uses.
+    // Scanning it here for the first not-shown-this-mount/not-dismissed
+    // entry means dismissing e.g. Expired item A reveals a still-eligible
+    // Expired item B on a later activation, instead of incorrectly
+    // falling straight to Welcome Back just because A itself was already
+    // suppressed. "Shown this mount" comes from shownCandidateKeysRef
+    // (in-memory, resets on reload); "dismissed" comes from
+    // isDialogueDismissed (localStorage, survives reload) — see
+    // selectDialogueCandidate.ts's own doc for why these are now two
+    // separate signals rather than one persisted-storage composition.
+    // Falls back to the legacy single `state.candidate` when `candidates`
+    // isn't present, for defensive compatibility only.
+    const pool = Array.isArray(state.candidates) ? state.candidates : (state.candidate ? [state.candidate] : []);
+    const candidate = selectFirstEligibleDialogueCandidate(uid, pool, shownCandidateKeysRef.current);
+    if (candidate?.dedupeKey) {
+      arbitrationStartedRef.current = true;
+      activeCandidateRef.current = candidate;
+      activeOnActionRef.current = state.onAction ?? null;
+      setActiveCandidate(candidate);
+      currentDialogType.current = 'personalized';
+      tryActivateDialog();
+      return;
+    }
+
+    arbitrationStartedRef.current = true;
+    await prepareWelcomeBackDialog(uid, userMeta, userEmail, requestId);
+  };
+
+  // Reactive fallback: re-attempts arbitration whenever the
+  // personalizedInsightState prop changes (App.tsx's isLoadingMain
+  // settling). No-ops immediately via the
+  // currentDialogType.current/arbitrationStartedRef guards above once
+  // anything has already been decided this activation cycle. Reads
+  // userMeta/userEmail from the refs initDialog() populates (no second
+  // supabase.auth.getSession() call), and the CURRENT request id (so if a
+  // newer initDialog() run has started since — e.g. a fresh logout/login —
+  // prepareWelcomeBackDialog's own internal staleness checks correctly
+  // recognize it, exactly as if this were a normal same-run call).
+  useEffect(() => {
+    void arbitrateReturningUser(
+      currentUserId,
+      userMetaRef.current,
+      userEmailRef.current,
+      initDialogRequestIdRef.current
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personalizedInsightState, currentUserId, disabled]);
+
+  // Cross-tab dismissal sync: if the SAME candidate (same userId +
+  // dedupeKey) is dismissed (Close) in another same-origin Inventory tab,
+  // that tab's write to localStorage fires the native `storage` event here
+  // — but only in THIS tab, never in the tab that performed the write, so
+  // reusing closeDialog() (which itself re-writes the identical key/value)
+  // cannot loop; passing persistDismissal: false makes this a pure
+  // local-UI suppression regardless.
+  useEffect(() => {
+    if (disabled) return;
+
+    const handlePersonalizedStorage = (event) => {
+      if (!event.key || event.newValue === null) return;
+      if (currentDialogType.current !== 'personalized') return;
+      if (!isDialogActiveRef.current) return;
+
+      const candidate = activeCandidateRef.current;
+      if (!candidate || !currentUserId) return;
+
+      const expectedKey = buildDialogueDismissalKey(currentUserId, candidate.dedupeKey);
+      if (event.key === expectedKey) {
+        closeDialog({ persistDismissal: false });
+      }
+    };
+
+    window.addEventListener('storage', handlePersonalizedStorage);
+    return () => window.removeEventListener('storage', handlePersonalizedStorage);
+  }, [disabled, currentUserId]);
 
   const [dialogSteps, setDialogSteps] = useState([]);
 
@@ -467,6 +686,9 @@ export default function CatMascot({ onCatClick, disabled = false }) {
     if (wasDisabled && !disabled) {
       dismissedDialogs.current.clear();
       currentDialogType.current = null;
+      // New activation cycle for this never-unmounted component instance
+      // — allow arbitrateReturningUser to decide again for the new session.
+      arbitrationStartedRef.current = false;
       // If a dialog from the previous session was left open (e.g. logout while
       // Welcome Back was still showing), fully close it so the new session's
       // dialog can activate cleanly instead of being skipped as "already active".
@@ -488,15 +710,23 @@ export default function CatMascot({ onCatClick, disabled = false }) {
         userId = session?.user?.id || null;
         userMeta = session?.user?.user_metadata || null;
         userEmail = session?.user?.email || null;
+        userMetaRef.current = userMeta;
+        userEmailRef.current = userEmail;
         setCurrentUserId(userId);
       } catch (err) {
         console.error("Error fetching session in initDialog:", err);
       }
 
-      // If user is logged in (disabled = false) and has seen the intro, fetch
-      // the configurable Welcome Back message and auto-close after a few seconds.
+      // If user is logged in (disabled = false) and has seen the intro:
+      // returning-user cycle. Deterministic arbitration (Personalized vs
+      // Welcome Back) lives entirely in arbitrateReturningUser now — it
+      // reads personalizedInsightState's explicit readiness rather than
+      // racing on whichever of App.tsx's isLoadingMain or this Welcome
+      // Back fetch happens to resolve first. If the state is still
+      // 'not_ready' at this exact moment, arbitrateReturningUser
+      // deliberately does nothing and defers to the reactive effect above.
       if (!disabled && userId && localStorage.getItem(`intro_shown_${userId}`) === 'true') {
-        await prepareWelcomeBackDialog(userId, userMeta, userEmail, requestId);
+        await arbitrateReturningUser(userId, userMeta, userEmail, requestId);
         return;
       }
 
@@ -522,7 +752,7 @@ export default function CatMascot({ onCatClick, disabled = false }) {
           // login, instead of requiring another reload/login to see it.
           if (!disabled) {
             markIntroCompleted(userId);
-            await prepareWelcomeBackDialog(userId, userMeta, userEmail, requestId);
+            await arbitrateReturningUser(userId, userMeta, userEmail, requestId);
           }
           return;
         }
@@ -561,7 +791,7 @@ export default function CatMascot({ onCatClick, disabled = false }) {
         // in this same login, instead of requiring another reload/login.
         if (!disabled) {
           markIntroCompleted(userId);
-          await prepareWelcomeBackDialog(userId, userMeta, userEmail, requestId);
+          await arbitrateReturningUser(userId, userMeta, userEmail, requestId);
         }
       } catch (err) {
         console.error("Error fetching dialog steps:", err);
@@ -976,7 +1206,7 @@ export default function CatMascot({ onCatClick, disabled = false }) {
         }}
       >
         <AnimatePresence mode="wait">
-          {isDialogActive && dialogSteps.length > 0 && (
+          {isDialogActive && !activeCandidate && dialogSteps.length > 0 && (
             <motion.div
               data-cat="true"
               key={`dialog-bubble-${dialogStep}`}
@@ -1017,6 +1247,72 @@ export default function CatMascot({ onCatClick, disabled = false }) {
                       Next <ChevronRight className="w-4 h-4" />
                     </button>
                   )}
+                </div>
+              </div>
+              <div className="absolute -bottom-2 left-1/2 w-4 h-4 bg-white transform rotate-45 -translate-x-1/2 shadow-md border-r border-b border-slate-100 z-0"></div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Phase-2 proactive personalized reminder — reuses the exact same
+            dialogue bubble container/styling as Intro/Welcome Back above,
+            but single-step (no Back/Next). No CTA button: Inventory's
+            current Phase-2 candidates never populate `action` (see
+            aiExperience/contracts/insightCandidate.ts) — message + Close
+            only. */}
+        <AnimatePresence mode="wait">
+          {isDialogActive && activeCandidate && (
+            <motion.div
+              data-cat="true"
+              key="dialog-bubble-personalized"
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="w-max shrink-0 max-w-[min(85vw,340px)] bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col overflow-visible relative pointer-events-auto mb-4 mr-1 cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                className="p-4 text-sm font-semibold leading-relaxed flex flex-col relative z-10 bg-white rounded-lg text-slate-700"
+              >
+                <div className="flex-1 flex items-center justify-center text-center">
+                  <p className="whitespace-pre-wrap text-slate-700">{activeCandidate.message}</p>
+                </div>
+                <div className="pt-4 flex justify-end items-center gap-4 mt-auto">
+                  {activeCandidate.action && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // CTA order: mark dismissed first (inside
+                        // closeDialog), then close/update UI, then run
+                        // App.tsx's existing action — never a new action
+                        // derived here. Uses the action AND candidate
+                        // captured at adoption time (not a fresh read of
+                        // the prop, and not whatever the inline resolver's
+                        // current winner happens to be), since the
+                        // dialogue persists even if personalizedInsightState
+                        // has since gone back to null/not_ready or moved on
+                        // to a different candidate — this is what
+                        // guarantees the CTA always navigates for the
+                        // exact candidate Cat is showing, never a stale or
+                        // unrelated one. Both refs are read BEFORE
+                        // closeDialog() clears activeCandidateRef.
+                        const onAction = activeOnActionRef.current;
+                        const candidateToActOn = activeCandidateRef.current;
+                        closeDialog();
+                        if (candidateToActOn) onAction?.(candidateToActOn);
+                      }}
+                      className="flex items-center gap-1 text-xs font-bold text-white bg-[#2A9D8F] px-3 py-1.5 rounded-md hover:opacity-90 cursor-pointer"
+                    >
+                      {activeCandidate.action.label}
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); closeDialog(); }}
+                    className="flex items-center gap-1 text-xs font-semibold text-[#2A9D8F] underline underline-offset-2 hover:opacity-80 cursor-pointer"
+                  >
+                    Close <X className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
               <div className="absolute -bottom-2 left-1/2 w-4 h-4 bg-white transform rotate-45 -translate-x-1/2 shadow-md border-r border-b border-slate-100 z-0"></div>

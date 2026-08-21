@@ -37,11 +37,7 @@ function compareForSelection(a: InventorySnapshotItem, b: InventorySnapshotItem)
   return a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0;
 }
 
-export function evaluateOutOfStock(snapshot: InventorySnapshotItem[]): InsightCandidate<OutOfStockInventoryFacts> | null {
-  const qualifying = snapshot.filter((i) => i.usableQuantity === 0);
-  if (qualifying.length === 0) return null;
-
-  const winner = [...qualifying].sort(compareForSelection)[0];
+function buildCandidateFromItem(winner: InventorySnapshotItem): InsightCandidate<OutOfStockInventoryFacts> {
   const safeName = safeItemName(winner.itemName);
   const message = safeName ? `${safeName} is out of stock.` : 'An inventory item is out of stock.';
 
@@ -58,8 +54,26 @@ export function evaluateOutOfStock(snapshot: InventorySnapshotItem[]): InsightCa
     facts,
     messageTemplate: '{itemName} is out of stock.',
     message,
+    action: { label: 'View Out of Stock', view: 'inventory' },
     dedupeKey: `inventory_out_of_stock:${winner.itemId}`,
     sourceRecordId: winner.itemId,
     evaluatedAt: new Date().toISOString(),
   };
+}
+
+export function evaluateOutOfStock(snapshot: InventorySnapshotItem[]): InsightCandidate<OutOfStockInventoryFacts> | null {
+  const qualifying = snapshot.filter((i) => i.usableQuantity === 0);
+  if (qualifying.length === 0) return null;
+
+  const winner = [...qualifying].sort(compareForSelection)[0];
+  return buildCandidateFromItem(winner);
+}
+
+/** Additive ordered pool — see expiredInventoryProvider.ts's
+ *  evaluateExpiredInventoryCandidates for the same design intent.
+ *  `evaluateOutOfStockCandidates(snapshot)[0]` is always identical to
+ *  `evaluateOutOfStock(snapshot)`. */
+export function evaluateOutOfStockCandidates(snapshot: InventorySnapshotItem[]): InsightCandidate<OutOfStockInventoryFacts>[] {
+  const qualifying = snapshot.filter((i) => i.usableQuantity === 0);
+  return [...qualifying].sort(compareForSelection).map(buildCandidateFromItem);
 }

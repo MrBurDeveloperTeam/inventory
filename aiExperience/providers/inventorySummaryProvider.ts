@@ -135,6 +135,7 @@ export function evaluateInventorySummary(
     facts,
     messageTemplate: 'Inventory is up to date across {itemCount} tracked items.',
     message,
+    action: { label: 'View Inventory', view: 'inventory' },
     dedupeKey: `inventory_summary:${todayKey}:count:${itemCount}`,
     // Aggregate — no single backing record.
     sourceRecordId: null,

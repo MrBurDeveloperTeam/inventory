@@ -30,6 +30,8 @@ import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
 import { useInventoryPersonalizedInsight } from './aiExperience/hooks/useInventoryPersonalizedInsight';
 import PersonalizedInsight from './aiExperience/components/PersonalizedInsight';
+import { buildInventoryDialoguePool } from './aiExperience/petDialogue/buildInventoryDialoguePool';
+import type { InsightCandidate } from './aiExperience/contracts/insightCandidate';
 import { isInventoryMutationRequest } from './aiExperience/dataChat/router/isInventoryMutationRequest';
 import { classifyInventoryDataIntent } from './aiExperience/dataChat/router/classifyInventoryDataIntent';
 import { resolveInventoryDataQuery } from './aiExperience/dataChat/resolver/resolveInventoryDataQuery';
@@ -149,7 +151,21 @@ const ensureBatches = (item: Item): Item => {
   const baseBatches = item.batches && item.batches.length > 0
     ? item.batches.map(b => ({ ...b }))
     : [{
-      id: generateId(),
+      // Deterministic, NOT generateId(): this branch runs on every load to
+      // project a legacy item with zero persisted `inventory_item_batches`
+      // rows into one virtual batch — a fresh crypto.randomUUID() here
+      // regenerated a different id every reload, which flowed straight
+      // into aiExperience's dedupeKey construction (expiredBatch.batchId /
+      // upcomingExpiryBatch.batchId — see inventorySnapshot.ts) and broke
+      // Cat Reminder dismissal persistence for any legacy/no-batch-row item
+      // (dismissal was keyed to the OLD random id, reload produced a NEW
+      // one, so the "same" reminder never matched as dismissed). Reusing
+      // `item.id` is both stable across reloads (same item -> same virtual
+      // batch id, always) and a valid, globally-unique UUID safe for any
+      // downstream inventory_item_batches upsert that might later persist
+      // it for real (item ids and batch ids are independent primary keys
+      // in different tables, so no collision risk between them).
+      id: item.id,
       qty: item.quantity,
       unitPrice: item.price,
       expiryDate: item.expiryDate || null
@@ -243,6 +259,71 @@ const App: React.FC = () => {
   // loading gate changes — no new Supabase query, no dedupe, no polling.
   // See ./aiExperience/hooks/useInventoryPersonalizedInsight.ts.
   const inventoryPersonalizedInsight = useInventoryPersonalizedInsight(rooms, isLoadingMain);
+  // Dismissal-aware ordered candidate pool for Cat only (starvation fix) —
+  // reuses the same already-loaded `rooms`/`isLoadingMain`, no second
+  // fetch. See aiExperience/petDialogue/buildInventoryDialoguePool.ts. Pure
+  // business ordering only; CatMascot itself does the actual
+  // seen/dismissed suppression scan once it knows the current userId — see
+  // personalizedInsightState.candidates below.
+  const inventoryDialoguePool = useMemo(
+    () => (isLoadingMain ? [] : buildInventoryDialoguePool(rooms)),
+    [rooms, isLoadingMain]
+  );
+  // Proactive Cat reminder readiness for CatMascot (a sibling, not a child,
+  // of this component's own JSX — passed as a direct prop since App.tsx
+  // already owns both the candidate computation and the CatMascot render,
+  // so a Context bridge would be unnecessary machinery here). Reuses the
+  // exact same `isLoadingMain` gate already passed to
+  // resolveInventoryDataQuery for Phase-3 Data Chat's own readiness check
+  // (see the call a few hundred lines below) — not a new query, not a new
+  // readiness flag. useInventoryPersonalizedInsight's own return value
+  // collapses "still loading" and "resolved, no candidate" into the same
+  // `null` (it returns `null` while `isLoadingMain` and also whenever the
+  // resolver legitimately finds nothing) — this object keeps that
+  // distinction explicit for CatMascot's arbitration, exactly the same
+  // fix already applied in the other five Cat Reminder implementations.
+  // `rooms` resets to `[]` together with `isLoadingMain` resetting to
+  // `true` SYNCHRONOUSLY in the same handler on logout/user-switch (see
+  // the auth effect below), so `isLoadingMain` alone is already a safe,
+  // race-free ownership boundary — no separate owner-id check is needed
+  // here the way Profit Calculator's async-effect-driven context required.
+  // Bumped by handleInventoryInsightAction below to jump MasterInventory to
+  // its existing 'expiring' tab — see that state's own prop doc in
+  // MasterInventory.tsx. Undefined until first used, so mounting
+  // MasterInventory never itself triggers a tab switch.
+  const [focusExpiringTabRequestId, setFocusExpiringTabRequestId] = useState<number | undefined>(undefined);
+  // Takes the candidate to act on explicitly — never closes over
+  // `inventoryPersonalizedInsight` — so this stays correct even when the
+  // caller is Cat showing a different (dismissal-revealed) candidate than
+  // the inline banner's current winner. Only navigates (existing
+  // `currentView`/MasterInventory tab state) — never mutates inventory
+  // data. See the contract's InsightAction doc for what each `view` value
+  // reuses.
+  const handleInventoryInsightAction = useCallback((candidate: InsightCandidate<unknown> | null) => {
+    if (!candidate?.action) return;
+    setCurrentView('dashboard');
+    if (candidate.action.view === 'inventory_expiring') {
+      setFocusExpiringTabRequestId((id) => (id ?? 0) + 1);
+    }
+  }, []);
+  const personalizedInsightState = isLoadingMain
+    ? { status: 'not_ready' as const }
+    : {
+        status: 'ready' as const,
+        candidate: inventoryPersonalizedInsight,
+        // Additive: ordered pool across all four record-specific families
+        // (plus Inventory Summary fallback) for CatMascot's dismissal-aware
+        // pool scan. `candidates[0] ?? null` is always identical to
+        // `candidate` above when no suppression applies — the inline
+        // PersonalizedInsight banner keeps reading `candidate` only, so its
+        // behavior is completely unaffected by this field's addition.
+        candidates: inventoryDialoguePool,
+        // Home's own existing action logic (view/tab navigation only,
+        // above) — reused verbatim, never reimplemented in CatMascot. Takes
+        // the candidate to act on explicitly so Cat always executes the
+        // action belonging to the exact candidate it is currently showing.
+        onAction: handleInventoryInsightAction,
+      };
   const lastLocalMutation = useRef(0);
   const isDirty = useRef(false);
   const lastLoadRequestId = useRef(0);
@@ -3158,7 +3239,10 @@ const handleLogout = async () => {
                 <PromoBanner key={promo.id} appCode="inventory" promo={promo} />
               ))}
               {inventoryPersonalizedInsight && (
-                <PersonalizedInsight candidate={inventoryPersonalizedInsight} />
+                <PersonalizedInsight
+                  candidate={inventoryPersonalizedInsight}
+                  onAction={() => handleInventoryInsightAction(inventoryPersonalizedInsight)}
+                />
               )}
               <ClinicMap
                 rooms={rooms}
@@ -3242,6 +3326,7 @@ const handleLogout = async () => {
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
                 readOnly={!canEditItems || isLoadingMain}
+                focusExpiringTabRequestId={focusExpiringTabRequestId}
               />
             </>
           ) : (
@@ -3365,7 +3450,11 @@ const handleLogout = async () => {
 
       {!isVirtualPetOpen && (
         <>
-        <CatMascot onCatClick={() => setIsVirtualPetOpen(true)} disabled={!isAuthenticated} />
+        <CatMascot
+          onCatClick={() => setIsVirtualPetOpen(true)}
+          disabled={!isAuthenticated}
+          personalizedInsightState={personalizedInsightState}
+        />
         <MolarAIFloat
           isOpen={isChatOpen}
           onOpen={() => setIsChatOpen(true)}

@@ -41,13 +41,7 @@ function compareForSelection(a: InventorySnapshotItem, b: InventorySnapshotItem)
   return a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0;
 }
 
-export function evaluateLowStock(snapshot: InventorySnapshotItem[]): InsightCandidate<LowStockInventoryFacts> | null {
-  const qualifying = snapshot.filter(
-    (i) => i.usableQuantity >= 1 && i.usableQuantity <= LOW_STOCK_THRESHOLD && i.expiredBatch === null
-  );
-  if (qualifying.length === 0) return null;
-
-  const winner = [...qualifying].sort(compareForSelection)[0];
+function buildCandidateFromItem(winner: InventorySnapshotItem): InsightCandidate<LowStockInventoryFacts> {
   const safeName = safeItemName(winner.itemName);
   const message = safeName
     ? `${safeName} is running low with ${winner.usableQuantity} remaining.`
@@ -67,8 +61,29 @@ export function evaluateLowStock(snapshot: InventorySnapshotItem[]): InsightCand
     facts,
     messageTemplate: '{itemName} is running low with {quantity} remaining.',
     message,
+    action: { label: 'View Low Stock', view: 'inventory' },
     dedupeKey: `inventory_low_stock:${winner.itemId}:quantity:${winner.usableQuantity}:threshold${LOW_STOCK_THRESHOLD}`,
     sourceRecordId: winner.itemId,
     evaluatedAt: new Date().toISOString(),
   };
+}
+
+function qualifyingLowStock(snapshot: InventorySnapshotItem[]): InventorySnapshotItem[] {
+  return snapshot.filter((i) => i.usableQuantity >= 1 && i.usableQuantity <= LOW_STOCK_THRESHOLD && i.expiredBatch === null);
+}
+
+export function evaluateLowStock(snapshot: InventorySnapshotItem[]): InsightCandidate<LowStockInventoryFacts> | null {
+  const qualifying = qualifyingLowStock(snapshot);
+  if (qualifying.length === 0) return null;
+
+  const winner = [...qualifying].sort(compareForSelection)[0];
+  return buildCandidateFromItem(winner);
+}
+
+/** Additive ordered pool — see expiredInventoryProvider.ts's
+ *  evaluateExpiredInventoryCandidates for the same design intent.
+ *  `evaluateLowStockCandidates(snapshot)[0]` is always identical to
+ *  `evaluateLowStock(snapshot)`. */
+export function evaluateLowStockCandidates(snapshot: InventorySnapshotItem[]): InsightCandidate<LowStockInventoryFacts>[] {
+  return [...qualifyingLowStock(snapshot)].sort(compareForSelection).map(buildCandidateFromItem);
 }

@@ -47,16 +47,27 @@ export type InsightTriggerId =
 export type InsightPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
 
 /**
- * Minimal placeholder action shape. No first-slice candidate populates
- * `action` — Inventory's current landing surface (App.tsx's `dashboard`
- * view) has no separate list/detail state to navigate to beyond what's
- * already always visible (MasterInventory is rendered inline, not behind a
- * togglable view) — see the implementation report's "Actions" section. Kept
- * as an optional field on the contract, not removed, so a later slice with
- * a real navigation target doesn't require a contract shape change.
+ * A real, already-existing local navigation target — never a fabricated
+ * route/filter. Both values reuse state App.tsx/MasterInventory.tsx already
+ * had before this action was added:
+ *   - `'inventory'` — App.tsx's existing `currentView` ('dashboard' |
+ *     'profile'); the action returns to 'dashboard', the only view
+ *     MasterInventory/ClinicMap render in. This is the only destination
+ *     available for families with no more specific existing filter (Out of
+ *     Stock, Low Stock, Summary — MasterInventory's own `activeTab` state
+ *     has no matching value for either).
+ *   - `'inventory_expiring'` — same 'dashboard' switch, PLUS
+ *     MasterInventory's existing `activeTab === 'expiring'` tab, which
+ *     already lists every batch expiring within 30 days INCLUDING already
+ *     expired ones (see MasterInventory.tsx's `expiringItems` — expiry
+ *     `<= now+30days`, no lower bound) — a genuine, if combined, existing
+ *     destination for both Expired and Expiring Soon, exposed externally
+ *     via App.tsx's new `focusExpiringTabRequestId` prop rather than any
+ *     new tab/filter being invented.
  */
 export interface InsightAction {
   label: string;
+  view: 'inventory' | 'inventory_expiring';
 }
 
 export interface InsightCandidate<TFacts = unknown> {

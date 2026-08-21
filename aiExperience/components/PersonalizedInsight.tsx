@@ -12,6 +12,14 @@ import type { InsightCandidate, InsightPriority } from '../contracts/insightCand
 
 interface PersonalizedInsightProps {
   candidate: InsightCandidate<unknown>;
+  /** Optional — omitted by any caller that doesn't need the CTA (none
+   *  currently do, but this keeps the prop non-breaking for any future
+   *  caller). Invoked with no arguments, exactly like the existing
+   *  onClick={onAction} pattern already used in the To-Do/Appointments/
+   *  E-Learning PersonalizedInsight components — the candidate itself is
+   *  bound by the caller (see App.tsx's handleInventoryInsightAction),
+   *  never derived here. */
+  onAction?: () => void;
 }
 
 const PRIORITY_STYLES: Partial<Record<InsightPriority, { icon: React.ReactNode; wrapperClass: string }>> = {
@@ -42,7 +50,7 @@ const PRIORITY_STYLES: Partial<Record<InsightPriority, { icon: React.ReactNode; 
   },
 };
 
-export default function PersonalizedInsight({ candidate }: PersonalizedInsightProps) {
+export default function PersonalizedInsight({ candidate, onAction }: PersonalizedInsightProps) {
   const style = PRIORITY_STYLES[candidate.priority];
   // Defensive only — every InsightPriority value now has a style entry, so
   // this is never actually undefined; kept in case a future priority value
@@ -53,6 +61,15 @@ export default function PersonalizedInsight({ candidate }: PersonalizedInsightPr
     <div className={`rounded-2xl border p-4 shadow-sm flex items-center gap-3 ${style.wrapperClass}`}>
       <div className="flex-shrink-0">{style.icon}</div>
       <p className="flex-1 text-sm font-semibold">{candidate.message}</p>
+      {candidate.action && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="flex-shrink-0 text-sm font-bold underline underline-offset-2 hover:opacity-75"
+        >
+          {candidate.action.label}
+        </button>
+      )}
     </div>
   );
 }

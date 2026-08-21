@@ -43,16 +43,7 @@ function compareForSelection(a: InventorySnapshotItem, b: InventorySnapshotItem)
   return a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0;
 }
 
-export function evaluateExpiredInventory(snapshot: InventorySnapshotItem[]): InsightCandidate<ExpiredInventoryFacts> | null {
-  // usableQuantity > 0 is implied whenever expiredBatch is non-null (it can
-  // only be set from a qty > 0 batch — see inventorySnapshot.ts), but kept
-  // explicit here to state both required conditions directly, per the
-  // task's own eligibility wording, and as a defensive guard against a
-  // future snapshot-shape change.
-  const qualifying = snapshot.filter((i) => i.usableQuantity > 0 && i.expiredBatch !== null);
-  if (qualifying.length === 0) return null;
-
-  const winner = [...qualifying].sort(compareForSelection)[0];
+function buildCandidateFromItem(winner: InventorySnapshotItem): InsightCandidate<ExpiredInventoryFacts> {
   const expiredBatch = winner.expiredBatch as NonNullable<InventorySnapshotItem['expiredBatch']>;
   const safeName = safeItemName(winner.itemName);
   const message = safeName
@@ -74,8 +65,39 @@ export function evaluateExpiredInventory(snapshot: InventorySnapshotItem[]): Ins
     facts,
     messageTemplate: '{itemName} has expired. Please review this stock.',
     message,
+    action: { label: 'Review Expired', view: 'inventory_expiring' },
     dedupeKey: `inventory_expired:${winner.itemId}:batch:${expiredBatch.batchId}:${expiredBatch.expiryDate}`,
     sourceRecordId: winner.itemId,
     evaluatedAt: new Date().toISOString(),
   };
+}
+
+export function evaluateExpiredInventory(snapshot: InventorySnapshotItem[]): InsightCandidate<ExpiredInventoryFacts> | null {
+  // usableQuantity > 0 is implied whenever expiredBatch is non-null (it can
+  // only be set from a qty > 0 batch — see inventorySnapshot.ts), but kept
+  // explicit here to state both required conditions directly, per the
+  // task's own eligibility wording, and as a defensive guard against a
+  // future snapshot-shape change.
+  const qualifying = snapshot.filter((i) => i.usableQuantity > 0 && i.expiredBatch !== null);
+  if (qualifying.length === 0) return null;
+
+  const winner = [...qualifying].sort(compareForSelection)[0];
+  return buildCandidateFromItem(winner);
+}
+
+/**
+ * Additive: every independently eligible Expired candidate, in the exact
+ * same business order compareForSelection already produces —
+ * `evaluateExpiredInventoryCandidates(snapshot)[0]` is always identical to
+ * `evaluateExpiredInventory(snapshot)`. Used only by the dialogue-layer
+ * pool selector (see aiExperience/petDialogue/) so a dismissed Cat reminder
+ * can reveal the next still-eligible expired item instead of the whole
+ * family silently disappearing — the inline PersonalizedInsight banner
+ * keeps using evaluateExpiredInventory above, unaffected.
+ */
+export function evaluateExpiredInventoryCandidates(
+  snapshot: InventorySnapshotItem[]
+): InsightCandidate<ExpiredInventoryFacts>[] {
+  const qualifying = snapshot.filter((i) => i.usableQuantity > 0 && i.expiredBatch !== null);
+  return [...qualifying].sort(compareForSelection).map(buildCandidateFromItem);
 }
