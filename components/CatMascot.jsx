@@ -1,13 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, ChevronLeft, X } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { getPetOption, normalizePetId } from '../VirtualPet/petOptions';
-import {
-  markDialogueDismissed,
-  buildDialogueDismissalKey,
-} from '../aiExperience/petDialogue/sessionDedupe';
-import { selectFirstEligibleDialogueCandidate } from '../aiExperience/petDialogue/selectDialogueCandidate';
+import { useSharedCatDialogueRuntime } from '@mrburdeveloperteam/molar-experience/cat';
 
 const MALLOW_FRAME_WIDTH = 192;
 const MALLOW_FRAME_HEIGHT = 208;
@@ -146,137 +142,117 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
   const [walkDuration, setWalkDuration] = useState(0.8);
   const selectedPet = getPetOption(selectedPetId);
 
-  const [dialogStep, setDialogStep] = useState(0);
-  const [isDialogActive, setIsDialogActive] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
-  const autoCloseTimerRef = useRef(null);
   const isEntryWalkComplete = useRef(!!restoredMascotStateRef.current?.entryComplete);
-  // Which dialog type is currently prepared to show ('intro' | 'welcomeBack' | null),
-  // and which dialog types have already been dismissed during this page lifecycle.
-  // Tracking dismissal per-type (rather than one shared flag) means dismissing the
-  // Post-Login Intro no longer permanently blocks the Welcome Back dialog, or vice versa.
-  const currentDialogType = useRef(null);
-  const dismissedDialogs = useRef(new Set());
-  // In-memory, mount-scoped ONLY — never persisted (sessionStorage
-  // survives a same-tab reload, which was the bug this replaces: a
-  // candidate merely SHOWN, never explicitly Closed, must reappear on the
-  // next reload, not be silently suppressed forever). Purpose is
-  // otherwise unchanged from the old sessionStorage "seen" mark: prevent
-  // the SAME candidate from repeatedly reopening within this one
-  // activation (e.g. a source re-render/refresh re-triggering
-  // arbitration) — see tryActivateDialog's own comment. Resets to empty
-  // on every fresh mount, which a full page reload always is. Explicit
-  // dismissal (Close) remains in localStorage via markDialogueDismissed/
-  // isDialogueDismissed — that persistence is unaffected and still
-  // correctly survives reload.
-  const shownCandidateKeysRef = useRef(new Set());
-  // Holds the auto-close duration for a prepared 'welcomeBack' dialog, set when
-  // its content is fetched but only ever consumed by tryActivateDialog() at the
-  // moment it actually shows — see the comment on tryActivateDialog for why.
-  const welcomeBackAutoCloseMsRef = useRef(DEFAULT_WELCOME_BACK_AUTO_CLOSE_MS);
-  // Mirrors isDialogActive synchronously (React state updates aren't immediate).
-  // Without this, tryActivateDialog() can be called again while a dialog is
-  // already showing (e.g. StrictMode's dev double-invoke of the fetch effect,
-  // or the click-to-move handler firing again) and would re-arm the Welcome
-  // Back timer from scratch every time, so it could keep getting reset before
-  // ever completing a full countdown.
-  const isDialogActiveRef = useRef(false);
-  // Unlike the other 6 Snabbb apps, this CatMascot instance is never unmounted
-  // across login/logout (rendered once with disabled={!isAuthenticated}, no key).
-  // Tracks the previous `disabled` value so a logged-out -> logged-in transition
-  // (a real new auth session, detected via the auth boundary itself rather than
-  // comparing userIds, since the same user can log back in with the same id) can
-  // clear dismissedDialogs — otherwise a 'welcomeBack' dismissed in a prior
-  // session would keep suppressing it after a fresh re-login in the same tab.
-  const prevDisabledRef = useRef(disabled);
-  // Bumped at the start of every initDialog() run. Async Supabase calls check
-  // this after each await and bail out if a newer run has since started (e.g.
-  // disabled flipped due to logout/login) — so a slow, stale request from a
-  // previous session can never apply its result (dialog steps, dialog type)
-  // to a later session or a different user.
-  const initDialogRequestIdRef = useRef(0);
-  // The already-resolved Phase-2 candidate (from App.tsx via the
-  // personalizedInsightState prop) while it's the active dialogue —
-  // mirrored into React state (below) for render-time reads, following the
-  // same ref+state split already used for isDialogActive.
-  const activeCandidateRef = useRef(null);
-  const [activeCandidate, setActiveCandidate] = useState(null);
-  // App.tsx's existing action handler (view/tab navigation only — see
-  // handleInventoryInsightAction) for the candidate actually adopted,
-  // captured at adoption time (not a fresh read of the prop), since the
-  // dialogue persists even if personalizedInsightState has since gone back
-  // to null/not_ready or moved on to a different candidate.
-  const activeOnActionRef = useRef(null);
-  // Synchronous snapshot of the personalizedInsightState prop's current
-  // value. Props are already synchronously current inside effects/
-  // handlers, but this ref exists so the REACTIVE arbitration effect below
-  // (which fires independently of initDialog, whenever the prop changes)
-  // and initDialog()'s own one-shot async closure both read from one
-  // place, matching the structural pattern of the other five
-  // implementations. Three-way: null (no candidate published — e.g. the
-  // very first render before App.tsx's own state settles) |
-  // {status:'not_ready'} (App.tsx's isLoadingMain is still true) |
-  // {status:'ready', candidate} (loading finished; candidate may itself be
-  // null if the resolver legitimately found nothing).
-  const personalizedInsightStateRef = useRef(personalizedInsightState);
-  useEffect(() => {
-    personalizedInsightStateRef.current = personalizedInsightState;
-  }, [personalizedInsightState]);
-  // initDialog()'s fetched session metadata, cached here so the REACTIVE
-  // arbitration effect (which runs independently of initDialog, whenever
-  // the personalizedInsightState prop changes) can reuse it for Welcome
-  // Back's [name] placeholder without a second supabase.auth.getSession()
-  // call.
+  // Content-only inputs fed into the shared dialogue runtime — this
+  // component no longer decides WHICH dialogue type shows or WHEN
+  // (mount-scoped shown-tracking, dismissal persistence, cross-tab sync,
+  // exact-adopted-candidate binding, one-activation/no-cascade, readiness
+  // arbitration all now live in @mrburdeveloperteam/molar-experience's
+  // useSharedCatDialogueRuntime, ported from this file's own pre-migration
+  // controller). This file keeps only what's genuinely Inventory-specific:
+  // fetching Intro/Welcome Back CONTENT from Supabase, and reshaping the
+  // `personalizedInsightState` prop App.tsx already computes.
+  const [introInput, setIntroInput] = useState({ status: 'not_ready' });
+  const [welcomeBackInput, setWelcomeBackInput] = useState({ status: 'not_ready' });
+  // initDialog()'s fetched session metadata, cached here so
+  // fetchWelcomeBackContent can reuse it for Welcome Back's [name]
+  // placeholder without a second supabase.auth.getSession() call.
   const userMetaRef = useRef(null);
   const userEmailRef = useRef(null);
-  // Guards against arbitrateReturningUser being entered twice concurrently
-  // — set as soon as a path is actually committed to. Reset alongside
-  // dismissedDialogs/currentDialogType on the logged-out -> logged-in
-  // session boundary below, since that's a genuinely new activation cycle
-  // for this never-unmounted component instance.
-  const arbitrationStartedRef = useRef(false);
 
-  const clearWelcomeBackAutoCloseTimer = () => {
-    if (autoCloseTimerRef.current !== null) {
-      clearTimeout(autoCloseTimerRef.current);
-      autoCloseTimerRef.current = null;
+  // Reshapes App.tsx's three-way personalizedInsightState prop into the
+  // shared runtime's DialogueAdapter contract. `undefined` (no state
+  // published yet — the very first render before App.tsx's own state has
+  // settled) is exactly what the runtime treats as "no personalized
+  // candidate — proceed to Welcome Back", matching the original
+  // `state === null || state === undefined` handling.
+  const personalizedInput = useMemo(() => {
+    if (!personalizedInsightState) return undefined;
+    if (personalizedInsightState.status === 'not_ready') {
+      return { state: { status: 'not_ready' }, onAction: () => {} };
+    }
+    // Falls back to the legacy single `personalizedInsightState.candidate`
+    // when `candidates` isn't present, for defensive compatibility only.
+    const candidates = Array.isArray(personalizedInsightState.candidates)
+      ? personalizedInsightState.candidates
+      : (personalizedInsightState.candidate ? [personalizedInsightState.candidate] : []);
+    return {
+      state: { status: 'ready', candidates },
+      onAction: (candidate) => personalizedInsightState.onAction?.(candidate),
+    };
+  }, [personalizedInsightState]);
+
+  const { dialogue, closeActiveDialogue } = useSharedCatDialogueRuntime({
+    appId: 'inventory',
+    userId: currentUserId,
+    disabled,
+    intro: introInput,
+    personalized: personalizedInput,
+    welcomeBack: welcomeBackInput,
+  });
+
+  // Existing Intro content fetch, unchanged in content from the
+  // pre-migration `initDialog()` — only the "activate" step is gone
+  // (setDialogSteps/currentDialogType/tryActivateDialog), replaced by
+  // simply publishing the fetched steps into `introInput` for the shared
+  // runtime to decide what to do with.
+  const fetchIntroContent = async (userId) => {
+    try {
+      const { data: configs, error: configsError } = await supabase
+        .from('aiboard_simulator_configs')
+        .select('id')
+        .eq('module_name', 'Inventory')
+        .limit(1);
+
+      if (configsError) {
+        // Infrastructure/query failure — leave introInput at 'not_ready'
+        // forever this mount; preserve the ability to retry on next reload.
+        return;
+      }
+
+      if (!configs || configs.length === 0) {
+        // No simulator config exists at all for this module — there is no
+        // Intro to ever show. Publishing zero steps lets the shared runtime
+        // mark the intro stage complete itself (mirrors the original
+        // unconditional markIntroCompleted call for this case).
+        setIntroInput({ status: 'ready', steps: [] });
+        return;
+      }
+
+      const configId = configs[0].id;
+
+      const { data, error } = await supabase
+        .from('aiboard_simulator_dialog_steps')
+        .select('step_text, sort_order')
+        .eq('config_id', configId)
+        .eq('is_post_login', !disabled)
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        // Infrastructure/query failure — leave introInput at 'not_ready'.
+        return;
+      }
+
+      const steps = (data || [])
+        .map(d => d.step_text)
+        .filter(text => typeof text === 'string' && text.trim().length > 0);
+
+      setIntroInput({ status: 'ready', steps });
+    } catch (err) {
+      console.error("Error fetching dialog steps:", err);
+      // Do not publish 'ready' on an unexpected/network failure — preserve
+      // the ability to retry on the next login or reload.
     }
   };
 
-  const startWelcomeBackAutoCloseTimer = () => {
-    clearWelcomeBackAutoCloseTimer();
-
-    const configuredDuration = Number(welcomeBackAutoCloseMsRef.current);
-    const duration = Number.isFinite(configuredDuration) && configuredDuration > 0
-      ? configuredDuration
-      : DEFAULT_WELCOME_BACK_AUTO_CLOSE_MS;
-
-    autoCloseTimerRef.current = setTimeout(() => {
-      autoCloseTimerRef.current = null;
-      closeDialog();
-    }, duration);
-  };
-
-  // Marks the Post-Login Intro stage complete for a given user — either because
-  // they actually dismissed a visible Intro, or because a successful query
-  // confirmed there's no Intro configured/usable to show. Takes an explicit
-  // userId (rather than reading currentUserId state) so it's safe to call from
-  // inside initDialog() itself, where the just-fetched userId may not yet be
-  // reflected in currentUserId (state updates aren't synchronous).
-  const markIntroCompleted = (uid) => {
-    if (!uid) return;
-    localStorage.setItem(`intro_shown_${uid}`, 'true');
-  };
-
-  // Fetches and prepares the Welcome Back dialog for a given user. Used both
-  // when intro_shown_<userId> is already 'true' on entry, and as a same-login
-  // fallback right after markIntroCompleted() when the Intro stage turns out
-  // to have no usable content. Takes an explicit requestId (see
-  // initDialogRequestIdRef) and bails out after every await if a newer
-  // initDialog() run has since started — e.g. disabled flipped back to true,
-  // or the user logged out/in again — so a slow, stale request can never
-  // apply its result to a later session or a different user.
-  const prepareWelcomeBackDialog = async (uid, userMeta, userEmail, requestId) => {
+  // Existing Welcome Back fetch, unchanged in content — publishes into
+  // `welcomeBackInput` instead of directly activating a dialog. Reads
+  // userMeta/userEmail from the refs initDialog() populates, rather than
+  // re-fetching the session.
+  const fetchWelcomeBackContent = async (userId) => {
+    const userMeta = userMetaRef.current;
+    const userEmail = userEmailRef.current;
     try {
       const { data: config, error } = await supabase
         .from('aiboard_simulator_configs')
@@ -284,8 +260,6 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
         .eq('module_name', 'Inventory')
         .limit(1)
         .maybeSingle();
-
-      if (initDialogRequestIdRef.current !== requestId) return;
 
       let welcomeText = !error ? config?.welcome_back_text : null;
       const autoCloseMs = (!error && config?.welcome_back_auto_close_ms) || DEFAULT_WELCOME_BACK_AUTO_CLOSE_MS;
@@ -296,15 +270,12 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
           const { data: profile } = await supabase
             .from('profiles')
             .select('name, full_name')
-            .eq('user_id', uid)
+            .eq('user_id', userId)
             .maybeSingle();
           displayName = profile?.name || profile?.full_name || null;
         } catch (err) {
           console.error("Error fetching profile for welcome back name:", err);
         }
-
-        if (initDialogRequestIdRef.current !== requestId) return;
-
         if (!displayName) displayName = userMeta?.name || null;
         if (!displayName && userEmail) displayName = userEmail.split('@')[0];
         // Never show a raw email address, even if it came from profiles.name/full_name.
@@ -320,225 +291,11 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
               .trim();
       }
 
-      if (initDialogRequestIdRef.current !== requestId) return;
-
-      if (welcomeText) {
-        setDialogSteps([welcomeText]);
-        setDialogStep(0);
-        currentDialogType.current = 'welcomeBack';
-        welcomeBackAutoCloseMsRef.current = autoCloseMs;
-        tryActivateDialog();
-      }
+      setWelcomeBackInput({ status: 'ready', message: welcomeText || null, autoCloseMs });
     } catch (err) {
       console.error("Error fetching welcome back message:", err);
     }
   };
-
-  // persistDismissal defaults to true (Close button and Cat-click-while-open
-  // both count as this tab actually finishing with the dialogue, so they
-  // write the cross-tab localStorage dismissal for a 'personalized'
-  // dialogue). The one caller that must NOT write again is the cross-tab
-  // `storage` event listener below — the dismissal key is already present
-  // in shared localStorage (that's what triggered the event), so
-  // re-writing it here would be a pointless redundant write;
-  // persistDismissal: false keeps that handler a pure local-UI suppression.
-  const closeDialog = (options) => {
-    const persistDismissal = options?.persistDismissal ?? true;
-    const dialogType = currentDialogType.current;
-    if (dialogType) {
-      dismissedDialogs.current.add(dialogType);
-    }
-    if (persistDismissal && dialogType === 'personalized') {
-      const candidate = activeCandidateRef.current;
-      if (candidate && currentUserId) {
-        markDialogueDismissed(currentUserId, candidate.dedupeKey);
-      }
-    }
-    isDialogActiveRef.current = false;
-    setIsDialogActive(false);
-    if (dialogType === 'personalized') {
-      activeCandidateRef.current = null;
-      activeOnActionRef.current = null;
-      setActiveCandidate(null);
-    }
-    saveMascotSessionState({
-      ...catPos,
-      facingLeft,
-      entryComplete: isEntryWalkComplete.current,
-    });
-    clearWelcomeBackAutoCloseTimer();
-    if (dialogType === 'intro' && !disabled && currentUserId) {
-      markIntroCompleted(currentUserId);
-    }
-  };
-
-  // Single source of truth for showing a prepared dialog: only activates once the
-  // entry walk has finished AND a dialog type has been prepared AND that specific
-  // type hasn't already been dismissed this page lifecycle. Idempotent via
-  // isDialogActiveRef — once active, further calls (StrictMode's dev double-invoke
-  // of the fetch effect, click-to-move, etc.) are no-ops instead of re-arming the
-  // Welcome Back timer from scratch every time.
-  const tryActivateDialog = () => {
-    const dialogType = currentDialogType.current;
-    if (
-      !isEntryWalkComplete.current ||
-      !dialogType ||
-      dismissedDialogs.current.has(dialogType) ||
-      isDialogActiveRef.current
-    ) {
-      return;
-    }
-
-    isDialogActiveRef.current = true;
-    setIsDialogActive(true);
-
-    if (dialogType === 'welcomeBack') {
-      startWelcomeBackAutoCloseTimer();
-    } else if (dialogType === 'personalized') {
-      // Show-time mark: in-memory, THIS MOUNT ONLY (see
-      // shownCandidateKeysRef's own doc — never sessionStorage). Merely
-      // displaying the candidate must never suppress it in another tab,
-      // nor survive a reload — only an explicit Close does either (see
-      // closeDialog above, which persists to localStorage).
-      const candidate = activeCandidateRef.current;
-      if (candidate) {
-        shownCandidateKeysRef.current.add(candidate.dedupeKey);
-      }
-    }
-  };
-
-  // Deterministic returning-user arbitration — the actual Personalized vs
-  // Welcome Back decision. Reads the personalizedInsightState prop's
-  // explicit three-way value (never treats a bare `null`/`not_ready`
-  // candidate as proof of readiness) and only ever decides once per
-  // activation, regardless of data-fetch speed:
-  //
-  //   state === null             -> no candidate published yet (very first
-  //                                  render before App.tsx's own state has
-  //                                  settled) — don't wait, proceed to
-  //                                  Welcome Back now via
-  //                                  prepareWelcomeBackDialog (already
-  //                                  extracted, reused verbatim).
-  //   state.status === 'not_ready' -> App.tsx's isLoadingMain is still
-  //                                  true — leave the decision unresolved;
-  //                                  this function will be called again by
-  //                                  the reactive effect below once the
-  //                                  prop changes.
-  //   state.status === 'ready'   -> inventory has genuinely finished
-  //                                  loading:
-  //     candidate exists & eligible (not seen/dismissed) -> Personalized.
-  //     candidate is null, OR exists but already seen/dismissed
-  //                                -> existing Welcome Back, unchanged.
-  //
-  // Called both from initDialog()'s three "intro is not due" call sites
-  // (already-shown-intro, and the two same-login "intro resolved to
-  // nothing" fallbacks) using whatever's on the prop at that exact moment,
-  // and reactively whenever the prop value changes. Takes explicit
-  // userMeta/userEmail/requestId params (rather than closing over
-  // initDialog's locals) for the same staleness-safety reason
-  // prepareWelcomeBackDialog itself already does — see its own header.
-  const arbitrateReturningUser = async (uid, userMeta, userEmail, requestId) => {
-    if (disabled || !uid) return;
-    if (currentDialogType.current) return;
-    if (arbitrationStartedRef.current) return;
-    if (initDialogRequestIdRef.current !== requestId) return;
-
-    const state = personalizedInsightStateRef.current;
-
-    if (state === null || state === undefined) {
-      arbitrationStartedRef.current = true;
-      await prepareWelcomeBackDialog(uid, userMeta, userEmail, requestId);
-      return;
-    }
-
-    if (state.status === 'not_ready') {
-      // Genuinely unresolved — do nothing yet. Not a decision, so
-      // arbitrationStartedRef stays false and this may be called again.
-      return;
-    }
-
-    // status === 'ready'
-    //
-    // Dismissal-aware pool scan (starvation fix): state.candidates is the
-    // ordered pool across all record-specific families plus Inventory
-    // Summary (see App.tsx / buildInventoryDialoguePool.ts), in the exact
-    // same family-priority order the pure business resolver already uses.
-    // Scanning it here for the first not-shown-this-mount/not-dismissed
-    // entry means dismissing e.g. Expired item A reveals a still-eligible
-    // Expired item B on a later activation, instead of incorrectly
-    // falling straight to Welcome Back just because A itself was already
-    // suppressed. "Shown this mount" comes from shownCandidateKeysRef
-    // (in-memory, resets on reload); "dismissed" comes from
-    // isDialogueDismissed (localStorage, survives reload) — see
-    // selectDialogueCandidate.ts's own doc for why these are now two
-    // separate signals rather than one persisted-storage composition.
-    // Falls back to the legacy single `state.candidate` when `candidates`
-    // isn't present, for defensive compatibility only.
-    const pool = Array.isArray(state.candidates) ? state.candidates : (state.candidate ? [state.candidate] : []);
-    const candidate = selectFirstEligibleDialogueCandidate(uid, pool, shownCandidateKeysRef.current);
-    if (candidate?.dedupeKey) {
-      arbitrationStartedRef.current = true;
-      activeCandidateRef.current = candidate;
-      activeOnActionRef.current = state.onAction ?? null;
-      setActiveCandidate(candidate);
-      currentDialogType.current = 'personalized';
-      tryActivateDialog();
-      return;
-    }
-
-    arbitrationStartedRef.current = true;
-    await prepareWelcomeBackDialog(uid, userMeta, userEmail, requestId);
-  };
-
-  // Reactive fallback: re-attempts arbitration whenever the
-  // personalizedInsightState prop changes (App.tsx's isLoadingMain
-  // settling). No-ops immediately via the
-  // currentDialogType.current/arbitrationStartedRef guards above once
-  // anything has already been decided this activation cycle. Reads
-  // userMeta/userEmail from the refs initDialog() populates (no second
-  // supabase.auth.getSession() call), and the CURRENT request id (so if a
-  // newer initDialog() run has started since — e.g. a fresh logout/login —
-  // prepareWelcomeBackDialog's own internal staleness checks correctly
-  // recognize it, exactly as if this were a normal same-run call).
-  useEffect(() => {
-    void arbitrateReturningUser(
-      currentUserId,
-      userMetaRef.current,
-      userEmailRef.current,
-      initDialogRequestIdRef.current
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [personalizedInsightState, currentUserId, disabled]);
-
-  // Cross-tab dismissal sync: if the SAME candidate (same userId +
-  // dedupeKey) is dismissed (Close) in another same-origin Inventory tab,
-  // that tab's write to localStorage fires the native `storage` event here
-  // — but only in THIS tab, never in the tab that performed the write, so
-  // reusing closeDialog() (which itself re-writes the identical key/value)
-  // cannot loop; passing persistDismissal: false makes this a pure
-  // local-UI suppression regardless.
-  useEffect(() => {
-    if (disabled) return;
-
-    const handlePersonalizedStorage = (event) => {
-      if (!event.key || event.newValue === null) return;
-      if (currentDialogType.current !== 'personalized') return;
-      if (!isDialogActiveRef.current) return;
-
-      const candidate = activeCandidateRef.current;
-      if (!candidate || !currentUserId) return;
-
-      const expectedKey = buildDialogueDismissalKey(currentUserId, candidate.dedupeKey);
-      if (event.key === expectedKey) {
-        closeDialog({ persistDismissal: false });
-      }
-    };
-
-    window.addEventListener('storage', handlePersonalizedStorage);
-    return () => window.removeEventListener('storage', handlePersonalizedStorage);
-  }, [disabled, currentUserId]);
-
-  const [dialogSteps, setDialogSteps] = useState([]);
 
   const [meowMsg, setMeowMsg] = useState(null);
   const [petStates, setPetStates] = useState(['Normal']);
@@ -677,134 +434,36 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
   }, [disabled]);
 
   useEffect(() => {
-    // A transition from logged-out to logged-in is a new auth session boundary.
-    // Clear per-type dismissals from the previous session so a dialog dismissed
-    // before logout (e.g. 'welcomeBack') doesn't keep suppressing itself forever
-    // just because this component instance was never unmounted.
-    const wasDisabled = prevDisabledRef.current;
-    prevDisabledRef.current = disabled;
-    if (wasDisabled && !disabled) {
-      dismissedDialogs.current.clear();
-      currentDialogType.current = null;
-      // New activation cycle for this never-unmounted component instance
-      // — allow arbitrateReturningUser to decide again for the new session.
-      arbitrationStartedRef.current = false;
-      // If a dialog from the previous session was left open (e.g. logout while
-      // Welcome Back was still showing), fully close it so the new session's
-      // dialog can activate cleanly instead of being skipped as "already active".
-      if (isDialogActiveRef.current) {
-        isDialogActiveRef.current = false;
-        setIsDialogActive(false);
-      }
-      clearWelcomeBackAutoCloseTimer();
-    }
-
     const initDialog = async () => {
-      const requestId = ++initDialogRequestIdRef.current;
       let userId = null;
-      let userMeta = null;
-      let userEmail = null;
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (initDialogRequestIdRef.current !== requestId) return;
         userId = session?.user?.id || null;
-        userMeta = session?.user?.user_metadata || null;
-        userEmail = session?.user?.email || null;
-        userMetaRef.current = userMeta;
-        userEmailRef.current = userEmail;
+        userMetaRef.current = session?.user?.user_metadata || null;
+        userEmailRef.current = session?.user?.email || null;
         setCurrentUserId(userId);
       } catch (err) {
         console.error("Error fetching session in initDialog:", err);
       }
 
       // If user is logged in (disabled = false) and has seen the intro:
-      // returning-user cycle. Deterministic arbitration (Personalized vs
-      // Welcome Back) lives entirely in arbitrateReturningUser now — it
-      // reads personalizedInsightState's explicit readiness rather than
-      // racing on whichever of App.tsx's isLoadingMain or this Welcome
-      // Back fetch happens to resolve first. If the state is still
-      // 'not_ready' at this exact moment, arbitrateReturningUser
-      // deliberately does nothing and defers to the reactive effect above.
+      // go straight to fetching Welcome Back content — the shared runtime's
+      // own intro effect independently checks this exact same
+      // `intro_shown_${userId}` key and will ignore `introInput` in this
+      // case regardless, so there's no need to publish anything into it.
       if (!disabled && userId && localStorage.getItem(`intro_shown_${userId}`) === 'true') {
-        await arbitrateReturningUser(userId, userMeta, userEmail, requestId);
+        await fetchWelcomeBackContent(userId);
         return;
       }
 
-      try {
-        const { data: configs, error: configsError } = await supabase
-          .from('aiboard_simulator_configs')
-          .select('id')
-          .eq('module_name', 'Inventory')
-          .limit(1);
-
-        if (initDialogRequestIdRef.current !== requestId) return;
-
-        if (configsError) {
-          // Infrastructure/query failure — do not mark the intro stage
-          // complete; preserve the ability to retry on the next login/reload.
-          return;
-        }
-
-        if (!configs || configs.length === 0) {
-          // Query succeeded and confirmed no simulator config exists at all
-          // for this module — there is no Intro to ever show. Mark the stage
-          // complete and immediately fall back to Welcome Back in this same
-          // login, instead of requiring another reload/login to see it.
-          if (!disabled) {
-            markIntroCompleted(userId);
-            await arbitrateReturningUser(userId, userMeta, userEmail, requestId);
-          }
-          return;
-        }
-
-        const configId = configs[0].id;
-
-        const { data, error } = await supabase
-          .from('aiboard_simulator_dialog_steps')
-          .select('step_text, sort_order')
-          .eq('config_id', configId)
-          .eq('is_post_login', !disabled)
-          .order('sort_order', { ascending: true });
-
-        if (initDialogRequestIdRef.current !== requestId) return;
-
-        if (error) {
-          // Infrastructure/query failure — do not mark the intro stage complete.
-          return;
-        }
-
-        const steps = (data || [])
-          .map(d => d.step_text)
-          .filter(text => typeof text === 'string' && text.trim().length > 0);
-
-        if (steps.length > 0) {
-          setDialogSteps(steps);
-          setDialogStep(0);
-          currentDialogType.current = 'intro';
-          tryActivateDialog();
-          return;
-        }
-
-        // Query succeeded but returned no usable intro content (zero rows, or
-        // every row was empty/whitespace-only) — there is nothing to show.
-        // Mark the stage complete and immediately fall back to Welcome Back
-        // in this same login, instead of requiring another reload/login.
-        if (!disabled) {
-          markIntroCompleted(userId);
-          await arbitrateReturningUser(userId, userMeta, userEmail, requestId);
-        }
-      } catch (err) {
-        console.error("Error fetching dialog steps:", err);
-        // Do not mark the intro stage complete on an unexpected/network
-        // failure — preserve the ability to retry on the next login or reload.
-      }
+      await fetchIntroContent(userId);
     };
 
     initDialog();
   }, [disabled]);
 
   useEffect(() => {
-    if (disabled || isDialogActive) return;
+    if (disabled || dialogue.kind !== 'none') return;
 
     let isSubscribed = true;
 
@@ -899,7 +558,7 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
       isSubscribed = false;
       if (meowTimerRef.current) clearTimeout(meowTimerRef.current);
     };
-  }, [disabled, isDialogActive, petStates]);
+  }, [disabled, dialogue.kind, petStates]);
 
   const audioLoopTimerRef = useRef(null);
 
@@ -996,7 +655,6 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
       setWalkDuration(0);
       setIsWalking(false);
       isEntryWalkComplete.current = true;
-      tryActivateDialog();
     } else {
       lastMoveStartPos.current = DEFAULT_MASCOT_POSITION;
       lastMoveTarget.current = { x: destX, y: destY };
@@ -1018,7 +676,6 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
           facingLeft: false,
           entryComplete: true,
         });
-        tryActivateDialog();
       }, duration * 1000);
     }
 
@@ -1086,7 +743,6 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
           facingLeft: nextFacingLeft,
           entryComplete: true,
         });
-        tryActivateDialog();
       }, duration * 1000);
     };
 
@@ -1095,9 +751,6 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
       document.removeEventListener('dblclick', handleGlobalClick);
       if (walkTimeoutRef.current) {
         clearTimeout(walkTimeoutRef.current);
-      }
-      if (autoCloseTimerRef.current) {
-        clearTimeout(autoCloseTimerRef.current);
       }
       saveMascotSessionState({
         ...lastMoveTarget.current,
@@ -1111,7 +764,7 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
     e.stopPropagation();
     // Only close the dialog on click if we are NOT in pre-login mode (disabled=true)
     if (!disabled) {
-      closeDialog();
+      closeActiveDialogue();
     }
     if (!isPetSleeping && audioRef.current) {
       audioRef.current.currentTime = 0;
@@ -1206,10 +859,10 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
         }}
       >
         <AnimatePresence mode="wait">
-          {isDialogActive && !activeCandidate && dialogSteps.length > 0 && (
+          {dialogue.kind === 'sequence' && (
             <motion.div
               data-cat="true"
-              key={`dialog-bubble-${dialogStep}`}
+              key={`dialog-bubble-${dialogue.stepIndex}`}
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
@@ -1221,27 +874,27 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
                 className="p-4 text-sm font-semibold leading-relaxed flex flex-col relative z-10 bg-white rounded-lg text-slate-700"
               >
                 <div className="flex-1 flex items-center justify-center text-center">
-                  <p className="whitespace-pre-wrap text-slate-700">{dialogSteps[dialogStep]}</p>
+                  <p className="whitespace-pre-wrap text-slate-700">{dialogue.steps[dialogue.stepIndex]}</p>
                 </div>
                 <div className="pt-4 flex justify-between items-center mt-auto">
                   <button
-                    onClick={(e) => { e.stopPropagation(); setDialogStep(p => Math.max(0, p - 1)); }}
-                    disabled={dialogStep === 0}
-                    className={`flex items-center gap-1 text-xs font-semibold text-slate-600 underline underline-offset-2 hover:text-slate-900 cursor-pointer ${dialogStep === 0 ? 'invisible' : ''
+                    onClick={(e) => { e.stopPropagation(); dialogue.onBack(); }}
+                    disabled={dialogue.stepIndex === 0}
+                    className={`flex items-center gap-1 text-xs font-semibold text-slate-600 underline underline-offset-2 hover:text-slate-900 cursor-pointer ${dialogue.stepIndex === 0 ? 'invisible' : ''
                       }`}
                   >
                     <ChevronLeft className="w-4 h-4" /> Back
                   </button>
-                  {dialogStep === dialogSteps.length - 1 ? (
+                  {dialogue.stepIndex === dialogue.steps.length - 1 ? (
                     <button
-                      onClick={(e) => { e.stopPropagation(); closeDialog(); }}
+                      onClick={(e) => { e.stopPropagation(); dialogue.onClose(); }}
                       className="flex items-center gap-1 text-xs font-semibold text-[#2A9D8F] underline underline-offset-2 hover:opacity-80 cursor-pointer"
                     >
                       Close <X className="w-4 h-4" />
                     </button>
                   ) : (
                     <button
-                      onClick={(e) => { e.stopPropagation(); setDialogStep(p => Math.min(dialogSteps.length - 1, p + 1)); }}
+                      onClick={(e) => { e.stopPropagation(); dialogue.onNext(); }}
                       className="flex items-center gap-1 text-xs font-semibold text-[#2A9D8F] underline underline-offset-2 hover:opacity-80 cursor-pointer"
                     >
                       Next <ChevronRight className="w-4 h-4" />
@@ -1256,12 +909,9 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
 
         {/* Phase-2 proactive personalized reminder — reuses the exact same
             dialogue bubble container/styling as Intro/Welcome Back above,
-            but single-step (no Back/Next). No CTA button: Inventory's
-            current Phase-2 candidates never populate `action` (see
-            aiExperience/contracts/insightCandidate.ts) — message + Close
-            only. */}
+            but single-step (no Back/Next). */}
         <AnimatePresence mode="wait">
-          {isDialogActive && activeCandidate && (
+          {dialogue.kind === 'personalized' && (
             <motion.div
               data-cat="true"
               key="dialog-bubble-personalized"
@@ -1276,39 +926,22 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
                 className="p-4 text-sm font-semibold leading-relaxed flex flex-col relative z-10 bg-white rounded-lg text-slate-700"
               >
                 <div className="flex-1 flex items-center justify-center text-center">
-                  <p className="whitespace-pre-wrap text-slate-700">{activeCandidate.message}</p>
+                  <p className="whitespace-pre-wrap text-slate-700">{dialogue.message}</p>
                 </div>
                 <div className="pt-4 flex justify-end items-center gap-4 mt-auto">
-                  {activeCandidate.action && (
+                  {dialogue.action && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        // CTA order: mark dismissed first (inside
-                        // closeDialog), then close/update UI, then run
-                        // App.tsx's existing action — never a new action
-                        // derived here. Uses the action AND candidate
-                        // captured at adoption time (not a fresh read of
-                        // the prop, and not whatever the inline resolver's
-                        // current winner happens to be), since the
-                        // dialogue persists even if personalizedInsightState
-                        // has since gone back to null/not_ready or moved on
-                        // to a different candidate — this is what
-                        // guarantees the CTA always navigates for the
-                        // exact candidate Cat is showing, never a stale or
-                        // unrelated one. Both refs are read BEFORE
-                        // closeDialog() clears activeCandidateRef.
-                        const onAction = activeOnActionRef.current;
-                        const candidateToActOn = activeCandidateRef.current;
-                        closeDialog();
-                        if (candidateToActOn) onAction?.(candidateToActOn);
+                        dialogue.action.onClick();
                       }}
                       className="flex items-center gap-1 text-xs font-bold text-white bg-[#2A9D8F] px-3 py-1.5 rounded-md hover:opacity-90 cursor-pointer"
                     >
-                      {activeCandidate.action.label}
+                      {dialogue.action.label}
                     </button>
                   )}
                   <button
-                    onClick={(e) => { e.stopPropagation(); closeDialog(); }}
+                    onClick={(e) => { e.stopPropagation(); dialogue.onClose(); }}
                     className="flex items-center gap-1 text-xs font-semibold text-[#2A9D8F] underline underline-offset-2 hover:opacity-80 cursor-pointer"
                   >
                     Close <X className="w-4 h-4" />
@@ -1321,7 +954,7 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
         </AnimatePresence>
 
         <AnimatePresence mode="wait">
-          {!disabled && !isDialogActive && meowMsg && (
+          {!disabled && dialogue.kind === 'none' && meowMsg && (
             <motion.div
               initial={{ opacity: 0, y: 5, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}

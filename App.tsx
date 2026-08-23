@@ -3451,6 +3451,23 @@ const handleLogout = async () => {
       {!isVirtualPetOpen && (
         <>
         <CatMascot
+          // PHASE 7B: `key` forces a fresh mount on every distinct
+          // authenticated identity boundary (a real id, or 'signed-out').
+          // CatMascot was previously never unmounted across login/logout
+          // (rendered once with only `disabled` toggling) and instead used
+          // its own bespoke internal boundary (`prevDisabledRef`) to clear
+          // dismissal/arbitration state on a logged-out -> logged-in
+          // transition. The shared dialogue runtime being adopted here has
+          // no equivalent internal reset mechanism — its mount-scoped shown
+          // tracking and one-activation guards only reset on an actual
+          // remount — so without this key, a second user signing into the
+          // same tab could inherit the first user's in-memory dialogue
+          // state. The Cat's own on-screen position/facing/entry-complete
+          // state is unaffected by this remount: it's independently
+          // restored from sessionStorage (see CatMascot.jsx's
+          // readMascotSessionState), which survives a React remount within
+          // the same tab.
+          key={user?.id ?? 'signed-out'}
           onCatClick={() => setIsVirtualPetOpen(true)}
           disabled={!isAuthenticated}
           personalizedInsightState={personalizedInsightState}
