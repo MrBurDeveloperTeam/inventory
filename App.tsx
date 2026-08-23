@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, ChatHistory, UOM, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, UOM, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
 import Header from './Header';
@@ -23,7 +23,6 @@ import {
   readThemeCookie,
   parseTheme,
 } from './src/utils/themeSync';
-import { chatWithGemini, chatWithGroundedInventoryFacts } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { api } from './services/api';
 import PromoBanner from './component/PromoBanner';
@@ -32,11 +31,7 @@ import { useInventoryPersonalizedInsight } from './aiExperience/hooks/useInvento
 import PersonalizedInsight from './aiExperience/components/PersonalizedInsight';
 import { buildInventoryDialoguePool } from './aiExperience/petDialogue/buildInventoryDialoguePool';
 import type { InsightCandidate } from './aiExperience/contracts/insightCandidate';
-import { isInventoryMutationRequest } from './aiExperience/dataChat/router/isInventoryMutationRequest';
-import { classifyInventoryDataIntent } from './aiExperience/dataChat/router/classifyInventoryDataIntent';
-import { resolveInventoryDataQuery } from './aiExperience/dataChat/resolver/resolveInventoryDataQuery';
-import { formatGroundedInventoryFallback } from './aiExperience/dataChat/utils/formatGroundedInventoryFallback';
-import { buildUnsupportedParameterMessage } from './aiExperience/dataChat/utils/unsupportedParameterMessage';
+import { createInventoryMolarAdapter } from './aiExperience/inventoryMolarAdapter';
 import { jwtDecode } from 'jwt-decode';
 import {
   ARCHIVED_LOCATION_LABEL,
@@ -398,14 +393,15 @@ const App: React.FC = () => {
   // Virtual Pet State
   const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
 
-  // Global Chat State
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [isChatLoading, setIsChatLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  // PHASE 7D: SharedMolarAI now owns open/closed state, chat history, input
+  // draft, loading state, and auto-scroll internally — the local
+  // `isChatOpen`/`chatHistory`/`chatInput`/`isChatLoading`/`chatEndRef`/
+  // `handleClearChat` state block and its own auto-scroll effect (which
+  // used to live here) are gone. `chatAudioRef`/`playMeowChat` are kept
+  // as-is below — they were already dead code before this migration (their
+  // only call site was already commented out) and are unrelated to the
+  // generic chat lifecycle SharedMolarAI now owns.
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
-  const handleClearChat = () => setChatHistory([]);
 
   //promotions
   const role = finalProfile?.position || 'staff';
@@ -489,263 +485,6 @@ useEffect(() => {
     if (chatAudioRef.current) {
       chatAudioRef.current.currentTime = 0;
       chatAudioRef.current.play().catch(err => console.log("Audio blocked:", err));
-    }
-  };
-
-  useEffect(() => {
-    if (isChatOpen && chatHistory.length > 0 && chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [chatHistory, isChatOpen]);
-
-  const getPredefinedChatResponse = async (message: string): Promise<string | null> => {
-    const normalizedMessage = message.toLowerCase();
-
-    const { data: targetApps, error: targetAppsError } = await supabase
-      .from('aiboard_response_target_apps')
-      .select('response_id')
-      .in('app_name', ['Inventory', 'All']);
-
-    if (targetAppsError) {
-      console.error('Failed to fetch response target apps:', targetAppsError);
-      return null;
-    }
-
-    const responseIds = [...new Set((targetApps || []).map((app: any) => app.response_id).filter(Boolean))];
-    if (responseIds.length === 0) return null;
-
-    const { data: keywords, error: keywordsError } = await supabase
-      .from('aiboard_response_keywords')
-      .select('keyword, response_id')
-      .in('response_id', responseIds);
-
-    if (keywordsError) {
-      console.error('Failed to fetch response keywords:', keywordsError);
-      return null;
-    }
-
-    const matchedKeyword = (keywords || [])
-      .filter((item: any) => item.keyword && normalizedMessage.includes(String(item.keyword).toLowerCase()))
-      .sort((a: any, b: any) => String(b.keyword).length - String(a.keyword).length)[0];
-
-    if (!matchedKeyword?.response_id) return null;
-
-    const { data: responseData, error: responseError } = await supabase
-      .from('aiboard_responses')
-      .select('response')
-      .eq('id', matchedKeyword.response_id)
-      .maybeSingle();
-
-    if (responseError) {
-      console.error('Failed to fetch predefined response:', responseError);
-      return null;
-    }
-
-    return responseData?.response || null;
-  };
-
-  const handleSendChat = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!chatInput.trim() || isChatLoading) return;
-
-    const userMsg = chatInput;
-    setChatInput("");
-
-    const newHistory: ChatHistory[] = [
-      ...chatHistory,
-      { role: "user", parts: [{ text: userMsg }] }
-    ];
-    setChatHistory(newHistory);
-    setIsChatLoading(true);
-
-    try {
-      // ── Phase-3 Data-Driven Chat (read-only pilot) ──────────────────
-      // Runs BEFORE the existing predefined-response/General Chat
-      // pipeline below, and is fully separate from it: a matched request
-      // here never builds `simpleInventory`/purchase-history/activity-log
-      // context, never calls `getPredefinedChatResponse`/`chatWithGemini`,
-      // and never touches the `<ACTION>` mutation parser further down.
-      // See aiExperience/dataChat/ for the deterministic router/provider/
-      // resolver pipeline this reuses.
-
-      // 1. Explicit inventory MUTATION requests are intercepted with a
-      // deterministic refusal — zero Gemini calls, zero mutation. The
-      // existing General Chat's own <ACTION>-block execution path is
-      // untouched below for anything that doesn't match this guard.
-      if (isInventoryMutationRequest(userMsg)) {
-        setChatHistory([
-          ...newHistory,
-          {
-            role: "model",
-            parts: [{ text: "This data chat can check inventory information, but it can't make inventory changes." }],
-          },
-        ]);
-        return;
-      }
-
-      // 2. Deterministic LOCAL intent classification (no Gemini call).
-      const dataRoute = classifyInventoryDataIntent(userMsg);
-
-      // 2a. A message that matched an approved intent's keywords but ALSO
-      // carried an explicit user-supplied threshold/window override
-      // ("below 5", "within 7 days") is answered deterministically here —
-      // ZERO Gemini calls, and it does NOT fall through to General Chat
-      // (which would let the user bypass grounding entirely just by
-      // adding a number) and does NOT silently answer using the fixed
-      // rule as if that matched what was actually asked.
-      if (dataRoute.kind === 'unsupported_parameter') {
-        setChatHistory([
-          ...newHistory,
-          { role: "model", parts: [{ text: buildUnsupportedParameterMessage(dataRoute.intent) }] },
-        ]);
-        return;
-      }
-
-      // 2b. Approved standard data intent -> grounded provider -> grounded response.
-      if (dataRoute.kind === 'matched') {
-        const result = resolveInventoryDataQuery(dataRoute.intent, rooms, isLoadingMain);
-
-        let dataChatResponseText: string;
-        if (result.status === 'unavailable') {
-          // Unknown/unavailable inventory state is never reinterpreted as
-          // a zero-result answer, and a matched grounded intent owns this
-          // request even when its provider is temporarily unavailable —
-          // it does not fall through to General Chat.
-          dataChatResponseText = "I couldn't check your inventory data right now.";
-        } else {
-          try {
-            // 3. Grounded Gemini phrasing — receives ONLY the question,
-            // the approved intent, and the already-minimized facts. Plain
-            // text only; never scanned for <ACTION> blocks.
-            dataChatResponseText = await chatWithGroundedInventoryFacts(userMsg, result.intent, result.facts);
-          } catch (groundedErr) {
-            // Mandatory deterministic fallback — never falls through to
-            // General Chat on a Gemini failure at this stage.
-            console.error('Grounded inventory response failed:', groundedErr);
-            dataChatResponseText = formatGroundedInventoryFallback(result.intent, result.facts);
-          }
-        }
-
-        setChatHistory([
-          ...newHistory,
-          { role: "model", parts: [{ text: dataChatResponseText }] },
-        ]);
-        return;
-      }
-      // ── End Phase-3 Data-Driven Chat ────────────────────────────────
-
-      const simpleInventory = rooms.map(r => ({
-        id: r.id,
-        room: r.name,
-        items: r.items.map(i => ({
-          name: i.name,
-          brand: i.brand,
-          code: i.code,
-          category: i.category,
-          uom: i.uom,
-          totalQty: i.quantity,
-          avgPrice: i.price,
-          location: r.name,
-          batches: i.batches?.map(b => ({
-            qty: b.qty,
-            unitPrice: b.unitPrice,
-            expiryDate: b.expiryDate
-          }))
-        }))
-      }));
-
-      // Prepare purchase history (last 100 records for performance)
-      const recentPurchases = history.slice(0, 100).map(h => ({
-        date: h.timestamp,
-        product: h.productName,
-        brand: h.brand,
-        vendor: h.vendor,
-        qty: h.qty,
-        unitPrice: h.unitPrice,
-        total: h.totalPrice,
-        location: h.location,
-        category: h.category
-      }));
-
-      // Prepare activity logs (last 100 records for performance)
-      const recentLogs = logs.slice(0, 100).map(l => ({
-        date: l.timestamp,
-        room: l.roomName,
-        action: l.action,
-        details: l.details,
-        actor: l.actorName
-      }));
-
-      const contextStr = JSON.stringify(simpleInventory);
-      const purchaseHistoryStr = recentPurchases.length ? JSON.stringify(recentPurchases) : undefined;
-      const activityLogsStr = recentLogs.length ? JSON.stringify(recentLogs) : undefined;
-
-      const response = await getPredefinedChatResponse(userMsg)
-        || await chatWithGemini(chatHistory, userMsg, contextStr, purchaseHistoryStr, activityLogsStr);
-
-      let finalResponseText = response;
-      const actionMatch = response.match(/<ACTION>(.*?)<\/ACTION>/);
-
-      if (actionMatch && actionMatch[1]) {
-        try {
-          const actionData = JSON.parse(actionMatch[1]);
-          if (actionData.type === 'receive') {
-            receiveStock(
-              actionData.roomId,
-              {
-                name: actionData.itemName,
-                brand: actionData.brand || '',
-                code: actionData.code || '',
-                uom: (actionData.uom || 'pcs').toLowerCase() as any,
-                vendor: actionData.vendor || '',
-                category: (actionData.category || 'consumables').toLowerCase() as any
-              },
-              actionData.qty,
-              actionData.price,
-              new Date().toISOString().split('T')[0],
-              actionData.expiry,
-              actionData.createNewBatch
-            );
-          } else if (actionData.type === 'remove') {
-            removeStock(
-              actionData.roomId,
-              actionData.itemName,
-              actionData.brand,
-              actionData.qty,
-              actionData.expiry
-            );
-          } else if (actionData.type === 'transfer') {
-            const fromRoom = rooms.find(r => r.id === actionData.fromRoomId || r.name === (actionData.fromRoomName || actionData.fromRoom));
-            const toRoom = rooms.find(r => r.id === actionData.toRoomId || r.name === (actionData.toRoomName || actionData.toRoom));
-            if (fromRoom && toRoom) {
-              const item = fromRoom.items.find(i => 
-                i.name.toLowerCase() === actionData.itemName.toLowerCase() &&
-                (actionData.brand ? i.brand.toLowerCase() === actionData.brand.toLowerCase() : true)
-              );
-              if (item) {
-                moveItem(fromRoom.id, toRoom.id, item.id, actionData.qty);
-              }
-            }
-          }
-          finalResponseText = response.replace(/<ACTION>.*?<\/ACTION>/s, '').trim();
-        } catch (err) {
-          console.error('Failed to parse AI action:', err);
-        }
-      }
-
-      setChatHistory(prev => [
-        ...prev,
-        { role: "model", parts: [{ text: finalResponseText }] }
-      ]);
-      // playMeowChat();
-    } catch (err) {
-      console.error(err);
-      setChatHistory([
-        ...newHistory,
-        { role: "model", parts: [{ text: "I'm having trouble processing your request at the moment. Please try again shortly." }] }
-      ]);
-    } finally {
-      setIsChatLoading(false);
     }
   };
 
@@ -3132,6 +2871,28 @@ const handleLogout = async () => {
     }
   };
 
+  // PHASE 7D: the entire General Chat / Data Chat / live `<ACTION>` mutation
+  // orchestration that used to live inline in `handleSendChat` (AIBoard
+  // keyword lookup, deterministic Data Chat routing, grounded Gemini,
+  // General Chat Gemini fallback, and the `<ACTION>` block parser/executor
+  // that calls `receiveStock`/`removeStock`/`moveItem` directly) has moved
+  // mechanically — same order, same logic — into
+  // `aiExperience/inventoryMolarAdapter.ts`'s `createInventoryMolarAdapter`.
+  // <SharedMolarAI> now owns open/closed state, chat history, input draft,
+  // loading state, and auto-scroll; this adapter is the only thing it calls
+  // to produce a response. Rebuilt each render (matching the fact that
+  // `handleSendChat`/`receiveStock`/`removeStock`/`moveItem` were never
+  // memoized before either) so it always closes over the current
+  // `rooms`/`history`/`logs`/`isLoadingMain`. Declared here (after
+  // `receiveStock`/`removeStock`/`moveItem`, not near the top of the
+  // component) because those are `const` closures, not hoisted function
+  // declarations — referencing them earlier throws a temporal-dead-zone
+  // "used before declaration" error.
+  const inventoryMolarAdapter = useMemo(
+    () => createInventoryMolarAdapter({ rooms, history, logs, isLoadingMain, receiveStock, removeStock, moveItem }),
+    [rooms, history, logs, isLoadingMain, receiveStock, removeStock, moveItem]
+  );
+
   const navigatetoSnabbb = () => {
     window.open('https://app.snabbb.com', '_self');
   }
@@ -3306,7 +3067,6 @@ const handleLogout = async () => {
                   }
                 } : undefined}
                 onReceive={receiveStock}
-                onOpenChat={() => setIsChatOpen(true)}
                 onOpenVirtualPet={() => setIsVirtualPetOpen(true)}
                 readOnly={!canManageStructure || isLoadingMain}
                 syncStatus={syncStatus}
@@ -3481,20 +3241,8 @@ const handleLogout = async () => {
           personalizedInsightState={personalizedInsightState}
         />
         <MolarAIFloat
-          isOpen={isChatOpen}
-          onOpen={() => setIsChatOpen(true)}
-          onClose={() => setIsChatOpen(false)}
-          chatHistory={chatHistory}
-          isChatLoading={isChatLoading}
-          chatInput={chatInput}
-          setChatInput={setChatInput}
-          onSendMessage={handleSendChat}
-          onClearChat={handleClearChat}
-          chatEndRef={chatEndRef}
-          onPetToggle={() => {
-            setIsChatOpen(false);
-            setIsVirtualPetOpen(true);
-          }}
+          adapter={inventoryMolarAdapter}
+          onPetToggle={() => setIsVirtualPetOpen(true)}
           disabled={!isAuthenticated}
         />
         </>
