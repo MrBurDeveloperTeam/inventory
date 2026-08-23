@@ -1,158 +1,55 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, ChevronLeft, X } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
-import { getPetOption, normalizePetId } from '../VirtualPet/petOptions';
-import { useSharedCatDialogueRuntime } from '@mrburdeveloperteam/molar-experience/cat';
+import { normalizePetId } from '../VirtualPet/petOptions';
+import { useSharedCatDialogueRuntime, SharedCatMascot } from '@mrburdeveloperteam/molar-experience/cat';
 
-const MALLOW_FRAME_WIDTH = 192;
-const MALLOW_FRAME_HEIGHT = 208;
-const MALLOW_SCALE = 0.42;
 const PET_SLEEPING_KEY = 'pet_is_sleeping';
 const PET_SLEEPING_UPDATED_AT_KEY = 'pet_is_sleeping_updated_at';
-const MASCOT_SESSION_STATE_KEY = 'inventory_cat_mascot_session_state';
-const DEFAULT_MASCOT_POSITION = { x: -10, y: 85 };
 const DEFAULT_WELCOME_BACK_AUTO_CLOSE_MS = 6000;
-const MALLOW_ROWS = {
-  idle: { row: 0, frames: 6, duration: '1.1s' },
-  runRight: { row: 1, frames: 8, duration: '0.7s' },
-  runLeft: { row: 2, frames: 8, duration: '0.7s' },
-  wave: { row: 3, frames: 4, duration: '0.8s' },
-  review: { row: 3, frames: 4, duration: '0.8s' },
-  sleep: { row: 5, frames: 1, duration: '1s', frame: 4 },
-};
-
-const readMascotSessionState = () => {
-  try {
-    const raw = sessionStorage.getItem(MASCOT_SESSION_STATE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (
-      !parsed ||
-      typeof parsed.x !== 'number' ||
-      typeof parsed.y !== 'number'
-    ) {
-      return null;
-    }
-    return {
-      x: parsed.x,
-      y: parsed.y,
-      facingLeft: !!parsed.facingLeft,
-      entryComplete: !!parsed.entryComplete,
-    };
-  } catch {
-    return null;
-  }
-};
-
-const saveMascotSessionState = ({ x, y, facingLeft, entryComplete }) => {
-  try {
-    sessionStorage.setItem(
-      MASCOT_SESSION_STATE_KEY,
-      JSON.stringify({ x, y, facingLeft, entryComplete })
-    );
-  } catch {
-    // Ignore storage failures; the mascot can still run normally.
-  }
-};
-
-function MallowMascotSprite({
-  spriteSheetUrl,
-  sleepHoldFrame,
-  idleFrames,
-  idleDuration,
-  hoverRow,
-  hoverFrames,
-  hoverDuration,
-  clickRow,
-  clickFrames,
-  clickDuration,
-  isWalking,
-  facingLeft,
-  isMeowing,
-  isHovered,
-  isSleeping,
-  onHoverStart,
-  onHoverEnd,
-}) {
-  const shouldSleep = isSleeping && !isWalking && !isMeowing;
-  const shouldReview = isHovered && !isWalking && !shouldSleep;
-  const stateClass = shouldSleep ? 'sleep' : shouldReview ? 'review' : isWalking ? (facingLeft ? 'run-left' : 'run-right') : 'idle';
-  const reviewConfig = {
-    row: hoverRow ?? MALLOW_ROWS.review.row,
-    frames: hoverFrames ?? MALLOW_ROWS.review.frames,
-    duration: hoverDuration ?? MALLOW_ROWS.review.duration,
-  };
-  const clickConfig = {
-    row: clickRow ?? MALLOW_ROWS.wave.row,
-    frames: clickFrames ?? MALLOW_ROWS.wave.frames,
-    duration: clickDuration ?? MALLOW_ROWS.wave.duration,
-  };
-  const idleConfig = {
-    ...MALLOW_ROWS.idle,
-    frames: idleFrames ?? MALLOW_ROWS.idle.frames,
-    duration: idleDuration ?? MALLOW_ROWS.idle.duration,
-  };
-  const config = shouldSleep
-    ? { ...MALLOW_ROWS.sleep, frame: sleepHoldFrame ?? MALLOW_ROWS.sleep.frame }
-    : shouldReview
-      ? reviewConfig
-      : isMeowing && !isWalking
-        ? clickConfig
-        : facingLeft && isWalking
-          ? MALLOW_ROWS.runLeft
-          : isWalking
-            ? MALLOW_ROWS.runRight
-            : idleConfig;
-
-  return (
-    <div
-      className={`mallow-mascot ${stateClass} frames-${config.frames} ${isMeowing ? 'is-talking' : ''}`}
-      aria-label={`Mallow pet ${stateClass}`}
-      onPointerEnter={onHoverStart}
-      onMouseEnter={onHoverStart}
-      onMouseOver={onHoverStart}
-      onPointerLeave={onHoverEnd}
-      onMouseLeave={onHoverEnd}
-      style={{
-        '--sprite-row': config.row,
-        '--sprite-frames': config.frames,
-        '--sprite-duration': config.duration,
-        '--sprite-frame': config.frame ?? 0,
-        '--pet-spritesheet': `url("${spriteSheetUrl}")`,
-      }}
-    />
-  );
-}
 
 export default function CatMascot({ onCatClick, disabled = false, personalizedInsightState = null }) {
-  const restoredMascotStateRef = useRef(readMascotSessionState());
-  const [catPos, setCatPos] = useState(() => {
-    const restored = restoredMascotStateRef.current;
-    return restored?.entryComplete ? { x: restored.x, y: restored.y } : DEFAULT_MASCOT_POSITION;
-  });
-  const [isWalking, setIsWalking] = useState(false);
-  const [facingLeft, setFacingLeft] = useState(() => restoredMascotStateRef.current?.facingLeft ?? false);
-  const [isMeowing, setIsMeowing] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  // Presentation (sprite, position/walk animation, entry walk,
+  // double-click-to-move, click-sound-wave affordance, and the three
+  // dialogue bubble presentations) is now entirely owned by
+  // <SharedCatMascot> — see PHASE 7C. This wrapper keeps only what's
+  // genuinely Inventory host-specific: selected pet identity, sleeping
+  // state, dialogue CONTENT (Intro/Welcome Back/personalized), ambient
+  // mood meow content, ambient audio loop, and the click-sound asset +
+  // Cat -> Virtual Pet callback.
+  //
+  // PHASE 7C NOTE (position restore): the pre-migration component
+  // persisted its on-screen x/y/facing/entry-complete state to
+  // sessionStorage (`inventory_cat_mascot_session_state`) so a same-tab
+  // remount (e.g. this Phase 7B's own `key={user?.id ?? 'signed-out'}`
+  // boundary on the App.tsx composition) could restore the Cat's exact
+  // prior position instead of replaying the entry walk. Published
+  // `SharedCatMascot@0.5.0` exposes no position/restore props at all
+  // (confirmed by reading `dist/SharedCatMascot-*.d.ts`: only `disabled`,
+  // `petId`, `isSleeping`, `dialogue`, `meowMessage`, `onCatClick`) — its
+  // entry walk and position are fully internal, canonical, and always
+  // replay from the same off-screen start point on every mount. Per this
+  // phase's explicit instructions, no second local movement/position
+  // engine was built around SharedCatMascot to emulate the old restore
+  // behavior — the position-restore feature (and its sessionStorage key)
+  // is dropped, and canonical shared entry-walk behavior is used instead.
+  // This is a real, user-visible difference on every remount (including
+  // the Phase 7B user-key auth boundary and any React Strict-Mode-driven
+  // remount) that requires explicit manual browser acceptance.
   const [isPetSleeping, setIsPetSleeping] = useState(() => {
     try { return localStorage.getItem(PET_SLEEPING_KEY) === 'true'; } catch { return false; }
   });
   const [selectedPetId, setSelectedPetId] = useState(() => normalizePetId(localStorage.getItem('pet_name')));
-  const [walkDuration, setWalkDuration] = useState(0.8);
-  const selectedPet = getPetOption(selectedPetId);
 
   const [currentUserId, setCurrentUserId] = useState(null);
-  const isEntryWalkComplete = useRef(!!restoredMascotStateRef.current?.entryComplete);
   // Content-only inputs fed into the shared dialogue runtime — this
   // component no longer decides WHICH dialogue type shows or WHEN
   // (mount-scoped shown-tracking, dismissal persistence, cross-tab sync,
   // exact-adopted-candidate binding, one-activation/no-cascade, readiness
-  // arbitration all now live in @mrburdeveloperteam/molar-experience's
-  // useSharedCatDialogueRuntime, ported from this file's own pre-migration
-  // controller). This file keeps only what's genuinely Inventory-specific:
-  // fetching Intro/Welcome Back CONTENT from Supabase, and reshaping the
-  // `personalizedInsightState` prop App.tsx already computes.
+  // arbitration all live in @mrburdeveloperteam/molar-experience's
+  // useSharedCatDialogueRuntime — unchanged since Phase 7B). This file
+  // keeps only what's genuinely Inventory-specific: fetching Intro/Welcome
+  // Back CONTENT from Supabase, and reshaping the `personalizedInsightState`
+  // prop App.tsx already computes.
   const [introInput, setIntroInput] = useState({ status: 'not_ready' });
   const [welcomeBackInput, setWelcomeBackInput] = useState({ status: 'not_ready' });
   // initDialog()'s fetched session metadata, cached here so
@@ -621,386 +518,42 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
     };
   }, [disabled]);
 
-  const walkTimeoutRef = useRef(null);
+  // Existing Inventory click-sound asset — SharedCatMascot's own internal
+  // click handler already plays the wave/talking sprite animation and
+  // fires `onCatClick` (only when !disabled — pre-login/loading clicks are
+  // suppressed at the source, same gating the original component's final
+  // `if (!disabled && onCatClick) onCatClick();` used), but it does NOT
+  // bundle or play any audio asset (see SharedCatMascotProps' own doc:
+  // "no audio asset is bundled"). The click-sound stays host-owned here,
+  // using the exact same '/images/cat-meow.mp3' path the pre-migration
+  // component used, including its Inventory-specific `!isPetSleeping`
+  // gate (a nuance this app has that other migrated apps did not).
   const audioRef = useRef(null);
-  const lastMoveStartPos = useRef(restoredMascotStateRef.current?.entryComplete ? {
-    x: restoredMascotStateRef.current.x,
-    y: restoredMascotStateRef.current.y,
-  } : DEFAULT_MASCOT_POSITION);
-  const lastMoveStartTime = useRef(Date.now());
-  const lastMoveDuration = useRef(0.8);
-  const lastMoveTarget = useRef(restoredMascotStateRef.current?.entryComplete ? {
-    x: restoredMascotStateRef.current.x,
-    y: restoredMascotStateRef.current.y,
-  } : DEFAULT_MASCOT_POSITION);
-
   useEffect(() => {
     audioRef.current = new Audio('/images/cat-meow.mp3');
-
-    const restored = restoredMascotStateRef.current;
-
-    // Walk into screen from left
-    const destX = 20 + Math.random() * 60;
-    const destY = 80 + Math.random() * 10;
-    const duration = 2.8; // Entry walk duration
-
-    if (restored?.entryComplete) {
-      const restoredPos = { x: restored.x, y: restored.y };
-      lastMoveStartPos.current = restoredPos;
-      lastMoveTarget.current = restoredPos;
-      lastMoveStartTime.current = Date.now();
-      lastMoveDuration.current = 0;
-      setCatPos(restoredPos);
-      setFacingLeft(restored.facingLeft);
-      setWalkDuration(0);
-      setIsWalking(false);
-      isEntryWalkComplete.current = true;
-    } else {
-      lastMoveStartPos.current = DEFAULT_MASCOT_POSITION;
-      lastMoveTarget.current = { x: destX, y: destY };
-      lastMoveStartTime.current = Date.now();
-      lastMoveDuration.current = duration;
-
-      setFacingLeft(false);
-      setWalkDuration(duration);
-      setCatPos({ x: destX, y: destY });
-      setIsWalking(true);
-
-      if (walkTimeoutRef.current) clearTimeout(walkTimeoutRef.current);
-      walkTimeoutRef.current = setTimeout(() => {
-        setIsWalking(false);
-        isEntryWalkComplete.current = true;
-        saveMascotSessionState({
-          x: destX,
-          y: destY,
-          facingLeft: false,
-          entryComplete: true,
-        });
-      }, duration * 1000);
-    }
-
-    const getInterpolatedPos = () => {
-      const elapsed = (Date.now() - lastMoveStartTime.current) / 1000;
-      const progress = Math.min(elapsed / lastMoveDuration.current, 1);
-      return {
-        x: lastMoveStartPos.current.x + (lastMoveTarget.current.x - lastMoveStartPos.current.x) * progress,
-        y: lastMoveStartPos.current.y + (lastMoveTarget.current.y - lastMoveStartPos.current.y) * progress,
-      };
-    };
-
-    const handleGlobalClick = (e) => {
-      const target = e.target;
-      if (
-        target.closest('button') ||
-        target.closest('a') ||
-        target.closest('input') ||
-        target.closest('select') ||
-        target.closest('option') ||
-        target.closest('textarea') ||
-        target.closest('[data-cat]') ||
-        target.closest('[data-cat-ignore]')
-      ) return;
-
-      const targetX_px = e.clientX;
-      const targetY_px = e.clientY;
-
-      const targetX = (targetX_px / window.innerWidth) * 100;
-      const targetY = (targetY_px / window.innerHeight) * 100;
-      const currentPos = getInterpolatedPos();
-      const currentX_px = (currentPos.x / 100) * window.innerWidth;
-      const currentY_px = (currentPos.y / 100) * window.innerHeight;
-
-      const distance_px = Math.sqrt(Math.pow(targetX_px - currentX_px, 2) + Math.pow(targetY_px - currentY_px, 2));
-
-      if (distance_px < 5) return;
-
-      const duration = distance_px / 200;
-
-      lastMoveStartPos.current = currentPos;
-      lastMoveTarget.current = { x: targetX, y: targetY };
-      lastMoveStartTime.current = Date.now();
-      lastMoveDuration.current = duration;
-
-      const nextFacingLeft = targetX < currentPos.x;
-      setFacingLeft(nextFacingLeft);
-      setWalkDuration(duration);
-      setCatPos({ x: targetX, y: targetY });
-      setIsWalking(true);
-      saveMascotSessionState({
-        x: targetX,
-        y: targetY,
-        facingLeft: nextFacingLeft,
-        entryComplete: true,
-      });
-
-      if (walkTimeoutRef.current) clearTimeout(walkTimeoutRef.current);
-      walkTimeoutRef.current = setTimeout(() => {
-        setIsWalking(false);
-        isEntryWalkComplete.current = true;
-        saveMascotSessionState({
-          x: targetX,
-          y: targetY,
-          facingLeft: nextFacingLeft,
-          entryComplete: true,
-        });
-      }, duration * 1000);
-    };
-
-    document.addEventListener('dblclick', handleGlobalClick);
-    return () => {
-      document.removeEventListener('dblclick', handleGlobalClick);
-      if (walkTimeoutRef.current) {
-        clearTimeout(walkTimeoutRef.current);
-      }
-      saveMascotSessionState({
-        ...lastMoveTarget.current,
-        facingLeft,
-        entryComplete: isEntryWalkComplete.current,
-      });
-    };
   }, []);
 
-  const handleCatClick = (e) => {
-    e.stopPropagation();
-    // Only close the dialog on click if we are NOT in pre-login mode (disabled=true)
-    if (!disabled) {
-      closeActiveDialogue();
-    }
+  // Preserves the original ordering: close whatever dialogue is active,
+  // then (only if the pet isn't sleeping) play the click sound, then
+  // invoke the host's Cat -> Virtual Pet callback. Only ever called by
+  // SharedCatMascot when `!disabled`.
+  const handleCatClick = () => {
+    closeActiveDialogue();
     if (!isPetSleeping && audioRef.current) {
       audioRef.current.currentTime = 0;
       audioRef.current.play().catch(() => { });
-      setIsMeowing(true);
-      setTimeout(() => setIsMeowing(false), 800);
     }
-    if (!disabled && onCatClick) onCatClick();
+    onCatClick?.();
   };
 
   return (
-    <>
-      <style>{`
-        @keyframes cat-sound-wave {
-          0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
-          100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
-        }
-        .cat-sound-ring {
-          animation: cat-sound-wave 0.6s ease-out forwards;
-        }
-        .cat-tooltip {
-          opacity: 0;
-          transition: opacity 0.2s;
-          pointer-events: none;
-        }
-        .cat-mascot-wrapper:hover .cat-tooltip {
-          opacity: 1;
-        }
-        .mallow-mascot {
-          position: relative;
-          width: ${MALLOW_FRAME_WIDTH * MALLOW_SCALE}px;
-          height: ${MALLOW_FRAME_HEIGHT * MALLOW_SCALE}px;
-          background-image: var(--pet-spritesheet);
-          background-repeat: no-repeat;
-          background-size: ${MALLOW_FRAME_WIDTH * 8 * MALLOW_SCALE}px ${MALLOW_FRAME_HEIGHT * 9 * MALLOW_SCALE}px;
-          background-position-y: calc(-1 * var(--sprite-row) * ${MALLOW_FRAME_HEIGHT * MALLOW_SCALE}px);
-          image-rendering: pixelated;
-          pointer-events: auto;
-          cursor: pointer;
-          filter: drop-shadow(0 5px 8px rgba(15, 23, 42, 0.1));
-          animation-duration: var(--sprite-duration);
-          animation-iteration-count: infinite;
-          animation-timing-function: steps(var(--sprite-frames));
-        }
-        .mallow-mascot.idle {
-          animation-name: mallow-sprite;
-        }
-        .mallow-mascot.run-left,
-        .mallow-mascot.run-right,
-        .mallow-mascot.review {
-          animation-name: mallow-sprite;
-        }
-        .mallow-mascot.sleep {
-          animation-name: none;
-          background-position-x: calc(-1 * var(--sprite-frame) * ${MALLOW_FRAME_WIDTH * MALLOW_SCALE}px);
-        }
-        .mallow-mascot.sleep::after {
-          content: 'Zzz...';
-          position: absolute;
-          left: 64%;
-          top: -5px;
-          color: #94a3b8;
-          font-size: 14px;
-          font-weight: 800;
-          letter-spacing: 0.02em;
-          animation: mascot-sleep-float 1.8s ease-in-out infinite;
-        }
-        @keyframes mallow-sprite {
-          from { background-position-x: 0; }
-          to { background-position-x: calc(-1 * var(--sprite-frames) * ${MALLOW_FRAME_WIDTH * MALLOW_SCALE}px); }
-        }
-        @keyframes mascot-sleep-float {
-          0%, 100% { transform: translateY(0); opacity: 0.65; }
-          50% { transform: translateY(-4px); opacity: 1; }
-        }
-      `}</style>
-
-      <div
-        className="cat-mascot-wrapper"
-        style={{
-          position: 'fixed',
-          left: `${catPos.x}%`,
-          top: `${catPos.y}%`,
-          transform: `translate(-50%, -100%)`,
-          transition: `left ${walkDuration}s linear, top ${walkDuration}s linear`,
-          zIndex: 9990,
-          userSelect: 'none',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          pointerEvents: 'none',
-        }}
-      >
-        <AnimatePresence mode="wait">
-          {dialogue.kind === 'sequence' && (
-            <motion.div
-              data-cat="true"
-              key={`dialog-bubble-${dialogue.stepIndex}`}
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
-              className="w-max shrink-0 max-w-[min(85vw,340px)] bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col overflow-visible relative pointer-events-auto mb-4 mr-1 cursor-default"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                className="p-4 text-sm font-semibold leading-relaxed flex flex-col relative z-10 bg-white rounded-lg text-slate-700"
-              >
-                <div className="flex-1 flex items-center justify-center text-center">
-                  <p className="whitespace-pre-wrap text-slate-700">{dialogue.steps[dialogue.stepIndex]}</p>
-                </div>
-                <div className="pt-4 flex justify-between items-center mt-auto">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); dialogue.onBack(); }}
-                    disabled={dialogue.stepIndex === 0}
-                    className={`flex items-center gap-1 text-xs font-semibold text-slate-600 underline underline-offset-2 hover:text-slate-900 cursor-pointer ${dialogue.stepIndex === 0 ? 'invisible' : ''
-                      }`}
-                  >
-                    <ChevronLeft className="w-4 h-4" /> Back
-                  </button>
-                  {dialogue.stepIndex === dialogue.steps.length - 1 ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); dialogue.onClose(); }}
-                      className="flex items-center gap-1 text-xs font-semibold text-[#2A9D8F] underline underline-offset-2 hover:opacity-80 cursor-pointer"
-                    >
-                      Close <X className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); dialogue.onNext(); }}
-                      className="flex items-center gap-1 text-xs font-semibold text-[#2A9D8F] underline underline-offset-2 hover:opacity-80 cursor-pointer"
-                    >
-                      Next <ChevronRight className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="absolute -bottom-2 left-1/2 w-4 h-4 bg-white transform rotate-45 -translate-x-1/2 shadow-md border-r border-b border-slate-100 z-0"></div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Phase-2 proactive personalized reminder — reuses the exact same
-            dialogue bubble container/styling as Intro/Welcome Back above,
-            but single-step (no Back/Next). */}
-        <AnimatePresence mode="wait">
-          {dialogue.kind === 'personalized' && (
-            <motion.div
-              data-cat="true"
-              key="dialog-bubble-personalized"
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
-              className="w-max shrink-0 max-w-[min(85vw,340px)] bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col overflow-visible relative pointer-events-auto mb-4 mr-1 cursor-default"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                className="p-4 text-sm font-semibold leading-relaxed flex flex-col relative z-10 bg-white rounded-lg text-slate-700"
-              >
-                <div className="flex-1 flex items-center justify-center text-center">
-                  <p className="whitespace-pre-wrap text-slate-700">{dialogue.message}</p>
-                </div>
-                <div className="pt-4 flex justify-end items-center gap-4 mt-auto">
-                  {dialogue.action && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        dialogue.action.onClick();
-                      }}
-                      className="flex items-center gap-1 text-xs font-bold text-white bg-[#2A9D8F] px-3 py-1.5 rounded-md hover:opacity-90 cursor-pointer"
-                    >
-                      {dialogue.action.label}
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); dialogue.onClose(); }}
-                    className="flex items-center gap-1 text-xs font-semibold text-[#2A9D8F] underline underline-offset-2 hover:opacity-80 cursor-pointer"
-                  >
-                    Close <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="absolute -bottom-2 left-1/2 w-4 h-4 bg-white transform rotate-45 -translate-x-1/2 shadow-md border-r border-b border-slate-100 z-0"></div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence mode="wait">
-          {!disabled && dialogue.kind === 'none' && meowMsg && (
-            <motion.div
-              initial={{ opacity: 0, y: 5, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -5, scale: 0.95 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg shadow-sm relative pointer-events-auto mb-4 mr-1 cursor-default"
-            >
-              <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">{meowMsg}</span>
-              <div className="absolute -bottom-2 left-1/2 w-4 h-4 bg-white transform rotate-45 -translate-x-1/2 shadow-md border-r border-b border-slate-100 z-0"></div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Mallow pet mascot */}
-        <div
-          data-cat="true"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleCatClick(e);
-          }}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseOver={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-          style={{ pointerEvents: 'auto' }}
-        >
-          <MallowMascotSprite
-            spriteSheetUrl={selectedPet.spriteSheetUrl}
-            sleepHoldFrame={selectedPet.sleepHoldFrame}
-            idleFrames={selectedPet.idleFrames}
-            idleDuration={selectedPet.idleDuration}
-            hoverRow={selectedPet.hoverRow}
-            hoverFrames={selectedPet.hoverFrames}
-            hoverDuration={selectedPet.hoverDuration}
-            clickRow={selectedPet.clickRow}
-            clickFrames={selectedPet.clickFrames}
-            clickDuration={selectedPet.clickDuration}
-            isWalking={isWalking}
-            facingLeft={facingLeft}
-            isMeowing={isMeowing}
-            isHovered={isHovered}
-            isSleeping={isPetSleeping}
-            onHoverStart={() => setIsHovered(true)}
-            onHoverEnd={() => setIsHovered(false)}
-          />
-        </div>
-      </div>
-    </>
+    <SharedCatMascot
+      disabled={disabled}
+      petId={selectedPetId}
+      isSleeping={isPetSleeping}
+      dialogue={dialogue}
+      meowMessage={meowMsg}
+      onCatClick={handleCatClick}
+    />
   );
 }

@@ -3362,12 +3362,20 @@ const handleLogout = async () => {
       )}
 
       {pendingRoomDelete && (
+        // PHASE 7C: renamed from `data-cat-ignore` to `data-mascot-ignore` —
+        // the local CatMascot click-to-move handler (which recognized
+        // `data-cat-ignore`) was removed when this component's presentation
+        // moved to <SharedCatMascot>; `data-mascot-ignore` is one of the two
+        // attribute names SharedCatMascot's own click-ignore selector
+        // supports (confirmed in the installed `dist/cat.js`), so this
+        // modal's double-click-to-move exclusion continues to work
+        // unchanged.
         <div
-          data-cat-ignore="true"
+          data-mascot-ignore="true"
           className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/45 backdrop-blur-sm p-4"
         >
           <div
-            data-cat-ignore="true"
+            data-mascot-ignore="true"
             className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden"
           >
             <div className="p-6 border-b border-slate-100">
@@ -3397,7 +3405,7 @@ const handleLogout = async () => {
               <div className="rounded-2xl border border-slate-200 p-4">
                 <label className="block text-sm font-black text-slate-700 mb-2">Transfer items to another room</label>
                 <select
-                  data-cat-ignore="true"
+                  data-mascot-ignore="true"
                   value={deleteRoomTransferTargetId}
                   onChange={e => setDeleteRoomTransferTargetId(e.target.value)}
                   disabled={roomDeleteTransferTargets.length === 0}
