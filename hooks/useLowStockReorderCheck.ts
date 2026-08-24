@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Room } from '../types';
 import { findLowStockNonLiquidItems, LowStockHit } from '../services/lowStockReorder';
-import { deriveAccountShopDomain } from '../services/mrburCart';
+import { deriveAccountShopDomain, getSessionShopDomain } from '../services/mrburCart';
 
 /**
  * Runs the low-stock reorder check once per login: when the user
@@ -40,11 +40,16 @@ export const useLowStockReorderCheck = (
 
   const dismissCurrent = () => setQueue(prev => prev.slice(1));
 
-  // The shopper's own known mrbur.shop country domain, derived from any
-  // already-synced item in their inventory — used so items with no shop_url
-  // of their own (manually added, never synced, etc) still fall back to the
-  // shopper's actual storefront instead of the generic international one.
-  const shopDomain = useMemo(() => deriveAccountShopDomain(rooms), [rooms]);
+  // The shopper's mrbur.shop domain: the authoritative source is the
+  // session's own company_code (see getSessionShopDomain — synchronous,
+  // reads the same odoo_session localStorage already used elsewhere in this
+  // app, no network call). Falls back to deriving one from this account's
+  // own already-synced inventory items only if the session has no usable
+  // company_code yet.
+  const shopDomain = useMemo(
+    () => (isAuthenticated ? getSessionShopDomain() : null) ?? deriveAccountShopDomain(rooms),
+    [isAuthenticated, rooms]
+  );
 
   return {
     current: queue[0] ?? null,
