@@ -296,8 +296,9 @@ const App: React.FC = () => {
     current: lowStockHit,
     remaining: lowStockRemaining,
     dismissCurrent: dismissLowStockHit,
+    dismissForToday: dismissLowStockForToday,
     shopDomain: lowStockShopDomain,
-  } = useLowStockReorderCheck(isAuthenticated, isLoadingMain, rooms);
+  } = useLowStockReorderCheck(isAuthenticated, isLoadingMain, rooms, user?.id);
 
   // Keep tbaRoomRef always up-to-date so loadInventory can read it synchronously
   useEffect(() => {
@@ -3651,6 +3652,7 @@ const handleLogout = async () => {
           remaining={lowStockRemaining}
           shopDomain={lowStockShopDomain}
           onClose={dismissLowStockHit}
+          onDismissToday={dismissLowStockForToday}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AlertTriangle, ShoppingCart, X } from 'lucide-react';
 import { LowStockHit } from '../services/lowStockReorder';
 import { addItemToMrburCart, resolveMrburUrl } from '../services/mrburCart';
@@ -13,6 +13,9 @@ interface LowStockReorderModalProps {
    *  with no synced items yet, in which case the generic mrbur.shop is used. */
   shopDomain?: string | null;
   onClose: () => void;
+  /** Persist "don't remind me again today" and clear the rest of the queue.
+   *  Called instead of onClose when the checkbox is ticked. */
+  onDismissToday: () => void;
 }
 
 /**
@@ -29,12 +32,22 @@ interface LowStockReorderModalProps {
  * the item's real mrbur.shop product page when it's known (items bought
  * through mrbur.shop have this stamped on them at purchase time), otherwise
  * the mrbur.shop homepage. window.open is called exactly once, here.
+ *
+ * "Don't remind me again today" checkbox: when ticked, both Close and View
+ * Cart & Checkout route through onDismissToday instead of onClose, which
+ * persists the dismissal (services/lowStockReorder.ts) and clears the whole
+ * queue — not just this item — so nothing else pops up for the rest of the
+ * calendar day, including across a logout/login or a reload/PWA relaunch.
  */
-const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remaining, shopDomain, onClose }) => {
+const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remaining, shopDomain, onClose, onDismissToday }) => {
+  const [dontShowToday, setDontShowToday] = useState(false);
+
+  const dismiss = () => (dontShowToday ? onDismissToday() : onClose());
+
   const handleViewCart = () => {
     const { url } = addItemToMrburCart(hit.item, shopDomain);
     window.open(url, '_blank', 'noopener,noreferrer');
-    onClose();
+    dismiss();
   };
 
   const extraCount = remaining - 1;
@@ -62,7 +75,7 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remain
               <p className="text-xs text-slate-500 mt-0.5">{hit.roomName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-full transition-colors shrink-0">
+          <button onClick={dismiss} className="p-1.5 hover:bg-slate-200 rounded-full transition-colors shrink-0">
             <X size={18} className="text-slate-500" />
           </button>
         </div>
@@ -78,11 +91,20 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remain
               {extraCount} more low-stock item{extraCount === 1 ? '' : 's'} to review after this one.
             </p>
           )}
+          <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={dontShowToday}
+              onChange={(e) => setDontShowToday(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-[#004aad] focus:ring-[#004aad]"
+            />
+            <span className="text-xs text-slate-500">Don't remind me about low stock again today</span>
+          </label>
         </div>
 
         <div className="p-4 flex gap-3 bg-slate-50/50 border-t border-slate-100">
           <button
-            onClick={onClose}
+            onClick={dismiss}
             className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
           >
             Close

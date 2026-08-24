@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Room } from '../types';
-import { findLowStockNonLiquidItems, LowStockHit } from '../services/lowStockReorder';
+import {
+  findLowStockNonLiquidItems,
+  LowStockHit,
+  isLowStockDismissedToday,
+  dismissLowStockForToday,
+} from '../services/lowStockReorder';
 import { deriveAccountShopDomain, getSessionShopDomain } from '../services/mrburCart';
 
 /**
@@ -14,11 +19,19 @@ import { deriveAccountShopDomain, getSessionShopDomain } from '../services/mrbur
  * "trigger this check every time the user is logged in" requirement. Within
  * one login session it only runs once, so it doesn't re-fire on every
  * unrelated re-render/inventory update.
+ *
+ * On top of that, a shopper can tick "Don't remind me again today" on the
+ * modal, which calls dismissForToday() below. That's checked here too — via
+ * isLowStockDismissedToday — independent of the login-session ref, so the
+ * prompt actually stays away for the rest of the calendar day even across a
+ * logout/login or a page reload/PWA relaunch (previously those reset the ref
+ * and brought the modal straight back).
  */
 export const useLowStockReorderCheck = (
   isAuthenticated: boolean,
   isLoadingMain: boolean,
-  rooms: Room[]
+  rooms: Room[],
+  userId?: string | null
 ) => {
   const [queue, setQueue] = useState<LowStockHit[]>([]);
   const hasCheckedThisLogin = useRef(false);
@@ -34,11 +47,21 @@ export const useLowStockReorderCheck = (
   useEffect(() => {
     if (!isAuthenticated || isLoadingMain || hasCheckedThisLogin.current) return;
     hasCheckedThisLogin.current = true;
+    if (isLowStockDismissedToday(userId)) return;
     const hits = findLowStockNonLiquidItems(rooms);
     if (hits.length) setQueue(hits);
-  }, [isAuthenticated, isLoadingMain, rooms]);
+  }, [isAuthenticated, isLoadingMain, rooms, userId]);
 
   const dismissCurrent = () => setQueue(prev => prev.slice(1));
+
+  // "Don't remind me again today": persist the dismissal and clear the rest
+  // of the queue so nothing else pops up for the remaining low-stock items
+  // either — the shopper said they don't want to be bothered today, not just
+  // about the one item currently on screen.
+  const dismissForToday = () => {
+    dismissLowStockForToday(userId);
+    setQueue([]);
+  };
 
   // The shopper's mrbur.shop domain: the authoritative source is the
   // session's own company_code (see getSessionShopDomain — synchronous,
@@ -55,6 +78,7 @@ export const useLowStockReorderCheck = (
     current: queue[0] ?? null,
     remaining: queue.length,
     dismissCurrent,
+    dismissForToday,
     shopDomain,
   };
 };
