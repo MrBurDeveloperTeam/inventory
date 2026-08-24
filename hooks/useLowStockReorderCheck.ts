@@ -11,8 +11,9 @@ import { deriveAccountShopDomain, getSessionShopDomain } from '../services/mrbur
 /**
  * Runs the low-stock reorder check once per login: when the user
  * authenticates and their inventory finishes loading, it scans every room
- * for non-liquid items at/below the reorder threshold and queues them up
- * (one at a time) for the LowStockReorderModal to show.
+ * for non-liquid items at/below the reorder threshold and surfaces the
+ * whole list at once, in a single LowStockReorderModal (previously this
+ * queued one modal per item, shown one after another).
  *
  * The check re-arms on every fresh login — logging out and back in (or a
  * page reload that restores the session) re-scans current stock, per the
@@ -33,14 +34,16 @@ export const useLowStockReorderCheck = (
   rooms: Room[],
   userId?: string | null
 ) => {
-  const [queue, setQueue] = useState<LowStockHit[]>([]);
+  const [hits, setHits] = useState<LowStockHit[]>([]);
+  const [visible, setVisible] = useState(false);
   const hasCheckedThisLogin = useRef(false);
 
   // Re-arm the check on logout so the next login runs it again.
   useEffect(() => {
     if (!isAuthenticated) {
       hasCheckedThisLogin.current = false;
-      setQueue([]);
+      setHits([]);
+      setVisible(false);
     }
   }, [isAuthenticated]);
 
@@ -48,19 +51,24 @@ export const useLowStockReorderCheck = (
     if (!isAuthenticated || isLoadingMain || hasCheckedThisLogin.current) return;
     hasCheckedThisLogin.current = true;
     if (isLowStockDismissedToday(userId)) return;
-    const hits = findLowStockNonLiquidItems(rooms);
-    if (hits.length) setQueue(hits);
+    const found = findLowStockNonLiquidItems(rooms);
+    if (found.length) {
+      setHits(found);
+      setVisible(true);
+    }
   }, [isAuthenticated, isLoadingMain, rooms, userId]);
 
-  const dismissCurrent = () => setQueue(prev => prev.slice(1));
+  // Plain "Close": hides the modal for the rest of this login session (it
+  // won't re-run until the next fresh login/reload, per hasCheckedThisLogin
+  // above), but doesn't persist anything.
+  const dismiss = () => setVisible(false);
 
-  // "Don't remind me again today": persist the dismissal and clear the rest
-  // of the queue so nothing else pops up for the remaining low-stock items
-  // either — the shopper said they don't want to be bothered today, not just
-  // about the one item currently on screen.
+  // "Don't remind me again today": persist the dismissal so the whole list
+  // stays away for the rest of the calendar day, across logout/login and
+  // reloads too.
   const dismissForToday = () => {
     dismissLowStockForToday(userId);
-    setQueue([]);
+    setVisible(false);
   };
 
   // The shopper's mrbur.shop domain: the authoritative source is the
@@ -75,9 +83,9 @@ export const useLowStockReorderCheck = (
   );
 
   return {
-    current: queue[0] ?? null,
-    remaining: queue.length,
-    dismissCurrent,
+    hits,
+    visible: visible && hits.length > 0,
+    dismiss,
     dismissForToday,
     shopDomain,
   };

@@ -290,12 +290,13 @@ const App: React.FC = () => {
   /**
    * Auto-reorder check: every time the user logs in (and once their
    * inventory has finished loading), scan for non-liquid items at/below the
-   * reorder threshold and queue them up to prompt an mrbur.shop cart add.
+   * reorder threshold and list them all at once in LowStockReorderModal to
+   * prompt an mrbur.shop cart add.
    */
   const {
-    current: lowStockHit,
-    remaining: lowStockRemaining,
-    dismissCurrent: dismissLowStockHit,
+    hits: lowStockHits,
+    visible: lowStockVisible,
+    dismiss: dismissLowStockHits,
     dismissForToday: dismissLowStockForToday,
     shopDomain: lowStockShopDomain,
   } = useLowStockReorderCheck(isAuthenticated, isLoadingMain, rooms, user?.id);
@@ -3646,12 +3647,11 @@ const handleLogout = async () => {
 
       <VirtualPetContainer isOpen={isVirtualPetOpen} onClose={() => setIsVirtualPetOpen(false)} />
 
-      {lowStockHit && (
+      {lowStockVisible && (
         <LowStockReorderModal
-          hit={lowStockHit}
-          remaining={lowStockRemaining}
+          hits={lowStockHits}
           shopDomain={lowStockShopDomain}
-          onClose={dismissLowStockHit}
+          onClose={dismissLowStockHits}
           onDismissToday={dismissLowStockForToday}
         />
       )}
