@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { AlertTriangle, ShoppingCart, X } from 'lucide-react';
 import { LowStockHit } from '../services/lowStockReorder';
-import { addItemToMrburCart, MrburCartResult } from '../services/mrburCart';
+import { addItemToMrburCart } from '../services/mrburCart';
 
 interface LowStockReorderModalProps {
   hit: LowStockHit;
@@ -14,25 +14,16 @@ interface LowStockReorderModalProps {
  * Shown once per login for each non-liquid item at/below the reorder
  * threshold (see useLowStockReorderCheck + services/lowStockReorder.ts).
  *
- * On mount it fires a best-effort attempt to open mrbur.shop pre-searched
- * for the item (services/mrburCart.ts) — this can be silently blocked by the
- * browser's popup blocker since it isn't the direct result of a click. The
- * "View Cart & Checkout" button re-issues that same window.open() from an
- * actual click, which is never blocked, so the shopper always has a working
- * path to mrbur.shop either way.
+ * Nothing opens mrbur.shop until the shopper actually clicks "View Cart &
+ * Checkout" — closing this modal (the X or "Close") just dismisses it and
+ * moves on to the next queued item, with no side effect. Opening on click
+ * also avoids the browser's popup blocker, which would silently swallow a
+ * window.open() fired outside a direct user gesture (e.g. on mount).
  */
 const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remaining, onClose }) => {
-  const [result, setResult] = useState<MrburCartResult | null>(null);
-
-  useEffect(() => {
-    setResult(addItemToMrburCart(hit.item));
-    // Only re-run when the item being shown changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hit.item.id]);
-
   const handleViewCart = () => {
-    const url = result?.searchUrl ?? addItemToMrburCart(hit.item).searchUrl;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    const { searchUrl } = addItemToMrburCart(hit.item);
+    window.open(searchUrl, '_blank', 'noopener,noreferrer');
     onClose();
   };
 
@@ -59,8 +50,8 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remain
         <div className="p-5 space-y-3">
           <p className="text-sm text-slate-600 leading-relaxed">
             Only <span className="font-bold text-slate-800">{hit.item.quantity}</span> left in stock.
-            We've queued <span className="font-bold text-slate-800">{hit.item.name}</span> to add to your
-            cart on <span className="font-semibold">mrbur.shop</span>.
+            View your cart to add <span className="font-bold text-slate-800">{hit.item.name}</span> on{' '}
+            <span className="font-semibold">mrbur.shop</span> and check out.
           </p>
           {extraCount > 0 && (
             <p className="text-xs text-slate-400">
