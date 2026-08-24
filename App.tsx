@@ -10,7 +10,7 @@ import TutorialVideoModal from './TutorialVideoModal';
 import ProfilePage from './ProfilePage';
 import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
-import { VirtualPetContainer } from './VirtualPet/VirtualPetContainer';
+import InventoryVirtualPet from './petExperience/InventoryVirtualPet';
 import CatMascot from './components/CatMascot';
 import MolarAIFloat from './components/MolarAIFloat';
 import {
@@ -3248,7 +3248,7 @@ const handleLogout = async () => {
         </>
       )}
 
-      <VirtualPetContainer isOpen={isVirtualPetOpen} onClose={() => setIsVirtualPetOpen(false)} />
+      <InventoryVirtualPet isOpen={isVirtualPetOpen} onClose={() => setIsVirtualPetOpen(false)} />
     </div>
   );
 };
