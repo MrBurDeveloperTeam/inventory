@@ -28,6 +28,14 @@ export interface Item {
   batches?: ItemBatch[];
   /** True when the item's room was deleted — shown as TBA until reassigned. */
   tba?: boolean;
+  /**
+   * Direct mrbur.shop product page URL (e.g.
+   * "https://www.mrbur.shop/shop/801-06-fg-diamond-round-9153"), captured by
+   * the Odoo-side snabbb_shop_inventory_sync module at the moment this item
+   * was auto-received from a shop purchase. Null/undefined for items never
+   * bought through mrbur.shop (manually added, OCR/Excel import, etc).
+   */
+  shopUrl?: string | null;
 }
 
 export interface Room {

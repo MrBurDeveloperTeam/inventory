@@ -19,11 +19,16 @@ interface LowStockReorderModalProps {
  * moves on to the next queued item, with no side effect. Opening on click
  * also avoids the browser's popup blocker, which would silently swallow a
  * window.open() fired outside a direct user gesture (e.g. on mount).
+ *
+ * The target URL is resolved by addItemToMrburCart (services/mrburCart.ts):
+ * the item's real mrbur.shop product page when it's known (items bought
+ * through mrbur.shop have this stamped on them at purchase time), otherwise
+ * the mrbur.shop homepage. window.open is called exactly once, here.
  */
 const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remaining, onClose }) => {
   const handleViewCart = () => {
-    const { searchUrl } = addItemToMrburCart(hit.item);
-    window.open(searchUrl, '_blank', 'noopener,noreferrer');
+    const { url } = addItemToMrburCart(hit.item);
+    window.open(url, '_blank', 'noopener,noreferrer');
     onClose();
   };
 

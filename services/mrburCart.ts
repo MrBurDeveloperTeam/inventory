@@ -8,46 +8,53 @@ import { Item } from '../types';
  * disallows automated scraping, so this app has no way to silently POST an
  * item into a mrbur.shop cart purely server-side without merchant/partner
  * credentials. Instead, "adding to cart" here means opening mrbur.shop in a
- * new tab, pre-searched for the item, so the shopper's own logged-in
- * mrbur.shop session in that tab can actually add it and check out.
+ * new tab so the shopper's own logged-in mrbur.shop session in that tab can
+ * actually add it and check out.
+ *
+ * Where to send that tab depends on `item.shopUrl`:
+ *  - If the item was auto-received from a mrbur.shop purchase, the Odoo-side
+ *    snabbb_shop_inventory_sync module stamped its exact product page URL
+ *    (Odoo's own `/shop/<slug>-<id>` shape, e.g.
+ *    "https://www.mrbur.shop/shop/801-06-fg-diamond-round-9153") onto
+ *    inventory_items.shop_url — use that directly.
+ *  - Otherwise (manually added items, OCR/Excel imports, items bought
+ *    before this existed) there's no known product page — mrbur.shop has no
+ *    confirmed public search endpoint to fall back to either, so this opens
+ *    mrbur.shop's homepage and lets the shopper search themselves.
  *
  * If you later get real mrbur.shop API/partner credentials, swap the body of
- * addItemToMrburCart() for a real request to that endpoint — the
- * MrburCartResult shape and every call site (useLowStockReorderCheck,
- * LowStockReorderModal) can stay unchanged.
+ * resolveMrburUrl()/addItemToMrburCart() for a real request to that endpoint
+ * — the MrburCartResult shape and every call site (LowStockReorderModal)
+ * can stay unchanged.
  */
 
 export const MRBUR_BASE_URL = 'https://www.mrbur.shop';
 
-/**
- * Best-effort search URL for an item on mrbur.shop. NOTE: the exact search
- * query-string parameter below (`keyword`) has not been confirmed against
- * mrbur.shop directly — their robots.txt blocks automated verification. If
- * this doesn't land on the right results page, run one manual search on
- * mrbur.shop and update MRBUR_SEARCH_PATH/param below to match.
- */
-const MRBUR_SEARCH_PATH = '/shop/search.html';
-
-export const buildMrburSearchUrl = (query: string): string =>
-  `${MRBUR_BASE_URL}${MRBUR_SEARCH_PATH}?keyword=${encodeURIComponent(query)}`;
+/** Resolves the URL an item's mrbur.shop link should point to. */
+export const resolveMrburUrl = (item: Item): string => {
+  const stored = item.shopUrl?.trim();
+  if (!stored) return MRBUR_BASE_URL;
+  // shop_url is stored as an absolute URL by the Odoo sync, but tolerate a
+  // bare path too in case that ever changes.
+  return stored.startsWith('http') ? stored : `${MRBUR_BASE_URL}${stored}`;
+};
 
 export interface MrburCartResult {
   item: Item;
-  searchUrl: string;
-  /** False when the browser's popup blocker prevented window.open (common
-   *  when this runs outside a direct click, e.g. right after auto-login). */
-  opened: boolean;
+  url: string;
+  /** True when `url` is the item's real mrbur.shop product page rather than
+   *  the homepage fallback. */
+  isDirectProductLink: boolean;
 }
 
 /**
- * Attempts to open mrbur.shop, pre-searched for the given item, in a new
- * tab — standing in for "adding it to cart" until real API credentials are
- * wired up. Prefers the item's SKU/code (more precise) and falls back to its
- * name.
+ * Resolves where "adding this item to cart" should send the shopper.
+ * Deliberately does NOT call window.open itself — opening a tab has to
+ * happen inside the caller's own click handler (see LowStockReorderModal),
+ * both so it isn't blocked by the browser's popup blocker and so it's never
+ * accidentally triggered twice.
  */
 export const addItemToMrburCart = (item: Item): MrburCartResult => {
-  const query = item.code?.trim() || item.name;
-  const searchUrl = buildMrburSearchUrl(query);
-  const win = window.open(searchUrl, '_blank', 'noopener,noreferrer');
-  return { item, searchUrl, opened: !!win };
+  const url = resolveMrburUrl(item);
+  return { item, url, isDirectProductLink: url !== MRBUR_BASE_URL };
 };
