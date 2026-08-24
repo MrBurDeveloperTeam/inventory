@@ -13,6 +13,8 @@ import CollaboratorModal from './CollaboratorModal';
 import { VirtualPetContainer } from './VirtualPet/VirtualPetContainer';
 import CatMascot from './components/CatMascot';
 import MolarAIFloat from './components/MolarAIFloat';
+import LowStockReorderModal from './components/LowStockReorderModal';
+import { useLowStockReorderCheck } from './hooks/useLowStockReorderCheck';
 import {
   readStoredTheme,
   writeThemeCookie,
@@ -285,6 +287,16 @@ const App: React.FC = () => {
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
   const { profileImageUrl } = useProfileImage(isAuthenticated);
+  /**
+   * Auto-reorder check: every time the user logs in (and once their
+   * inventory has finished loading), scan for non-liquid items at/below the
+   * reorder threshold and queue them up to prompt an mrbur.shop cart add.
+   */
+  const {
+    current: lowStockHit,
+    remaining: lowStockRemaining,
+    dismissCurrent: dismissLowStockHit,
+  } = useLowStockReorderCheck(isAuthenticated, isLoadingMain, rooms);
 
   // Keep tbaRoomRef always up-to-date so loadInventory can read it synchronously
   useEffect(() => {
@@ -3628,6 +3640,14 @@ const handleLogout = async () => {
       )}
 
       <VirtualPetContainer isOpen={isVirtualPetOpen} onClose={() => setIsVirtualPetOpen(false)} />
+
+      {lowStockHit && (
+        <LowStockReorderModal
+          hit={lowStockHit}
+          remaining={lowStockRemaining}
+          onClose={dismissLowStockHit}
+        />
+      )}
     </div>
   );
 };

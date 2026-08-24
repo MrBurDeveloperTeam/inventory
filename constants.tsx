@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Box
 } from 'lucide-react';
+import { Category } from './types';
 
 export const CATEGORIES = [
   { id: 'consumables', label: 'Consumables', icon: <Package className="w-4 h-4" /> },
@@ -23,6 +24,21 @@ export const CATEGORIES = [
 export const UOMS = ['pcs', 'box'];
 
 export const CATEGORY_ORDER = ['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other'];
+
+/**
+ * Categories treated as "liquid" stock for the low-stock reorder check (see
+ * services/lowStockReorder.ts). There's no per-item liquid/solid flag in the
+ * data model, so this is inferred from category: 'materials' (impression
+ * material, disinfectants, bonding/etching liquids — already given the
+ * Droplets icon above) and 'medication' (rinses, injectable/liquid meds) are
+ * treated as liquid; everything else (consumables, equipment, instruments,
+ * ppe, other) is treated as non-liquid and is eligible for the qty<=2
+ * auto-reorder prompt. Adjust this list if your categorization differs.
+ */
+export const LIQUID_CATEGORIES: Category[] = ['materials', 'medication'];
+
+export const isLiquidCategory = (category: Category): boolean =>
+  LIQUID_CATEGORIES.includes(category);
 
 export const PRESET_BLUEPRINTS = [
   {
