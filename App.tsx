@@ -900,6 +900,7 @@ useEffect(() => {
             category: (it.category as any) || 'other',
             description: it.description || '',
             expiryDate: it.expiry_date || null,
+            shopUrl: it.shop_url || null,
             batches: (it.item_batches || []).map((b: any) => ({
               qty: Number(b.qty) || 0,
               unitPrice: Number(b.unit_price) || 0,
@@ -1139,6 +1140,7 @@ useEffect(() => {
           category: (row.category as any) || 'other',
           description: row.description || '',
           expiryDate: row.expiry_date || null,
+          shopUrl: row.shop_url || null,
           createdAt: row.created_at,
           batches
         });
@@ -1316,7 +1318,8 @@ useEffect(() => {
                     vendor: newItemData.vendor,
                     category: newItemData.category,
                     description: newItemData.description,
-                    expiryDate: newItemData.expiry_date
+                    expiryDate: newItemData.expiry_date,
+                    shopUrl: newItemData.shop_url ?? i.shopUrl ?? null
                   } : i)
                 };
               } else {
