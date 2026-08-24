@@ -1,12 +1,17 @@
 import React from 'react';
 import { AlertTriangle, ShoppingCart, X } from 'lucide-react';
 import { LowStockHit } from '../services/lowStockReorder';
-import { addItemToMrburCart } from '../services/mrburCart';
+import { addItemToMrburCart, resolveMrburUrl } from '../services/mrburCart';
 
 interface LowStockReorderModalProps {
   hit: LowStockHit;
   /** Total items still queued, including this one — used for the "N more" hint. */
   remaining: number;
+  /** The shopper's known mrbur.shop country domain (e.g. "https://my.mrbur.shop"),
+   *  derived from any already-synced item in their inventory — used as the
+   *  fallback when this item has no shop_url of its own. Null for an account
+   *  with no synced items yet, in which case the generic mrbur.shop is used. */
+  shopDomain?: string | null;
   onClose: () => void;
 }
 
@@ -25,14 +30,24 @@ interface LowStockReorderModalProps {
  * through mrbur.shop have this stamped on them at purchase time), otherwise
  * the mrbur.shop homepage. window.open is called exactly once, here.
  */
-const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remaining, onClose }) => {
+const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remaining, shopDomain, onClose }) => {
   const handleViewCart = () => {
-    const { url } = addItemToMrburCart(hit.item);
+    const { url } = addItemToMrburCart(hit.item, shopDomain);
     window.open(url, '_blank', 'noopener,noreferrer');
     onClose();
   };
 
   const extraCount = remaining - 1;
+
+  // Same resolution the click handler will use, just for display — so the
+  // copy always names the domain the shopper is actually about to land on
+  // (their own country storefront when known) instead of a hardcoded one.
+  let shopHost = 'mrbur.shop';
+  try {
+    shopHost = new URL(resolveMrburUrl(hit.item, shopDomain)).host;
+  } catch {
+    // Keep the generic fallback label if the resolved URL is somehow malformed.
+  }
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -56,7 +71,7 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remain
           <p className="text-sm text-slate-600 leading-relaxed">
             Only <span className="font-bold text-slate-800">{hit.item.quantity}</span> left in stock.
             View your cart to add <span className="font-bold text-slate-800">{hit.item.name}</span> on{' '}
-            <span className="font-semibold">mrbur.shop</span> and check out.
+            <span className="font-semibold">{shopHost}</span> and check out.
           </p>
           {extraCount > 0 && (
             <p className="text-xs text-slate-400">

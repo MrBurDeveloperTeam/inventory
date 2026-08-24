@@ -296,6 +296,7 @@ const App: React.FC = () => {
     current: lowStockHit,
     remaining: lowStockRemaining,
     dismissCurrent: dismissLowStockHit,
+    shopDomain: lowStockShopDomain,
   } = useLowStockReorderCheck(isAuthenticated, isLoadingMain, rooms);
 
   // Keep tbaRoomRef always up-to-date so loadInventory can read it synchronously
@@ -899,7 +900,6 @@ useEffect(() => {
             category: (it.category as any) || 'other',
             description: it.description || '',
             expiryDate: it.expiry_date || null,
-            shopUrl: it.shop_url || null,
             batches: (it.item_batches || []).map((b: any) => ({
               qty: Number(b.qty) || 0,
               unitPrice: Number(b.unit_price) || 0,
@@ -1139,7 +1139,6 @@ useEffect(() => {
           category: (row.category as any) || 'other',
           description: row.description || '',
           expiryDate: row.expiry_date || null,
-          shopUrl: row.shop_url || null,
           createdAt: row.created_at,
           batches
         });
@@ -1317,8 +1316,7 @@ useEffect(() => {
                     vendor: newItemData.vendor,
                     category: newItemData.category,
                     description: newItemData.description,
-                    expiryDate: newItemData.expiry_date,
-                    shopUrl: newItemData.shop_url ?? i.shopUrl ?? null
+                    expiryDate: newItemData.expiry_date
                   } : i)
                 };
               } else {
@@ -3648,6 +3646,7 @@ const handleLogout = async () => {
         <LowStockReorderModal
           hit={lowStockHit}
           remaining={lowStockRemaining}
+          shopDomain={lowStockShopDomain}
           onClose={dismissLowStockHit}
         />
       )}
