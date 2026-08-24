@@ -74,7 +74,7 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({ hit, remain
           </button>
           <button
             onClick={handleViewCart}
-            className="flex-1 py-2.5 rounded-xl bg-[#004aad] text-white text-sm font-bold hover:bg-[#003a8a] transition-colors flex items-center justify-center gap-1.5"
+            className="flex-1 py-2.5 px-2.5 rounded-xl bg-[#004aad] text-white text-sm font-bold hover:bg-[#003a8a] transition-colors flex items-center justify-center gap-1.5"
           >
             <ShoppingCart size={16} />
             View Cart & Checkout
