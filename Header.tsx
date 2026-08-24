@@ -67,7 +67,33 @@ const Header: React.FC<HeaderProps> = ({
   const [creditLoading, setCreditLoading] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [isOpeningSupportTickets, setIsOpeningSupportTickets] = useState(false);
   const { mutateAsync: createAppLink, isPending } = useGetUserId();
+
+  const openSupportTickets = useCallback(async () => {
+    if (isOpeningSupportTickets) return;
+
+    setIsOpen(false);
+    setIsOpeningSupportTickets(true);
+
+    try {
+      const response = await fetch('/ticketing/sso', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.url) {
+        throw new Error(data?.error || 'Unable to open the support portal.');
+      }
+
+      window.location.assign(data.url);
+    } catch (error) {
+      console.error('Ticketing SSO failed:', error);
+      setIsOpeningSupportTickets(false);
+    }
+  }, [isOpeningSupportTickets]);
 
   useEffect(() => {
     console.log('userAvatarUrl: ',userAvatarUrl)
@@ -587,6 +613,23 @@ const Header: React.FC<HeaderProps> = ({
                           <p className="text-[11px] font-semibold text-slate-400 truncate">Manage your channel</p>
                         </div>
                         <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors"></i>
+                      </button>
+
+                      {/* Support Tickets */}
+                      <button
+                        type="button"
+                        disabled={isOpeningSupportTickets}
+                        onClick={openSupportTickets}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <div className="w-7 h-7 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                          <i className="fa-solid fa-life-ring text-[11px] text-blue-500" aria-hidden="true"></i>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-slate-800 leading-tight">Support Tickets</p>
+                          <p className="text-[11px] font-semibold text-slate-400 truncate">Create and track your support tickets</p>
+                        </div>
+                        <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors" aria-hidden="true"></i>
                       </button>
                         
                       {/* Settings */}

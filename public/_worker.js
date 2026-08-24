@@ -464,6 +464,66 @@ async function handleActivityRequest(request) {
   }
 }
 
+function base64UrlEncode(value) {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function handleTicketingSso(request, env) {
+  if (request.method !== 'POST') {
+    return jsonResponse({ ok: false, error: 'Method not allowed' }, 405);
+  }
+  if (!env.TICKETING_SSO_SECRET) {
+    return jsonResponse({ ok: false, error: 'Ticketing SSO is not configured.' }, 503);
+  }
+
+  const odooCookie = getOdooCookie(request);
+  if (!odooCookie) {
+    return jsonResponse({ ok: false, error: 'Please sign in again.' }, 401);
+  }
+
+  try {
+    const sessionResponse = await fetch(`${ODOO_BASE_URL}/web/session/get_session_info`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Cookie: odooCookie },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'call', params: {}, id: Date.now() }),
+    });
+    const sessionData = await sessionResponse.json().catch(() => null);
+    const session = sessionData?.result;
+
+    if (!sessionResponse.ok || !session?.uid || !session?.partner_id) {
+      return jsonResponse({ ok: false, error: 'Unable to verify your Snabbb account.' }, 401);
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const header = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const payload = base64UrlEncode(JSON.stringify({
+      sub: String(session.uid),
+      partner_id: session.partner_id,
+      aud: 'snabbb-ticketing-portal',
+      iat: now,
+      exp: now + 60,
+      jti: crypto.randomUUID(),
+    }));
+    const key = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(env.TICKETING_SSO_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+    );
+    const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${header}.${payload}`));
+    const token = `${header}.${payload}.${base64UrlEncode(new Uint8Array(signature))}`;
+
+    return jsonResponse({
+      ok: true,
+      url: `${ODOO_BASE_URL}/snabbb/ticketing/sso?token=${encodeURIComponent(token)}`,
+    });
+  } catch (error) {
+    console.error('Ticketing SSO error:', error);
+    return jsonResponse({ ok: false, error: 'Ticketing sign-in is unavailable.' }, 502);
+  }
+}
+
 function isHtmlRequest(request) {
   const accept = request.headers.get('Accept') || '';
   if (!accept.includes('text/html')) return false;
@@ -496,6 +556,10 @@ export default {
 
     if (url.pathname === '/api/activity') {
       return handleActivityRequest(request);
+    }
+
+    if (url.pathname === '/ticketing/sso') {
+      return handleTicketingSso(request, env);
     }
 
     if (!isHtmlRequest(request)) {
