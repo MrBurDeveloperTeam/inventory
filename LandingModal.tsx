@@ -7,6 +7,7 @@ import applink from './services/applink';
 import { DENTAL_POSITIONS } from './constants/dentalPositions';
 import { DOBPicker } from './components/DOBPicker';
 import AuthShell from './components/AuthShell';
+import { SNABBB_SIGNUP_URL } from './constants/authLinks';
 
 interface LandingModalProps {
   onLogin: (user: UserProfile) => void;
@@ -716,13 +717,12 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
             </form>
 
             <div className="text-center text-xs font-medium text-slate-500">
-              <button
-                type="button"
-                onClick={() => setView('signup')}
+              <a
+                href={SNABBB_SIGNUP_URL}
                 className="transition-colors hover:text-slate-600"
               >
                 Don't have an account? <span className="font-bold text-tiffany-600 hover:underline">Sign Up</span>
-              </button>
+              </a>
             </div>
           </div>
         )}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { SNABBB_SIGNUP_URL } from '../constants/authLinks';
 
 type AuthView = 'login' | 'signup';
 
@@ -54,15 +55,14 @@ const AuthShell: React.FC<AuthShellProps> = ({
           >
             Log In
           </button>
-          <motion.button
-            type="button"
-            onClick={() => onViewChange('signup')}
+          <motion.a
+            href={SNABBB_SIGNUP_URL}
             whileHover={{ scale: 1.05, y: -1 }}
             whileTap={{ scale: 0.95 }}
             className="px-4 sm:px-6 py-2.5 bg-tiffany-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-tiffany-600/20 hover:bg-tiffany-700 transition-all"
           >
             Sign Up
-          </motion.button>
+          </motion.a>
         </nav>
       </div>
     </header>
