@@ -370,3 +370,50 @@ body {
 .dark .shadow-sm {
   box-shadow: none !important;
 }
+
+/* Inventory SNAI support shortcut: explicit light/dark ownership keeps the
+   action visible even when broad utility overrides change chat surfaces. */
+.inventory-support-link {
+  border-color: rgba(203, 213, 225, 0.9);
+  color: #334155;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+}
+.inventory-support-link:hover {
+  border-color: rgba(52, 211, 153, 0.82);
+  background: rgba(236, 253, 245, 0.97);
+  box-shadow: 0 8px 20px rgba(5, 150, 105, 0.13);
+}
+.inventory-support-link:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+.inventory-support-icon {
+  border-color: #a7f3d0;
+  color: #059669;
+  background: #d1fae5;
+}
+.inventory-support-title { color: #334155; }
+.inventory-support-meta { color: #64748b; }
+.inventory-support-link:hover .inventory-support-title { color: #065f46; }
+
+.dark .inventory-support-link {
+  border-color: #334155;
+  color: #e2e8f0;
+  background: rgba(30, 41, 59, 0.94);
+  box-shadow: 0 5px 16px rgba(2, 6, 23, 0.34) !important;
+}
+.dark .inventory-support-link:hover {
+  border-color: rgba(52, 211, 153, 0.72);
+  background: rgba(15, 55, 55, 0.96);
+  box-shadow: 0 8px 22px rgba(2, 6, 23, 0.46) !important;
+}
+.dark .inventory-support-link:focus-visible { outline-color: #34d399; }
+.dark .inventory-support-icon {
+  border-color: rgba(52, 211, 153, 0.34);
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.16);
+}
+.dark .inventory-support-title { color: #e2e8f0; }
+.dark .inventory-support-meta { color: #94a3b8; }
+.dark .inventory-support-link:hover .inventory-support-title { color: #a7f3d0; }

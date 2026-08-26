@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { X, Send, Zap, ShieldCheck, AlertCircle, BarChart3, RefreshCcw } from 'lucide-react';
+import { X, Send, Zap, ShieldCheck, AlertCircle, BarChart3, RefreshCcw, Mail } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -276,9 +276,32 @@ export const MolarChat = React.memo(({
                     </div>
                 </div>
 
+                {/* Persistent support shortcut */}
+                <div className="px-3 pt-1 relative z-20">
+                    <a
+                        href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=support%40snabbb.com&amp;su=Customer%20Inquiry"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Email support at support@snabbb.com"
+                        className="inventory-support-link group flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-all duration-200 focus-visible:outline-none active:scale-[0.99]"
+                    >
+                        <span className="inventory-support-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-transform duration-200 group-hover:scale-105">
+                            <Mail className="h-5 w-5" aria-hidden="true" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                            <span className="inventory-support-title block text-sm font-semibold">
+                                Email Support
+                            </span>
+                            <span className="inventory-support-meta block truncate text-xs">
+                                Contact support@snabbb.com
+                            </span>
+                        </span>
+                    </a>
+                </div>
+
                 {/* Footer Input Area */}
                 <div className="p-3 relative z-20">
-                    <form onSubmit={onSendMessage} className="relative w-full max-w-xl mx-auto">
+                    <form noValidate onSubmit={onSendMessage} className="relative w-full max-w-xl mx-auto">
                         {/* Container */}
                         <div
                             className="
