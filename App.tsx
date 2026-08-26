@@ -651,6 +651,10 @@ useEffect(() => {
   const [availableInventories, setAvailableInventories] = useState<{ id: string; name: string; role: string }[]>([]);
 
   const fetchAvailableInventories = async (uid: string) => {
+    console.log(
+      "[company-workspace] fetchAvailableInventories running",
+      { uid }
+    );
     const { data: membership, error: membershipError } =
       await supabase
         .from("company_members")
@@ -660,7 +664,13 @@ useEffect(() => {
         .eq("member_user_id", uid)
         .eq("status", "active")
         .maybeSingle();
-
+    console.log(
+          "[company-workspace] membership result",
+          {
+            membership,
+            membershipError,
+          }
+        );
     if (membershipError) {
       console.error(
         "Error resolving company workspace:",
