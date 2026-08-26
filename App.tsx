@@ -653,61 +653,90 @@ useEffect(() => {
   const [availableInventories, setAvailableInventories] = useState<{ id: string; name: string; role: string }[]>([]);
 
   const fetchAvailableInventories = async (uid: string) => {
-    // 1. Own Inventory
-    const list: { id: string; name: string; role: string }[] = [{ id: uid, name: 'My Inventory', role: 'owner' }];
-
-    // 2. Shared Inventories - get collaborator records
-    // const shared = await api.get<any>('/collaborators', { params: { uid: uid } }).catch(async err => {
-      const { data: shared, error } = await supabase
-        .from('collaborators')
-        .select('owner_id, role')
-        .eq('user_id', uid);
-
-        if (error) {
-          console.error('Error fetching shared inventories:', error);
-        }
-        // return shared as any
-      // }
-      // );
-      
-      if (shared && shared.length > 0) {
-      // Fetch owner profiles separately to avoid FK join issues
-      const ownerIds = shared.map((s: any) => s.owner_id);
-      const { data: ownerProfiles } = await supabase
-        .from('profiles')
-        .select('user_id, email, name')
-        .in('user_id', ownerIds);
-
-      const profileMap = new Map<string, any>();
-      (ownerProfiles || []).forEach((p: any) => profileMap.set(p.user_id, p));
-
-      shared.forEach((s: any) => {
-        const ownerProfile = profileMap.get(s.owner_id);
-        const ownerName = ownerProfile?.name || ownerProfile?.email || 'Unknown';
-        list.push({
-          id: s.owner_id,
-          name: `${ownerName}'s Inventory`,
-          role: s.role
-        });
-      });
+    console.log(
+      "[company-workspace] fetchAvailableInventories running",
+      { uid }
+    );
+    const { data: membership, error: membershipError } =
+      await supabase
+        .from("company_members")
+        .select(
+          "company_owner_user_id, member_user_id, role, status"
+        )
+        .eq("member_user_id", uid)
+        .eq("status", "active")
+        .maybeSingle();
+    console.log(
+          "[company-workspace] membership result",
+          {
+            membership,
+            membershipError,
+          }
+        );
+    if (membershipError) {
+      console.error(
+        "Error resolving company workspace:",
+        membershipError
+      );
     }
 
+    const companyOwnerId =
+      membership?.company_owner_user_id || null;
+
+    const workspaceUserId = companyOwnerId || uid;
+
+    const list: {
+      id: string;
+      name: string;
+      role: string;
+    }[] = companyOwnerId
+      ? [
+          {
+            id: companyOwnerId,
+            name: finalProfile?.company_name
+              ? `${finalProfile.company_name} Inventory`
+              : "Company Inventory",
+            role: membership?.role || "member",
+          },
+        ]
+      : [
+          {
+            id: uid,
+            name: "My Inventory",
+            role: "owner",
+          },
+        ];
 
     setAvailableInventories(list);
-    // Determine which ID to use. If currentInventoryOwnerId is already set and valid, keep it. Otherwise default to own.
-    setCurrentInventoryOwnerId(prev => {
-      const storedId = uid ? localStorage.getItem(`${PREFERRED_INVENTORY_ID_KEY}${uid}`) : null;
-      const targetId = prev || storedId || uid;
-      const stillValid = list.find(i => i.id === targetId);
-      const nextId = stillValid ? targetId : uid;
 
-      if (nextId !== prev) {
-        console.log('Switching inventory to:', nextId, '(from:', prev, ') resetting hydration');
+    setCurrentInventoryOwnerId((previousId) => {
+      const storedId = localStorage.getItem(
+        `${PREFERRED_INVENTORY_ID_KEY}${uid}`
+      );
+
+      const candidateId =
+        previousId || storedId || workspaceUserId;
+
+      const candidateIsValid = list.some(
+        (inventory) => inventory.id === candidateId
+      );
+
+      const nextId = candidateIsValid
+        ? candidateId
+        : workspaceUserId;
+
+      if (nextId !== previousId) {
+        console.log(
+          "Switching inventory to company workspace:",
+          nextId
+        );
+
         isHydrated.current = false;
         isDirty.current = false;
         setIsLoadingMain(true);
-        setRooms([]); // Clear local state for new inventory
+        setRooms([]);
       }
+
       return nextId;
     });
   };
