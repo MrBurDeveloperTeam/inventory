@@ -2,12 +2,34 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { normalizePetId } from '../VirtualPet/petOptions';
 import { useSharedCatDialogueRuntime, SharedCatMascot } from '@mrburdeveloperteam/molar-experience/cat';
+import { CAT_SPRITE_SHEET_URLS } from '../aiExperience/molarExperienceAssets';
 
 const PET_SLEEPING_KEY = 'pet_is_sleeping';
 const PET_SLEEPING_UPDATED_AT_KEY = 'pet_is_sleeping_updated_at';
 const DEFAULT_WELCOME_BACK_AUTO_CLOSE_MS = 6000;
 
-export default function CatMascot({ onCatClick, disabled = false, personalizedInsightState = null }) {
+// INVENTORY-3: this Cat presentation cache (pet mood/sleep stats used for
+// the ambient meow bubble/sleep icon/selected sprite) is host-owned and
+// account-sensitive, so it must never bleed across accounts on a shared
+// browser profile. Own namespace — `snabbb_cat:<userId>:<key>` — matching
+// the same fix already accepted for App Gallery's own CatMascot. `userId`
+// absent -> no-op/null: presentation optimization only, never a guest-mode
+// persistent store (a guest simply uses component defaults for the
+// session, exactly as before this fix).
+const CAT_CACHE_PREFIX = 'snabbb_cat';
+const getCatStorageKey = (userId, key) => (userId ? `${CAT_CACHE_PREFIX}:${userId}:${key}` : null);
+const readCatStorage = (userId, key) => {
+  const storageKey = getCatStorageKey(userId, key);
+  if (!storageKey) return null;
+  try { return localStorage.getItem(storageKey); } catch { return null; }
+};
+const writeCatStorage = (userId, key, value) => {
+  const storageKey = getCatStorageKey(userId, key);
+  if (!storageKey) return;
+  try { localStorage.setItem(storageKey, value); } catch { /* ignore */ }
+};
+
+export default function CatMascot({ onCatClick, disabled = false, personalizedInsightState = null, catCacheOwnerId = null }) {
   // Presentation (sprite, position/walk animation, entry walk,
   // double-click-to-move, click-sound-wave affordance, and the three
   // dialogue bubble presentations) is now entirely owned by
@@ -35,10 +57,8 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
   // This is a real, user-visible difference on every remount (including
   // the Phase 7B user-key auth boundary and any React Strict-Mode-driven
   // remount) that requires explicit manual browser acceptance.
-  const [isPetSleeping, setIsPetSleeping] = useState(() => {
-    try { return localStorage.getItem(PET_SLEEPING_KEY) === 'true'; } catch { return false; }
-  });
-  const [selectedPetId, setSelectedPetId] = useState(() => normalizePetId(localStorage.getItem('pet_name')));
+  const [isPetSleeping, setIsPetSleeping] = useState(() => readCatStorage(catCacheOwnerId, PET_SLEEPING_KEY) === 'true');
+  const [selectedPetId, setSelectedPetId] = useState(() => normalizePetId(readCatStorage(catCacheOwnerId, 'pet_name')));
 
   const [currentUserId, setCurrentUserId] = useState(null);
   // Content-only inputs fed into the shared dialogue runtime — this
@@ -251,22 +271,22 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
     };
 
     // 1. Initial check from localStorage (with 5-min freshness check)
-    const saved = localStorage.getItem('pet_stats');
-    const lastSavedAt = localStorage.getItem('pet_last_saved_at');
+    const saved = readCatStorage(catCacheOwnerId, 'pet_stats');
+    const lastSavedAt = readCatStorage(catCacheOwnerId, 'pet_last_saved_at');
     const isFresh = lastSavedAt && (Date.now() - new Date(lastSavedAt).getTime() < 300000);
     if (saved && isFresh) {
       try { updateStateFromStats(JSON.parse(saved), lastSavedAt); } catch (e) { /* ignore */ }
     }
 
     const readLocalSleepState = () => {
-      const savedSleeping = localStorage.getItem(PET_SLEEPING_KEY);
+      const savedSleeping = readCatStorage(catCacheOwnerId, PET_SLEEPING_KEY);
       if (savedSleeping !== null) {
         setIsPetSleeping(savedSleeping === 'true');
       }
     };
 
     readLocalSleepState();
-    setSelectedPetId(normalizePetId(localStorage.getItem('pet_name')));
+    setSelectedPetId(normalizePetId(readCatStorage(catCacheOwnerId, 'pet_name')));
 
     const handlePetSleepChange = (event) => {
       setIsPetSleeping(!!event.detail);
@@ -276,11 +296,16 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
       setSelectedPetId(normalizePetId(event.detail));
     };
 
+    // Cross-tab sync: only ever react to a storage event for THIS owner's
+    // exact scoped key — a foreign/other-account key (or an old orphaned
+    // bare key) must never be able to update this tab's Cat presentation.
+    const scopedSleepKey = getCatStorageKey(catCacheOwnerId, PET_SLEEPING_KEY);
+    const scopedNameKey = getCatStorageKey(catCacheOwnerId, 'pet_name');
     const handleStorage = (event) => {
-      if (event.key === PET_SLEEPING_KEY) {
+      if (scopedSleepKey && event.key === scopedSleepKey) {
         setIsPetSleeping(event.newValue === 'true');
       }
-      if (event.key === 'pet_name') {
+      if (scopedNameKey && event.key === scopedNameKey) {
         setSelectedPetId(normalizePetId(event.newValue));
       }
     };
@@ -305,8 +330,8 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
           if (data && !error) {
           const nextSleeping = !!data.is_sleeping;
           setIsPetSleeping(nextSleeping);
-          localStorage.setItem(PET_SLEEPING_KEY, String(nextSleeping));
-          localStorage.setItem(PET_SLEEPING_UPDATED_AT_KEY, data.updated_at || new Date().toISOString());
+          writeCatStorage(catCacheOwnerId, PET_SLEEPING_KEY, String(nextSleeping));
+          writeCatStorage(catCacheOwnerId, PET_SLEEPING_UPDATED_AT_KEY, data.updated_at || new Date().toISOString());
           setSelectedPetId(normalizePetId(data.pet_name));
           updateStateFromStats(data, data.updated_at);
         }
@@ -328,7 +353,7 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
       window.removeEventListener('virtual-pet-selection-change', handlePetSelectionChange);
       window.removeEventListener('storage', handleStorage);
     };
-  }, [disabled]);
+  }, [disabled, catCacheOwnerId]);
 
   useEffect(() => {
     const initDialog = async () => {
@@ -554,6 +579,7 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
       dialogue={dialogue}
       meowMessage={meowMsg}
       onCatClick={handleCatClick}
+      spriteSheetUrls={CAT_SPRITE_SHEET_URLS}
     />
   );
 }

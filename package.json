@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.34.0",
-    "@mrburdeveloperteam/molar-experience": "0.5.0",
+    "@mrburdeveloperteam/molar-experience": "0.6.8",
     "@supabase/supabase-js": "^2.103.3",
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.5",

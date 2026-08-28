@@ -370,3 +370,48 @@ body {
 .dark .shadow-sm {
   box-shadow: none !important;
 }
+
+/* ── INVENTORY-4B: Shared 0.6.7 gradient compatibility ───────────────────
+   Proven runtime collision: Tailwind CDN v3.4.17's live JIT engine
+   re-generates its own `--tw-gradient-from`/`--tw-gradient-to` rules for
+   any `from-[#HEX]`/`to-[#HEX]`/`from-orange-300`/`to-orange-500` class it
+   finds in the live DOM (Shared's own room/Shop elements included), and
+   that later-registered rule wins over Shared 0.6.7's own pre-compiled
+   `@layer utilities` rule of the same selector — collapsing `from`/`to` to
+   transparent. Confirmed via live computed-style inspection (Kitchen:
+   --tw-gradient-from/-to both `rgba(0,0,0,0)`; Shop active button: same).
+   `--tw-gradient-via` was proven to already compute correctly and is
+   deliberately left untouched — this restores only the two proven-broken
+   variables, for exactly the six room gradients (all sharing the identical
+   mechanism as the proven Kitchen case) and the one proven Shop element.
+   Do NOT extend this list without the same live-DOM proof this section was
+   built from — the Shop header/body gradients found in Shared's source were
+   checked and are not present in the current live Shop DOM. */
+.snabbb-molar-experience .from-\[\#FFFCEB\] { --tw-gradient-from: #FFFCEB !important; }
+.snabbb-molar-experience .to-\[\#FDE68A\] { --tw-gradient-to: #FDE68A !important; }
+
+.snabbb-molar-experience .from-\[\#FFF5E6\] { --tw-gradient-from: #FFF5E6 !important; }
+.snabbb-molar-experience .to-\[\#FFCC80\] { --tw-gradient-to: #FFCC80 !important; }
+
+.snabbb-molar-experience .from-\[\#E0F7FA\] { --tw-gradient-from: #E0F7FA !important; }
+.snabbb-molar-experience .to-\[\#80DEEA\] { --tw-gradient-to: #80DEEA !important; }
+
+.snabbb-molar-experience .from-\[\#FDF2F8\] { --tw-gradient-from: #FDF2F8 !important; }
+.snabbb-molar-experience .to-\[\#F9A8D4\] { --tw-gradient-to: #F9A8D4 !important; }
+
+.snabbb-molar-experience .from-\[\#F0FDF4\] { --tw-gradient-from: #F0FDF4 !important; }
+.snabbb-molar-experience .to-\[\#86EFAC\] { --tw-gradient-to: #86EFAC !important; }
+
+.snabbb-molar-experience .from-\[\#EEF2FF\] { --tw-gradient-from: #EEF2FF !important; }
+.snabbb-molar-experience .to-\[\#C7D2FE\] { --tw-gradient-to: #C7D2FE !important; }
+
+.snabbb-molar-experience .from-orange-300 { --tw-gradient-from: var(--color-orange-300, oklch(83.7% 0.128 66.29)) !important; }
+.snabbb-molar-experience .to-orange-500 { --tw-gradient-to: var(--color-orange-500, oklch(70.5% 0.213 47.604)) !important; }
+
+/* INVENTORY-4C: Shop category-screen header (ShopModal — the panel titled
+   "Shop"/"Pick a shelf, then buy supplies") uses
+   `bg-gradient-to-r from-orange-400 to-amber-400`, the identical
+   `from-*`/`to-*` -> `--tw-gradient-from`/`-to` mechanism already proven
+   collided against by the room and Shop-active-button rules above. */
+.snabbb-molar-experience .from-orange-400 { --tw-gradient-from: var(--color-orange-400, oklch(75% 0.183 55.934)) !important; }
+.snabbb-molar-experience .to-amber-400 { --tw-gradient-to: var(--color-amber-400, oklch(82.8% 0.189 84.429)) !important; }

@@ -3216,8 +3216,27 @@ const handleLogout = async () => {
         onClose={() => setShowTutorialVideo(false)}
       />
 
-      {!isVirtualPetOpen && (
-        <>
+      {/* INVENTORY-4C: this wrapper is CSS-only visibility, never a
+          conditional render — `<CatMascot>` (and therefore its Shared
+          runtime instance) must stay mounted across Virtual Pet open/close
+          so its entry walk never replays and its identity-remount-only
+          contract (see the `key` below) stays intact. Before this fix,
+          `<CatMascot>` was wrapped in `{!isVirtualPetOpen && (...)}`, which
+          unmounted and freshly remounted it (and every effect/animation
+          inside it, including SharedCatMascot's one-per-mount entry walk)
+          on every single Pet open→close — that stale unmount/remount was
+          never actually needed for anything, and `display: none` alone is
+          enough to prevent Cat's own `position: fixed; z-index: 9990`
+          wrapper from visually floating on top of SharedVirtualPet's
+          `z-[1000]` full-screen opaque overlay (confirmed in Shared's own
+          compiled source) while Pet is open. `contents` when visible keeps
+          this div from participating in this container's own flex/grid
+          layout (Cat's own wrapper is independently `position: fixed`
+          regardless). MolarAIFloat is intentionally left on its prior
+          `{!isVirtualPetOpen && ...}` conditional below — it has no
+          entry-walk-equivalent lifecycle concern, so its behavior is
+          unchanged. */}
+      <div className={isVirtualPetOpen ? 'hidden' : 'contents'}>
         <CatMascot
           // PHASE 7B: `key` forces a fresh mount on every distinct
           // authenticated identity boundary (a real id, or 'signed-out').
@@ -3230,25 +3249,43 @@ const handleLogout = async () => {
           // tracking and one-activation guards only reset on an actual
           // remount — so without this key, a second user signing into the
           // same tab could inherit the first user's in-memory dialogue
-          // state. The Cat's own on-screen position/facing/entry-complete
-          // state is unaffected by this remount: it's independently
-          // restored from sessionStorage (see CatMascot.jsx's
-          // readMascotSessionState), which survives a React remount within
-          // the same tab.
+          // state.
           key={user?.id ?? 'signed-out'}
           onCatClick={() => setIsVirtualPetOpen(true)}
           disabled={!isAuthenticated}
           personalizedInsightState={personalizedInsightState}
+          // INVENTORY-3: account-scopes CatMascot's own ambient presentation
+          // cache (sleep/mood/selected-pet) so a fresh mount for a different
+          // signed-in user never reads a previous user's bare localStorage
+          // values — same canonical identity as the `key` above, threaded
+          // in synchronously as a prop so even the very first render's
+          // lazy useState initializers read the right namespace.
+          catCacheOwnerId={supabaseUserId}
         />
+      </div>
+      {!isVirtualPetOpen && (
         <MolarAIFloat
           adapter={inventoryMolarAdapter}
           onPetToggle={() => setIsVirtualPetOpen(true)}
           disabled={!isAuthenticated}
         />
-        </>
       )}
 
-      <InventoryVirtualPet isOpen={isVirtualPetOpen} onClose={() => setIsVirtualPetOpen(false)} />
+      {/* INVENTORY-3: `key` forces a fresh Pet runtime mount on every
+          distinct canonical identity boundary (a real Supabase Auth uuid,
+          or 'guest') — mirroring CatMascot's existing
+          `key={user?.id ?? 'signed-out'}` boundary above. Safe to read
+          `supabaseUserId` directly here (no extra pending gate needed):
+          this whole render tree is already past App.tsx's own
+          `authInitializing` early-return (see above), so identity has
+          already resolved to either a real uuid or a confirmed guest by
+          the time this JSX runs — never the "still resolving" state. */}
+      <InventoryVirtualPet
+        key={supabaseUserId ?? 'guest'}
+        isOpen={isVirtualPetOpen}
+        onClose={() => setIsVirtualPetOpen(false)}
+        userId={supabaseUserId}
+      />
     </div>
   );
 };

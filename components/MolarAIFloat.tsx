@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { SharedMolarAI } from '@mrburdeveloperteam/molar-experience/ai';
 import type { AIAdapter } from '@mrburdeveloperteam/molar-experience/contracts';
 import { supabase } from '../supabaseClient';
+import { MOLAR_LOGO_URL } from '../aiExperience/molarExperienceAssets';
 
 interface MolarAIFloatProps {
   adapter: AIAdapter;
@@ -86,6 +87,7 @@ export default function MolarAIFloat({ adapter, onPetToggle, disabled = false }:
       disabled={disabled}
       onPetToggle={onPetToggle}
       emptyState={emptyState}
+      logoUrl={MOLAR_LOGO_URL}
     />
   );
 }

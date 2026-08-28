@@ -38,6 +38,7 @@ import { useEffect, useRef, useState } from 'react';
 import { SharedVirtualPet } from '@mrburdeveloperteam/molar-experience/pet';
 import { supabase } from '../supabaseClient';
 import { inventoryPetRepository } from './inventoryPetRepository';
+import { PET_ASSET_URLS } from '../aiExperience/molarExperienceAssets';
 
 interface GeoInfo {
   ip: string;
@@ -149,25 +150,26 @@ async function detectAndLogVisit(): Promise<string> {
 interface InventoryVirtualPetProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Canonical Pet backend owner id — the same Supabase Auth session.user.id
+   * App.tsx already resolves once at boot (`supabaseUserId`/`user.id`, the
+   * same identity that drives CatMascot's `key={user?.id ?? 'signed-out'}`)
+   * and keeps in sync via bootstrapUser/onAuthStateChange. `null` means a
+   * confirmed signed-out guest — never "still resolving": App.tsx's own
+   * `authInitializing` render gate already prevents this component from
+   * mounting at all before that resolves. This component must never
+   * independently re-derive Pet ownership identity (e.g. via its own
+   * `supabase.auth.getSession()` call) — the Host is the sole source, so an
+   * account switch is only ever reflected via a fresh prop value paired
+   * with a Host-owned `key` boundary (see App.tsx's call site), never by
+   * this component noticing a change on its own.
+   */
+  userId: string | null;
 }
 
-export default function InventoryVirtualPet({ isOpen, onClose }: InventoryVirtualPetProps) {
+export default function InventoryVirtualPet({ isOpen, onClose, userId }: InventoryVirtualPetProps) {
   const hasLoggedRef = useRef(false);
   const [detectedCurrency, setDetectedCurrency] = useState(DEFAULT_CURRENCY_CODE);
-  const [userId, setUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!cancelled) setUserId(session?.user?.id || null);
-      } catch (err) {
-        console.error('Error fetching session in InventoryVirtualPet:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -190,6 +192,7 @@ export default function InventoryVirtualPet({ isOpen, onClose }: InventoryVirtua
       repository={inventoryPetRepository}
       userId={userId}
       currencyCode={detectedCurrency}
+      assetUrls={PET_ASSET_URLS}
     />
   );
 }
