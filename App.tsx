@@ -2295,11 +2295,30 @@ const handleLogout = async () => {
     }));
   };
 
+  // Phase INVENTORY-QUANTITY-STEPPER-UI-GUARD-HARDENING: a single
+  // in-flight guard, keyed by item id, shared by BOTH updateItemQty and
+  // updateItemBatchQty. Every current call site (across MasterInventory
+  // and RoomModal — plus/minus buttons in at least three separate list
+  // layouts, batch steppers, and the batch-delete-via-delta path) routes
+  // through these two functions, so guarding here protects all of them
+  // uniformly instead of duplicating the same ref-and-Set pattern at
+  // every button's onClick — and it can't be defeated by a call site
+  // this audit missed. One shared key per item (not separate whole-item
+  // vs per-batch keys) is deliberate: a `+` and a `−` for the same item
+  // — whether on the item's own quantity or on one of its batches — are
+  // both "adjusting this item's quantity" from the user's perspective,
+  // and the displayed item summary is stale until reconciliation
+  // completes either way, so serializing them is the correct, narrowest
+  // safe boundary. Different items are never blocked by each other.
+  const quantityAdjustInFlightRef = useRef<Set<string>>(new Set());
+
   const updateItemQty = async (roomId: string, itemId: string, delta: number) => {
     if (typeof delta !== 'number' || !Number.isFinite(delta) || delta === 0) return;
     const room = rooms.find(r => r.id === roomId);
     const item = room?.items.find(i => i.id === itemId);
     if (!room || !item || !currentInventoryOwnerId) return;
+    if (quantityAdjustInFlightRef.current.has(itemId)) return;
+    quantityAdjustInFlightRef.current.add(itemId);
 
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
@@ -2330,6 +2349,7 @@ const handleLogout = async () => {
     } finally {
       isDirty.current = false;
       syncInFlight.current = false;
+      quantityAdjustInFlightRef.current.delete(itemId);
     }
   };
 
@@ -2344,6 +2364,9 @@ const handleLogout = async () => {
     if (batchIndex < 0 || batchIndex >= batches.length) return;
     const targetBatchId = batches[batchIndex].id;
     const beforeQty = batches[batchIndex].qty;
+
+    if (quantityAdjustInFlightRef.current.has(itemId)) return;
+    quantityAdjustInFlightRef.current.add(itemId);
 
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
@@ -2375,6 +2398,7 @@ const handleLogout = async () => {
     } finally {
       isDirty.current = false;
       syncInFlight.current = false;
+      quantityAdjustInFlightRef.current.delete(itemId);
     }
   };
 
