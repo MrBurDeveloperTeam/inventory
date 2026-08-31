@@ -1816,171 +1816,120 @@ const handleLogout = async () => {
       return;
     }
 
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    let affectedItemToSync: Item | null = null;
-    let roomNameForLog = '';
-
-    // 1. Calculate the new state first (so we have affectedItemToSync immediately)
     const room = rooms.find(r => r.id === roomId);
     if (!room) return;
+    const roomNameForLog = room.name;
+    if (!currentInventoryOwnerId) return;
 
-    roomNameForLog = room.name;
-    const existingItem = room.items.find(i =>
-      i.name.toLowerCase() === itemData.name?.toLowerCase() &&
-      (itemData.brand ? i.brand.toLowerCase() === itemData.brand.toLowerCase() : true)
-    );
+    // Phase INVENTORY-RECEIVE-STOCK-DUPLICATE-CREATION-HARDENING: existing-
+    // vs-create resolution now happens server-side, inside
+    // receive_inventory_stock, under the same target room's row lock —
+    // never from this client's own (possibly stale) local `rooms` state.
+    // Local state is only updated AFTER the RPC succeeds, from a fresh
+    // read of what it actually wrote — mirroring moveItem's RPC-first
+    // pattern from the transfer atomicity/concurrency hardening.
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
 
-    if (existingItem) {
-      // If createNewBatch is explicitly true, force creation of a new batch
-      if (createNewBatch === true) {
-        // Create a new batch by adding it to the batches array
-        const normalized = ensureBatches(existingItem);
-        const batches = normalized.batches ? [...normalized.batches] : [];
-        batches.push({
-          id: generateId(),
+    try {
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('receive_inventory_stock', {
+        p_room_id: roomId,
+        p_name: itemData.name || '',
+        p_brand: itemData.brand || '',
+        p_code: itemData.code || '',
+        p_qty: qty,
+        p_price: price,
+        p_uom: normalizeUom(itemData.uom),
+        p_vendor: itemData.vendor || '',
+        p_category: normalizeCategory(itemData.category),
+        p_description: itemData.description || '',
+        p_expiry_date: expiry || null,
+        p_purchase_date: purchaseDate || null,
+        p_create_new_batch: createNewBatch === true,
+      });
+      if (rpcError) throw rpcError;
+
+      const [{ data: itemRow }, { data: batchRows }] = await Promise.all([
+        supabase.from('inventory_items').select('*').eq('id', rpcResult.item_id).maybeSingle(),
+        supabase.from('inventory_item_batches').select('*').eq('item_id', rpcResult.item_id),
+      ]);
+
+      if (itemRow) {
+        const batches: ItemBatch[] = (batchRows || []).map((b: any) => ({
+          id: b.id,
+          qty: Number(b.qty) || 0,
+          unitPrice: Number(b.unit_price) || 0,
+          expiryDate: b.expiry_date || null,
+        }));
+        const syncedItem: Item = ensureBatches({
+          id: itemRow.id,
+          name: itemRow.name || '',
+          brand: itemRow.brand || '',
+          code: itemRow.code || '',
+          quantity: Number(itemRow.quantity) || 0,
+          uom: itemRow.uom || 'pcs',
+          price: Number(itemRow.price) || 0,
+          vendor: itemRow.vendor || '',
+          category: (itemRow.category as any) || 'other',
+          description: itemRow.description || '',
+          expiryDate: itemRow.expiry_date || null,
+          createdAt: itemRow.created_at,
+          batches,
+        });
+
+        setRooms(prev => prev.map(r => {
+          if (r.id !== roomId) return r;
+          const exists = r.items.some(i => i.id === syncedItem.id);
+          const updatedItems = exists
+            ? r.items.map(i => i.id === syncedItem.id ? syncedItem : i)
+            : [...r.items, syncedItem];
+          return { ...r, items: updatedItems };
+        }));
+
+        const finalQty = Number(rpcResult.quantity) || 0;
+        addActivity(
+          roomId,
+          roomNameForLog,
+          'receive',
+          `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" [${itemData.code || 'N/A'}] @ $${price.toFixed(2)}`,
+          { beforeValue: String(Math.max(finalQty - qty, 0)), afterValue: String(finalQty) }
+        );
+
+        const historyEntry: PurchaseHistory = {
+          id: rpcResult.history_id,
+          timestamp: new Date().toISOString(),
+          productName: itemData.name || '',
+          brand: itemData.brand || '',
+          code: itemData.code || '',
+          vendor: itemData.vendor || '',
           qty,
           unitPrice: price,
-          expiryDate: expiry || null
-        });
-        const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(batches);
-        affectedItemToSync = { ...normalized, batches, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
-      } else {
-        // Default behavior: merge with existing batch if expiry matches
-        affectedItemToSync = mergeBatchAdd(existingItem, qty, price, expiry);
+          totalPrice: qty * price,
+          location: roomNameForLog,
+          category: itemData.category || 'other',
+          roomId,
+          uom: itemData.uom || 'pcs',
+          expiryDate: expiry,
+          description: itemData.description || ''
+        };
+        setHistory(h => [historyEntry, ...h]);
       }
-    } else {
-      affectedItemToSync = {
-        id: generateId(),
-        name: itemData.name || '',
-        brand: itemData.brand || '',
-        code: itemData.code || '',
-        quantity: qty,
-        price: price,
-        uom: normalizeUom(itemData.uom),
-        vendor: itemData.vendor || '',
-        category: normalizeCategory(itemData.category) as any,
-        description: itemData.description || '',
-        expiryDate: expiry || null,
-        createdAt: new Date().toISOString(),
-        batches: [{
-          id: generateId(),
-          qty,
-          unitPrice: price,
-          expiryDate: expiry || null
-        }]
-      };
-    }
 
-    // 2. Optimistic Update
-    setRooms(prev => prev.map(r => {
-      if (r.id !== roomId) return r;
-      const updatedItems = existingItem
-        ? r.items.map(i => i.id === existingItem.id ? affectedItemToSync! : i)
-        : [...r.items, affectedItemToSync!];
-      return { ...r, items: updatedItems };
-    }));
-
-    // Add activity and history locally
-    addActivity(
-      roomId,
-      roomNameForLog,
-      'receive',
-      `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" [${itemData.code || 'N/A'}] @ $${price.toFixed(2)}`,
-      { beforeValue: existingItem ? String(existingItem.quantity) : '0', afterValue: String(existingItem ? existingItem.quantity + qty : qty) }
-    );
-
-    const historyTimestamp = purchaseDate
-      ? new Date(`${purchaseDate}T${new Date().toTimeString().split(' ')[0]}`).toISOString()
-      : new Date().toISOString();
-    const historyEntry: PurchaseHistory = {
-      id: generateId(),
-      timestamp: historyTimestamp,
-      productName: itemData.name || '',
-      brand: itemData.brand || '',
-      code: itemData.code || '',
-      vendor: itemData.vendor || '',
-      qty,
-      unitPrice: price,
-      totalPrice: qty * price,
-      location: roomNameForLog,
-      category: itemData.category || 'other',
-      roomId: roomId,
-      uom: itemData.uom || existingItem?.uom || 'pcs',
-      expiryDate: expiry,
-      description: itemData.description || existingItem?.description || ''
-    };
-    setHistory(h => [historyEntry, ...h]);
-
-    // 3. Direct Persistence
-    if (affectedItemToSync && currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
-      try {
-        const itm = affectedItemToSync as Item;
-        const { error: itemErr } = await supabase.from('inventory_items').upsert({
-          id: itm.id,
-          room_id: roomId,
-          user_id: currentInventoryOwnerId,
-          name: itm.name,
-          brand: itm.brand,
-          code: itm.code,
-          quantity: itm.quantity,
-          price: itm.price,
-          uom: normalizeUom(itm.uom),
-          vendor: itm.vendor,
-          category: normalizeCategory(itm.category),
-          description: itm.description,
-          expiry_date: itm.expiryDate
-        });
-        if (itemErr) throw itemErr;
-
-        if (itm.batches) {
-          for (const b of itm.batches) {
-            await supabase.from('inventory_item_batches').upsert({
-              id: b.id,
-              item_id: itm.id,
-              qty: b.qty,
-              unit_price: b.unitPrice,
-              expiry_date: b.expiryDate
-            });
-          }
-        }
-
-        // 3. Persist History Entry
-        const { error: historyErr } = await supabase.from('inventory_purchase_history').insert({
-          id: historyEntry.id,
-          user_id: currentInventoryOwnerId,
-          room_id: historyEntry.roomId,
-          occurred_at: historyEntry.timestamp,
-          product_name: historyEntry.productName,
-          brand: historyEntry.brand,
-          code: historyEntry.code,
-          vendor: historyEntry.vendor,
-          qty: historyEntry.qty,
-          unit_price: historyEntry.unitPrice,
-          total_price: historyEntry.totalPrice,
-          location: historyEntry.location,
-          category: historyEntry.category,
-          uom: historyEntry.uom,
-          expiry_date: historyEntry.expiryDate || null,
-        });
-        if (historyErr) throw historyErr;
-
-        setSyncStatus('synced');
-      } catch (err) {
-        console.error('Failed to persist received stock:', err);
-        setSyncStatus('error');
-        // Phase INVENTORY-PERSISTENCE-FAILED-SAVE-SURFACING: durable-save
-        // failure must be observable by the caller — previously this was
-        // swallowed here, so a caller `await`ing this function could never
-        // tell a failed write from a successful one. Local optimistic
-        // state and sync-status behavior are otherwise unchanged.
-        throw err;
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
-      }
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('Failed to persist received stock:', err);
+      setSyncStatus('error');
+      // Phase INVENTORY-PERSISTENCE-FAILED-SAVE-SURFACING: durable-save
+      // failure must be observable by the caller — a caller `await`ing
+      // this function can tell a failed write from a successful one.
+      // Since local state is now only mutated after RPC success (see
+      // above), a failed receive leaves local state completely unchanged.
+      throw err;
+    } finally {
+      isDirty.current = false;
+      syncInFlight.current = false;
     }
   };
 
@@ -2013,153 +1962,123 @@ const handleLogout = async () => {
     items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>
   ) => {
     if (!items.length) return;
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return;
+    const roomNameForLog = room.name;
+    if (!currentInventoryOwnerId) return;
+
+    // Phase INVENTORY-RECEIVE-STOCK-DUPLICATE-CREATION-HARDENING: each
+    // item is now persisted through receive_inventory_stock (same RPC
+    // used by receiveStock), sequentially — so a later item in this same
+    // batch can still correctly merge into an item an earlier item in
+    // the batch just created, since each RPC call fully commits before
+    // the next begins. No raw table upserts remain in this path, and
+    // local state is only mutated after every RPC call has succeeded.
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
     setSyncStatus('syncing');
     syncInFlight.current = true;
 
-    const room = rooms.find(r => r.id === roomId);
-    if (!room) { isDirty.current = false; syncInFlight.current = false; return; }
+    try {
+      const affectedItemIds = new Set<string>();
+      const historyEntries: PurchaseHistory[] = [];
 
-    const roomNameForLog = room.name;
-    const affectedItems: Item[] = [];
-    const historyEntries: PurchaseHistory[] = [];
-    let currentItems = [...room.items];
+      for (const { itemData, qty, price, purchaseDate, expiry } of items) {
+        if (!itemData.name) continue;
 
-    // Build the full new state for each item sequentially (so merges are correct)
-    for (const { itemData, qty, price, purchaseDate, expiry } of items) {
-      if (!itemData.name) continue;
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('receive_inventory_stock', {
+          p_room_id: roomId,
+          p_name: itemData.name,
+          p_brand: itemData.brand || '',
+          p_code: itemData.code || '',
+          p_qty: qty,
+          p_price: price,
+          p_uom: normalizeUom(itemData.uom),
+          p_vendor: itemData.vendor || '',
+          p_category: normalizeCategory(itemData.category),
+          p_description: itemData.description || '',
+          p_expiry_date: expiry || null,
+          p_purchase_date: purchaseDate || null,
+          p_create_new_batch: false,
+        });
+        if (rpcError) throw rpcError;
 
-      const existingItem = currentItems.find(i =>
-        i.name.toLowerCase() === itemData.name!.toLowerCase() &&
-        (itemData.brand ? i.brand.toLowerCase() === itemData.brand.toLowerCase() : true)
-      );
+        affectedItemIds.add(rpcResult.item_id);
 
-      let newItem: Item;
-      if (existingItem) {
-        newItem = mergeBatchAdd(existingItem, qty, price, expiry);
-        currentItems = currentItems.map(i => i.id === existingItem.id ? newItem : i);
-      } else {
-        newItem = {
-          id: generateId(),
-          name: itemData.name || '',
+        const finalQty = Number(rpcResult.quantity) || 0;
+        addActivity(
+          roomId, roomNameForLog, 'receive',
+          `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" @ $${price.toFixed(2)}`,
+          { beforeValue: String(Math.max(finalQty - qty, 0)), afterValue: String(finalQty) }
+        );
+
+        historyEntries.push({
+          id: rpcResult.history_id,
+          timestamp: new Date().toISOString(),
+          productName: itemData.name || '',
           brand: itemData.brand || '',
           code: itemData.code || '',
-          quantity: qty,
-          price,
-          uom: normalizeUom(itemData.uom),
           vendor: itemData.vendor || '',
-          category: normalizeCategory(itemData.category) as any,
+          qty,
+          unitPrice: price,
+          totalPrice: qty * price,
+          location: roomNameForLog,
+          category: itemData.category || 'other',
+          roomId,
+          uom: itemData.uom || 'pcs',
+          expiryDate: expiry,
           description: itemData.description || '',
-          expiryDate: expiry || null,
-          createdAt: new Date().toISOString(),
-          batches: [{ id: generateId(), qty, unitPrice: price, expiryDate: expiry || null }],
-        };
-        currentItems = [...currentItems, newItem];
-      }
-      affectedItems.push(newItem);
-
-      // Activity log
-      addActivity(
-        roomId, roomNameForLog, 'receive',
-        `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" @ $${price.toFixed(2)}`,
-        { beforeValue: String(existingItem?.quantity ?? 0), afterValue: String(newItem.quantity) }
-      );
-
-      // History
-      const historyEntry: PurchaseHistory = {
-        id: generateId(),
-        timestamp: purchaseDate
-          ? new Date(`${purchaseDate}T${new Date().toTimeString().split(' ')[0]}`).toISOString()
-          : new Date().toISOString(),
-        productName: itemData.name || '',
-        brand: itemData.brand || '',
-        code: itemData.code || '',
-        vendor: itemData.vendor || '',
-        qty,
-        unitPrice: price,
-        totalPrice: qty * price,
-        location: roomNameForLog,
-        category: itemData.category || 'other',
-        roomId,
-        uom: itemData.uom || existingItem?.uom || 'pcs',
-        expiryDate: expiry,
-        description: itemData.description || existingItem?.description || '',
-      };
-      setHistory(h => [historyEntry, ...h]);
-      historyEntries.push(historyEntry);
-    }
-
-    // Optimistic update — apply all at once
-    setRooms(prev => prev.map(r => r.id === roomId ? { ...r, items: currentItems } : r));
-
-    if (!currentInventoryOwnerId) {
-      isDirty.current = false;
-      syncInFlight.current = false;
-      return;
-    }
-
-    try {
-      // Persist ALL items before clearing isDirty
-      for (const itm of affectedItems) {
-        const { error: itemErr } = await supabase.from('inventory_items').upsert({
-          id: itm.id,
-          room_id: roomId,
-          user_id: currentInventoryOwnerId,
-          name: itm.name,
-          brand: itm.brand,
-          code: itm.code,
-          quantity: itm.quantity,
-          price: itm.price,
-          uom: normalizeUom(itm.uom),
-          vendor: itm.vendor,
-          category: normalizeCategory(itm.category),
-          description: itm.description,
-          expiry_date: itm.expiryDate,
         });
-        if (itemErr) throw itemErr;
+      }
 
-        if (itm.batches) {
-          for (const b of itm.batches) {
-            await supabase.from('inventory_item_batches').upsert({
-              id: b.id,
-              item_id: itm.id,
-              qty: b.qty,
-              unit_price: b.unitPrice,
-              expiry_date: b.expiryDate,
-            });
+      const itemIdList = Array.from(affectedItemIds);
+      if (itemIdList.length > 0) {
+        const [{ data: itemRows }, { data: batchRows }] = await Promise.all([
+          supabase.from('inventory_items').select('*').in('id', itemIdList),
+          supabase.from('inventory_item_batches').select('*').in('item_id', itemIdList),
+        ]);
+        const batchesByItem: Record<string, ItemBatch[]> = {};
+        (batchRows || []).forEach((b: any) => {
+          const batch: ItemBatch = { id: b.id, qty: Number(b.qty) || 0, unitPrice: Number(b.unit_price) || 0, expiryDate: b.expiry_date || null };
+          batchesByItem[b.item_id] = [...(batchesByItem[b.item_id] || []), batch];
+        });
+        const syncedItems: Item[] = (itemRows || []).map((row: any) => ensureBatches({
+          id: row.id,
+          name: row.name || '',
+          brand: row.brand || '',
+          code: row.code || '',
+          quantity: Number(row.quantity) || 0,
+          uom: row.uom || 'pcs',
+          price: Number(row.price) || 0,
+          vendor: row.vendor || '',
+          category: (row.category as any) || 'other',
+          description: row.description || '',
+          expiryDate: row.expiry_date || null,
+          createdAt: row.created_at,
+          batches: batchesByItem[row.id] || [],
+        }));
+
+        setRooms(prev => prev.map(r => {
+          if (r.id !== roomId) return r;
+          const updatedItems = [...r.items];
+          for (const si of syncedItems) {
+            const idx = updatedItems.findIndex(i => i.id === si.id);
+            if (idx >= 0) updatedItems[idx] = si; else updatedItems.push(si);
           }
-        }
+          return { ...r, items: updatedItems };
+        }));
       }
 
-      // Persist all history entries to Supabase
-      for (const h of historyEntries) {
-        const { error: histErr } = await supabase.from('inventory_purchase_history').insert({
-          id: h.id,
-          user_id: currentInventoryOwnerId,
-          room_id: h.roomId,
-          occurred_at: h.timestamp,
-          product_name: h.productName,
-          brand: h.brand,
-          code: h.code,
-          vendor: h.vendor,
-          qty: h.qty,
-          unit_price: h.unitPrice,
-          total_price: h.totalPrice,
-          location: h.location,
-          category: normalizeCategory(h.category),
-          uom: normalizeUom(h.uom as string),
-          expiry_date: h.expiryDate || null,
-        });
-        if (histErr) console.error('receiveStockBatch: failed to persist history entry', histErr);
+      if (historyEntries.length > 0) {
+        setHistory(h => [...historyEntries, ...h]);
       }
 
       setSyncStatus('synced');
     } catch (err) {
       console.error('receiveStockBatch: failed to persist items', err);
       setSyncStatus('error');
+      throw err;
     } finally {
-      // Only NOW is it safe to clear isDirty — all items are in Supabase
       isDirty.current = false;
       syncInFlight.current = false;
     }
@@ -3199,7 +3118,7 @@ const handleLogout = async () => {
           onClose={() => setActiveRoomId(null)}
           onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateRoomName(id, name); }}
           onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp).catch((err) => { console.error('Manual receive stock failed:', err); }); }}
-          onReceiveBatch={(rid, items) => receiveStockBatch(rid, items)}
+          onReceiveBatch={(rid, items) => receiveStockBatch(rid, items).catch((err) => { console.error('Manual receive stock batch failed:', err); })}
           onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
           onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); }); }}
