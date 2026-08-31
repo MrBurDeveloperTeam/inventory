@@ -12,7 +12,7 @@
 // time reflects the current app state, not a stale snapshot captured when
 // the proposal was first created. Room/item existence and available
 // quantity are re-checked here immediately before calling the executor.
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { Room, Item } from '../types';
 import type { PendingInventoryAction } from '../aiExperience/inventoryConfirmedActionParser';
 
@@ -61,20 +61,32 @@ const InventoryActionConfirm: React.FC<InventoryActionConfirmProps> = ({
   removeStock,
   moveItem,
 }) => {
-  // Guards against a rapid double-click executing the same proposal twice
-  // — the Confirm button is disabled the instant this becomes true, before
-  // any async work starts.
+  // `isProcessing` drives the disabled/loading UI only — it is NOT the
+  // execution lock. React setState is not a synchronous mutex: a second
+  // Confirm click that fires before this component re-renders would still
+  // see the pre-update `isProcessing` value from its own event's closure,
+  // so an `if (isProcessing) return` check alone cannot prove only one
+  // executor call happens. `processingRef` is a plain mutable ref — reads
+  // and writes to `.current` are synchronous and shared across every
+  // event handler invocation regardless of render timing, so it is the
+  // actual execution authority below.
+  const processingRef = useRef(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleCancel = () => {
-    if (isProcessing) return;
+    if (processingRef.current) return;
     onCancel();
   };
 
   const handleConfirm = async () => {
-    if (isProcessing) return;
+    // Synchronous execution lock — checked and set before any other
+    // statement, so a second click arriving before React commits the
+    // `isProcessing` state update still observes `processingRef.current`
+    // already `true` and returns immediately with zero side effects.
+    if (processingRef.current) return;
+    processingRef.current = true;
     setIsProcessing(true);
     setError(null);
 
@@ -83,6 +95,7 @@ const InventoryActionConfirm: React.FC<InventoryActionConfirmProps> = ({
         const room = rooms.find((r) => r.id === action.roomId);
         if (!room) {
           setError('That room no longer exists. No stock was changed.');
+          processingRef.current = false;
           setIsProcessing(false);
           return;
         }
@@ -102,17 +115,20 @@ const InventoryActionConfirm: React.FC<InventoryActionConfirmProps> = ({
         const room = rooms.find((r) => r.id === action.roomId);
         if (!room) {
           setError('That room no longer exists. No stock was changed.');
+          processingRef.current = false;
           setIsProcessing(false);
           return;
         }
         const item = room.items.find((i) => i.id === action.itemId);
         if (!item) {
           setError('That item is no longer available in that room. No stock was changed.');
+          processingRef.current = false;
           setIsProcessing(false);
           return;
         }
         if (action.quantity > item.quantity) {
           setError(`Only ${item.quantity} available now — not enough to remove ${action.quantity}. No stock was changed.`);
+          processingRef.current = false;
           setIsProcessing(false);
           return;
         }
@@ -127,22 +143,26 @@ const InventoryActionConfirm: React.FC<InventoryActionConfirmProps> = ({
       const toRoom = rooms.find((r) => r.id === action.toRoomId);
       if (!fromRoom || !toRoom) {
         setError('One of the rooms no longer exists. No stock was changed.');
+        processingRef.current = false;
         setIsProcessing(false);
         return;
       }
       if (fromRoom.id === toRoom.id) {
         setError('Source and destination room must differ. No stock was changed.');
+        processingRef.current = false;
         setIsProcessing(false);
         return;
       }
       const item = fromRoom.items.find((i) => i.id === action.itemId);
       if (!item) {
         setError('That item is no longer available in the source room. No stock was changed.');
+        processingRef.current = false;
         setIsProcessing(false);
         return;
       }
       if (action.quantity > item.quantity) {
         setError(`Only ${item.quantity} available now — not enough to transfer ${action.quantity}. No stock was changed.`);
+        processingRef.current = false;
         setIsProcessing(false);
         return;
       }
@@ -152,6 +172,7 @@ const InventoryActionConfirm: React.FC<InventoryActionConfirmProps> = ({
     } catch (err) {
       console.error('InventoryActionConfirm: execution failed', err);
       setError('Something went wrong performing this action. No stock change is guaranteed to have been saved — please check inventory before retrying.');
+      processingRef.current = false;
       setIsProcessing(false);
     }
   };
