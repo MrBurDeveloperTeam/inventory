@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   X,
   Package,
@@ -39,11 +39,11 @@ interface RoomModalProps {
   logs: ActivityLog[];
   onClose: () => void;
   onUpdateName: (id: string, name: string) => void;
-  onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
-  onReceiveBatch?: (roomId: string, items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>) => void;
+  onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void | Promise<void>;
+  onReceiveBatch?: (roomId: string, items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>) => void | Promise<void>;
   onUpdateQty: (roomId: string, itemId: string, delta: number) => void;
   onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
-  onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
+  onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void | Promise<void>;
   onDeleteItem: (roomId: string, itemId: string) => void;
   onUpdateItem: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
   onUpdateBatch: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
@@ -51,6 +51,20 @@ interface RoomModalProps {
 }
 
 const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onReceiveBatch, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem, onUpdateItem, onUpdateBatch, readOnly = false }) => {
+  // Phase INVENTORY-DUPLICATE-SUBMISSION-UI-GUARD-HARDENING: synchronous
+  // in-flight guards for every stock-mutating confirm/submit action in
+  // this modal, set/checked before any await so a second click/submit
+  // that fires before React re-renders can't reach the mutation call.
+  // Each guards exactly one logical action's control (single receive
+  // form, single transfer-confirm dialog, single bulk-transfer dialog,
+  // one import-confirm button, one OCR-confirm button) — not a shared
+  // lock across unrelated actions.
+  const receiveSubmitInFlightRef = useRef(false);
+  const transferConfirmInFlightRef = useRef(false);
+  const bulkTransferConfirmInFlightRef = useRef(false);
+  const excelImportInFlightRef = useRef(false);
+  const ocrImportInFlightRef = useRef(false);
+
   const [isReceiving, setIsReceiving] = useState(false);
   const [receiveMode, setReceiveMode] = useState<'existing' | 'new' | 'edit'>('existing');
   const [selectedItemIdx, setSelectedItemIdx] = useState<string>('');
@@ -568,32 +582,40 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     setIsReceiving(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (receiveMode === 'edit') {
-      const itemIndex = parseInt(selectedItemIdx);
-      const originalItem = room.items[itemIndex];
-      if (originalItem) {
-        if (editingBatchId) {
-          onUpdateBatch(room.id, originalItem.id, editingBatchId, {
-            qty: receiveQty,
-            unitPrice: receivePrice,
-            expiryDate: hasExpiry ? expiry : null
-          });
-        } else {
-          onUpdateItem(room.id, originalItem.id, {
-            ...formData,
-            quantity: receiveQty,
-            price: receivePrice,
-            expiryDate: hasExpiry ? expiry : null
-          });
+    if (receiveSubmitInFlightRef.current) return;
+    receiveSubmitInFlightRef.current = true;
+    try {
+      if (receiveMode === 'edit') {
+        const itemIndex = parseInt(selectedItemIdx);
+        const originalItem = room.items[itemIndex];
+        if (originalItem) {
+          if (editingBatchId) {
+            onUpdateBatch(room.id, originalItem.id, editingBatchId, {
+              qty: receiveQty,
+              unitPrice: receivePrice,
+              expiryDate: hasExpiry ? expiry : null
+            });
+          } else {
+            onUpdateItem(room.id, originalItem.id, {
+              ...formData,
+              quantity: receiveQty,
+              price: receivePrice,
+              expiryDate: hasExpiry ? expiry : null
+            });
+          }
         }
+      } else {
+        await onReceive(room.id, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
       }
-    } else {
-      onReceive(room.id, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
+      setIsReceiving(false);
+      resetForm();
+    } catch (err) {
+      console.error('RoomModal: receive submit failed', err);
+    } finally {
+      receiveSubmitInFlightRef.current = false;
     }
-    setIsReceiving(false);
-    resetForm();
   };
 
   const resetForm = () => {
@@ -638,13 +660,21 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
 
 
-  const confirmTransfer = () => {
+  const confirmTransfer = async () => {
     if (!transferContext) return;
-    const maxQty = Math.max(transferContext.availableQty, 0);
-    const qtyToMove = Math.min(Math.max(transferQty || 0, 1), maxQty);
-    onTransfer(room.id, transferContext.toRoomId, transferContext.item.id, qtyToMove, transferContext.batchIndex);
-    setTransferContext(null);
-    setTransferQty(0);
+    if (transferConfirmInFlightRef.current) return;
+    transferConfirmInFlightRef.current = true;
+    try {
+      const maxQty = Math.max(transferContext.availableQty, 0);
+      const qtyToMove = Math.min(Math.max(transferQty || 0, 1), maxQty);
+      await onTransfer(room.id, transferContext.toRoomId, transferContext.item.id, qtyToMove, transferContext.batchIndex);
+      setTransferContext(null);
+      setTransferQty(0);
+    } catch (err) {
+      console.error('RoomModal: transfer failed', err);
+    } finally {
+      transferConfirmInFlightRef.current = false;
+    }
   };
 
   const cancelTransfer = () => {
@@ -673,10 +703,18 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   };
 
   const cancelDelete = () => setDeleteContext(null);
-  const confirmBulkTransfer = () => {
+  const confirmBulkTransfer = async () => {
     if (!bulkTransferContext) return;
-    onTransfer(room.id, bulkTransferContext.toRoomId, bulkTransferContext.item.id, bulkTransferContext.item.quantity);
-    setBulkTransferContext(null);
+    if (bulkTransferConfirmInFlightRef.current) return;
+    bulkTransferConfirmInFlightRef.current = true;
+    try {
+      await onTransfer(room.id, bulkTransferContext.toRoomId, bulkTransferContext.item.id, bulkTransferContext.item.quantity);
+      setBulkTransferContext(null);
+    } catch (err) {
+      console.error('RoomModal: bulk transfer failed', err);
+    } finally {
+      bulkTransferConfirmInFlightRef.current = false;
+    }
   };
   const cancelBulkTransfer = () => setBulkTransferContext(null);
 
@@ -840,30 +878,43 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                 
                 <div className="flex flex-col sm:flex-row-reverse items-center justify-center gap-3 pt-2">
                   <button
-                    onClick={() => {
-                      excelPreviewData.forEach(item => {
-                        if (item.name) {
-                          onReceive(
-                            room.id,
-                            {
-                              name: item.name,
-                              brand: item.brand || '',
-                              category: item.category || 'consumables',
-                              uom: item.uom || 'box',
-                              code: item.code || '',
-                              vendor: item.vendor || '',
-                              description: item.description || '',
-                              expiryDate: item.expiryDate || undefined
-                            },
-                            item.quantity || 1,
-                            item.price || 0,
-                            new Date().toISOString().split('T')[0],
-                            item.expiryDate || undefined
-                          );
+                    onClick={async () => {
+                      // Parent-action guard: one button click = one import
+                      // submission, even though it fans out into N
+                      // individual receive calls below — a double-click
+                      // must not start a second full pass over
+                      // excelPreviewData before the first one finishes.
+                      if (excelImportInFlightRef.current) return;
+                      excelImportInFlightRef.current = true;
+                      try {
+                        for (const item of excelPreviewData) {
+                          if (item.name) {
+                            await onReceive(
+                              room.id,
+                              {
+                                name: item.name,
+                                brand: item.brand || '',
+                                category: item.category || 'consumables',
+                                uom: item.uom || 'box',
+                                code: item.code || '',
+                                vendor: item.vendor || '',
+                                description: item.description || '',
+                                expiryDate: item.expiryDate || undefined
+                              },
+                              item.quantity || 1,
+                              item.price || 0,
+                              new Date().toISOString().split('T')[0],
+                              item.expiryDate || undefined
+                            );
+                          }
                         }
-                      });
-                      setIsExcelPreviewActive(false);
-                      setExcelPreviewData([]);
+                        setIsExcelPreviewActive(false);
+                        setExcelPreviewData([]);
+                      } catch (err) {
+                        console.error('RoomModal: Excel import failed', err);
+                      } finally {
+                        excelImportInFlightRef.current = false;
+                      }
                     }}
                     className={`w-full sm:w-44 py-3 rounded-xl font-black uppercase text-[12px] tracking-widest shadow-lg transition-all flex items-center justify-center gap-2 ${
                       excelPreviewData.length === 0
@@ -1400,55 +1451,64 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
                   <div className="flex flex-col sm:flex-row-reverse items-center justify-center gap-3 pt-2">
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         const validItems = ocrResult.filter(item => item.name);
                         if (validItems.length === 0) return;
-
-                        if (onReceiveBatch) {
-                          // Single batched call — isDirty stays true until ALL items are persisted
-                          onReceiveBatch(
-                            room.id,
-                            validItems.map(item => ({
-                              itemData: {
-                                name: item.name,
-                                brand: item.brand || '',
-                                category: item.category || 'consumables',
-                                uom: item.uom || 'box',
-                                code: item.code || '',
-                                vendor: item.vendor || '',
-                                description: item.description || '',
-                                expiryDate: item.expiryDate || undefined,
-                              },
-                              qty: item.quantity || 1,
-                              price: item.price || 0,
-                              purchaseDate: item.purchaseDate || new Date().toISOString().split('T')[0],
-                              expiry: item.expiryDate || undefined,
-                            }))
-                          );
-                        } else {
-                          // Fallback: individual calls (legacy path)
-                          validItems.forEach(item => {
-                            onReceive(
+                        // Parent-action guard: one "Add All" click = one
+                        // submission of the whole OCR batch.
+                        if (ocrImportInFlightRef.current) return;
+                        ocrImportInFlightRef.current = true;
+                        try {
+                          if (onReceiveBatch) {
+                            // Single batched call — isDirty stays true until ALL items are persisted
+                            await onReceiveBatch(
                               room.id,
-                              {
-                                name: item.name,
-                                brand: item.brand || '',
-                                category: item.category || 'consumables',
-                                uom: item.uom || 'box',
-                                code: item.code || '',
-                                vendor: item.vendor || '',
-                                description: item.description || '',
-                                expiryDate: item.expiryDate || undefined,
-                              },
-                              item.quantity || 1,
-                              item.price || 0,
-                              item.purchaseDate || new Date().toISOString().split('T')[0],
-                              item.expiryDate || undefined
+                              validItems.map(item => ({
+                                itemData: {
+                                  name: item.name,
+                                  brand: item.brand || '',
+                                  category: item.category || 'consumables',
+                                  uom: item.uom || 'box',
+                                  code: item.code || '',
+                                  vendor: item.vendor || '',
+                                  description: item.description || '',
+                                  expiryDate: item.expiryDate || undefined,
+                                },
+                                qty: item.quantity || 1,
+                                price: item.price || 0,
+                                purchaseDate: item.purchaseDate || new Date().toISOString().split('T')[0],
+                                expiry: item.expiryDate || undefined,
+                              }))
                             );
-                          });
+                          } else {
+                            // Fallback: individual sequential calls (legacy path)
+                            for (const item of validItems) {
+                              await onReceive(
+                                room.id,
+                                {
+                                  name: item.name,
+                                  brand: item.brand || '',
+                                  category: item.category || 'consumables',
+                                  uom: item.uom || 'box',
+                                  code: item.code || '',
+                                  vendor: item.vendor || '',
+                                  description: item.description || '',
+                                  expiryDate: item.expiryDate || undefined,
+                                },
+                                item.quantity || 1,
+                                item.price || 0,
+                                item.purchaseDate || new Date().toISOString().split('T')[0],
+                                item.expiryDate || undefined
+                              );
+                            }
+                          }
+                          setOcrStep('upload');
+                          setIsOCRActive(false);
+                        } catch (err) {
+                          console.error('RoomModal: OCR batch receive failed', err);
+                        } finally {
+                          ocrImportInFlightRef.current = false;
                         }
-                        setOcrStep('upload');
-                        setIsOCRActive(false);
                       }}
                       disabled={ocrResult.length === 0}
                       className="w-full sm:w-44 bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[12px] tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2"

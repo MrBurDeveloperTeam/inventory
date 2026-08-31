@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search,
   Package,
@@ -38,9 +38,9 @@ interface MasterInventoryProps {
   rooms: Room[];
   history: PurchaseHistory[];
   logs: ActivityLog[];
-  onReceive?: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
+  onReceive?: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void | Promise<void>;
   onUpdateQty?: (roomId: string, itemId: string, delta: number) => void;
-  onTransfer?: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
+  onTransfer?: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void | Promise<void>;
   onUpdateBatchQty?: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
   onDeleteItem?: (roomId: string, itemId: string) => void;
   onUpdateItem?: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
@@ -73,6 +73,17 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   focusExpiringTabRequestId
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
+
+  // Phase INVENTORY-DUPLICATE-SUBMISSION-UI-GUARD-HARDENING: synchronous
+  // in-flight guards, set/checked before any await so a second click that
+  // fires before React re-renders a disabled state still can't get
+  // through. Reset in `finally` so a later, genuinely new action is always
+  // allowed. `receiveSubmitInFlightRef` guards the one receive form (only
+  // one can be open at a time); `transferInFlightRef` is keyed per-item id
+  // so transferring different items concurrently is never blocked.
+  const receiveSubmitInFlightRef = useRef(false);
+  const restoreInFlightRef = useRef<Set<string>>(new Set());
+  const transferInFlightRef = useRef<Set<string>>(new Set());
 
   // See the prop's own doc — only ever fires on an actual increment, never
   // on mount with an undefined/unset value, so this never overrides a
@@ -357,39 +368,51 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     }
   };
 
-  const handleReceiveSubmit = (e: React.FormEvent) => {
+  const handleReceiveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('MasterInventory: handleReceive called', { selectedRoomId, receiveQty, receivePrice });
-    if (!selectedRoomId || receiveQty <= 0) {
-      alert('Please select a room and enter a valid quantity.');
-      return;
-    }
-    if (!onReceive || !onUpdateItem || !onUpdateBatch) return;
-
-    if (receiveMode === 'edit') {
-      const iId = selectedProductKey.split('|')[1];
-      if (iId) {
-        if (editingBatchId) {
-          onUpdateBatch(selectedRoomId, iId, editingBatchId, {
-            qty: receiveQty,
-            unitPrice: receivePrice,
-            expiryDate: hasExpiry ? expiry : null
-          });
-        } else {
-          onUpdateItem(selectedRoomId, iId, {
-            ...formData,
-            quantity: receiveQty,
-            price: receivePrice,
-            expiryDate: hasExpiry ? expiry : null
-          });
-        }
+    // Synchronous re-entry guard — checked and set before any other
+    // statement, so a second submit event (double Enter/click, or a
+    // stray duplicate form-submit event) that fires before React commits
+    // a disabled state still can't reach the mutation below.
+    if (receiveSubmitInFlightRef.current) return;
+    receiveSubmitInFlightRef.current = true;
+    try {
+      console.log('MasterInventory: handleReceive called', { selectedRoomId, receiveQty, receivePrice });
+      if (!selectedRoomId || receiveQty <= 0) {
+        alert('Please select a room and enter a valid quantity.');
+        return;
       }
-    } else {
-      onReceive(selectedRoomId, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
-    }
+      if (!onReceive || !onUpdateItem || !onUpdateBatch) return;
 
-    setActiveTab('all');
-    resetReceiveForm();
+      if (receiveMode === 'edit') {
+        const iId = selectedProductKey.split('|')[1];
+        if (iId) {
+          if (editingBatchId) {
+            onUpdateBatch(selectedRoomId, iId, editingBatchId, {
+              qty: receiveQty,
+              unitPrice: receivePrice,
+              expiryDate: hasExpiry ? expiry : null
+            });
+          } else {
+            onUpdateItem(selectedRoomId, iId, {
+              ...formData,
+              quantity: receiveQty,
+              price: receivePrice,
+              expiryDate: hasExpiry ? expiry : null
+            });
+          }
+        }
+      } else {
+        await onReceive(selectedRoomId, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
+      }
+
+      setActiveTab('all');
+      resetReceiveForm();
+    } catch (err) {
+      console.error('MasterInventory: receive submit failed', err);
+    } finally {
+      receiveSubmitInFlightRef.current = false;
+    }
   };
 
   const resetReceiveForm = () => {
@@ -811,10 +834,22 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                     <select
                                       value={item.roomId}
                                       disabled={rooms.length <= 1 || !onTransfer}
-                                      onChange={(e) => {
+                                      onChange={async (e) => {
                                         const toRoomId = e.target.value;
-                                        if (toRoomId && toRoomId !== item.roomId && onTransfer) {
-                                          onTransfer(item.roomId, toRoomId, item.id, item.quantity);
+                                        // Per-item guard: the controlled `value` stays
+                                        // pinned to item.roomId until the RPC's
+                                        // reconciled state lands, so re-selecting the
+                                        // same target while pending would otherwise
+                                        // fire onChange again and double-transfer.
+                                        if (toRoomId && toRoomId !== item.roomId && onTransfer && !transferInFlightRef.current.has(item.id)) {
+                                          transferInFlightRef.current.add(item.id);
+                                          try {
+                                            await onTransfer(item.roomId, toRoomId, item.id, item.quantity);
+                                          } catch (err) {
+                                            console.error('MasterInventory: transfer failed', err);
+                                          } finally {
+                                            transferInFlightRef.current.delete(item.id);
+                                          }
                                         }
                                       }}
                                       className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate disabled:cursor-default disabled:opacity-80"
@@ -1525,10 +1560,17 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   <select
                                     value={item.roomId}
                                     disabled={rooms.length <= 1 || !onTransfer}
-                                    onChange={(e) => {
+                                    onChange={async (e) => {
                                       const toRoomId = e.target.value;
-                                      if (toRoomId && toRoomId !== item.roomId && onTransfer) {
-                                        onTransfer(item.roomId, toRoomId, item.id, item.qty);
+                                      if (toRoomId && toRoomId !== item.roomId && onTransfer && !transferInFlightRef.current.has(item.id)) {
+                                        transferInFlightRef.current.add(item.id);
+                                        try {
+                                          await onTransfer(item.roomId, toRoomId, item.id, item.qty);
+                                        } catch (err) {
+                                          console.error('MasterInventory: transfer failed', err);
+                                        } finally {
+                                          transferInFlightRef.current.delete(item.id);
+                                        }
                                       }
                                     }}
                                     className="text-emerald-600 font-bold text-[10px] whitespace-nowrap border border-emerald-100 px-2 py-0.5 rounded-lg bg-emerald-50/30 cursor-pointer appearance-none hover:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors max-w-[110px] truncate disabled:cursor-default disabled:opacity-80"
@@ -1755,14 +1797,27 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     const qty = isNaN(parsedQty) ? 1 : parsedQty;
                     return (
                       <button
-                        onClick={() => {
-                          onReceive(
-                            log.roomId,
-                            { name: itemName, category: 'other' as any, uom: 'pcs' as any },
-                            qty,
-                            0,
-                            new Date().toISOString().split('T')[0]
-                          );
+                        onClick={async () => {
+                          // Per-log-id guard (a Set, not a single ref) —
+                          // restoring two DIFFERENT deleted items in quick
+                          // succession is legitimate and must not be
+                          // blocked; only a repeat click on THIS row's
+                          // button while its own request is in flight is.
+                          if (restoreInFlightRef.current.has(log.id)) return;
+                          restoreInFlightRef.current.add(log.id);
+                          try {
+                            await onReceive(
+                              log.roomId,
+                              { name: itemName, category: 'other' as any, uom: 'pcs' as any },
+                              qty,
+                              0,
+                              new Date().toISOString().split('T')[0]
+                            );
+                          } catch (err) {
+                            console.error('MasterInventory: restore item failed', err);
+                          } finally {
+                            restoreInFlightRef.current.delete(log.id);
+                          }
                         }}
                         className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-nowrap"
                         title={`Restore ${qty}x "${itemName}" to ${log.roomName}`}
