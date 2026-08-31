@@ -14,6 +14,7 @@
 // quantity are re-checked here immediately before calling the executor.
 import React, { useState, useRef } from 'react';
 import type { Room, Item } from '../types';
+import { InventoryReconciliationError, isDefiniteMutationFailure } from '../types';
 import type { PendingInventoryAction } from '../aiExperience/inventoryConfirmedActionParser';
 
 interface InventoryActionConfirmProps {
@@ -183,8 +184,39 @@ const InventoryActionConfirm: React.FC<InventoryActionConfirmProps> = ({
       setSuccessMessage(`Transferred ${action.quantity} of "${item.name}" from ${fromRoom.name} to ${toRoom.name}.`);
       setIsProcessing(false);
     } catch (err) {
+      // Phase INVENTORY-RETRY-UI-AFFORDANCE-AND-MESSAGING-HARDENING: an
+      // InventoryReconciliationError means the mutation RPC already
+      // confirmed success — the stock change IS saved, only the
+      // follow-up refresh failed. This is reported through the SAME
+      // success view (never the error view below), specifically so
+      // there is no "Confirm" button offered here that could re-run the
+      // mutation — closing the dialog is the only action, matching
+      // "recovery must be read-only, never a second mutation attempt".
+      if (err instanceof InventoryReconciliationError) {
+        console.warn('InventoryActionConfirm: mutation committed, reconciliation failed', err);
+        setSuccessMessage(
+          `${actionLabel[action.type]} was saved, but the latest inventory could not be refreshed here. It will show correctly the next time this screen loads.`
+        );
+        processingRef.current = false;
+        setIsProcessing(false);
+        return;
+      }
       console.error('InventoryActionConfirm: execution failed', err);
-      setError('Something went wrong performing this action. No stock change is guaranteed to have been saved — please check inventory before retrying.');
+      // Definite failure (server rejected it — auth/validation/stock):
+      // the mutation never committed, and Confirm below safely reuses
+      // the same idempotencyKeyRef.current on the next click, so a
+      // definite-failure retry is harmless either way. An UNKNOWN
+      // outcome (network/transport failure with no structured Postgres
+      // error code) genuinely needs the retry to reuse the same key —
+      // which it already does, since idempotencyKeyRef is stable for
+      // the lifetime of this mounted dialog — so both cases share the
+      // same safe "click Confirm again" recovery path here; only the
+      // wording differs.
+      setError(
+        isDefiniteMutationFailure(err)
+          ? 'Unable to save this stock change. No stock was changed — you can adjust and try again.'
+          : "We couldn't confirm whether this stock change completed. It's safe to try again — nothing will be double-applied."
+      );
       processingRef.current = false;
       setIsProcessing(false);
     }

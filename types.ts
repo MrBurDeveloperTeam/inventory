@@ -1,6 +1,36 @@
 export type Category = 'consumables' | 'equipment' | 'instruments' | 'materials' | 'medication' | 'ppe' | 'other';
 export type UOM = 'pcs' | 'box' | 'unit' | 'kit';
 
+// Phase INVENTORY-FAILED-SAVE-RETRY-AND-RECONCILIATION-RECOVERY-HARDENING
+// (kept here, not in App.tsx, specifically so components like
+// InventoryActionConfirm.tsx can `instanceof`-check it without a
+// circular import back into App.tsx). Thrown only after a mutation RPC
+// has already confirmed success — it means the stock change IS durably
+// saved; only the read-only follow-up reconciliation failed. Callers
+// must never treat this the same as a definite mutation failure: never
+// re-run the mutation, never claim "not saved".
+export class InventoryReconciliationError extends Error {
+  committed: true = true;
+  constructor(message: string, public cause: unknown) {
+    super(message);
+    this.name = 'InventoryReconciliationError';
+  }
+}
+
+// Structured classification of a thrown mutation error, using the
+// actual PostgREST/Postgres SQLSTATE (`error.code`) every hardened RPC
+// raises with — not message-substring matching. 28000 UNAUTHENTICATED,
+// 42501 UNAUTHORIZED, 22023 every INVALID_*/INSUFFICIENT_STOCK
+// validation rejection, P0002 every "not found" rejection, 23505
+// IDEMPOTENCY_KEY_REUSED. Anything else (no `.code` at all — a
+// transport failure never reaches Postgres — or an unrecognized code)
+// is deliberately treated as an UNKNOWN/ambiguous outcome, never a
+// definite one: a false negative here just costs one wasted idempotent
+// retry, while a false positive risks a real double mutation.
+const DEFINITE_MUTATION_FAILURE_CODES = new Set(['28000', '42501', '22023', 'P0002', '23505']);
+export const isDefiniteMutationFailure = (err: any): boolean =>
+  typeof err?.code === 'string' && DEFINITE_MUTATION_FAILURE_CODES.has(err.code);
+
 /** Sentinel room ID used for items whose room was deleted. Never persisted to DB. */
 export const TBA_ROOM_ID = '__TBA__';
 export const TBA_ROOM_NAME = 'Unassigned (TBA)';

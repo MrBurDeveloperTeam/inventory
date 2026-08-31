@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, UOM, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
+import { Room, Item, ActivityLog, PurchaseHistory, UserProfile, ItemBatch, CatPosition, UOM, TBA_ROOM_ID, TBA_ROOM_NAME, InventoryReconciliationError, isDefiniteMutationFailure } from './types';
 import { PRESET_BLUEPRINTS } from './constants';
 import MasterInventory from './MasterInventory';
 import Header from './Header';
@@ -232,17 +232,11 @@ const adjustBatchesWithDelta = (item: Item, delta: number) => {
 //     state. Retrying the *mutation* here would be wrong (it would
 //     either double-apply with a fresh key, or be a wasted no-op with
 //     the same key) — only the read needs retrying.
-// InventoryReconciliationError carries this distinction so a caller can
-// tell "your stock change was NOT saved" apart from "your stock change
-// WAS saved, but we couldn't refresh the screen" — the UI must never
-// show the former message for the latter case.
-class InventoryReconciliationError extends Error {
-  committed: true = true;
-  constructor(message: string, public cause: unknown) {
-    super(message);
-    this.name = 'InventoryReconciliationError';
-  }
-}
+// InventoryReconciliationError (defined in ./types.ts — see there for
+// why) carries this distinction so a caller can tell "your stock change
+// was NOT saved" apart from "your stock change WAS saved, but we
+// couldn't refresh the screen" — the UI must never show the former
+// message for the latter case.
 
 // One bounded extra attempt (never an unbounded/background retry loop,
 // per this phase's explicit "do not create infinite retry loops"
@@ -264,6 +258,10 @@ const reconcileWithOneRetry = async (reconcile: () => Promise<void>) => {
     }
   }
 };
+
+// isDefiniteMutationFailure lives in ./types.ts (see there) so
+// InventoryActionConfirm.tsx can reuse the identical classifier without
+// a circular import back into App.tsx.
 
 const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -1883,27 +1881,33 @@ const handleLogout = async () => {
     // See moveItem's identical comment on why the RPC call and its
     // reconciliation are in separate try/catch blocks.
     let rpcResult: any;
+    // Fingerprint mirrors receive_inventory_stock's own fingerprint
+    // inputs — an identical resubmission of the same room/name/brand/
+    // code/qty/price/uom/vendor/category/description/expiry/purchase-
+    // date/create-new-batch reuses the pending key (safe for an
+    // ambiguous outcome); any changed field is a different action.
+    const receiveFingerprint = `receive:${roomId}:${itemData.name}:${itemData.brand}:${itemData.code}:${qty}:${price}:${itemData.uom}:${itemData.vendor}:${itemData.category}:${itemData.description}:${expiry}:${purchaseDate}:${createNewBatch === true}`;
     try {
-      const receiveIdempotencyKey = idempotencyKey || crypto.randomUUID();
-
-      const { data, error: rpcError } = await supabase.rpc('receive_inventory_stock', {
-        p_room_id: roomId,
-        p_name: itemData.name || '',
-        p_brand: itemData.brand || '',
-        p_code: itemData.code || '',
-        p_qty: qty,
-        p_price: price,
-        p_uom: normalizeUom(itemData.uom),
-        p_vendor: itemData.vendor || '',
-        p_category: normalizeCategory(itemData.category),
-        p_description: itemData.description || '',
-        p_idempotency_key: receiveIdempotencyKey,
-        p_expiry_date: expiry || null,
-        p_purchase_date: purchaseDate || null,
-        p_create_new_batch: createNewBatch === true,
+      rpcResult = await resolveAndTrackActionKey(receiveFingerprint, idempotencyKey, async (key) => {
+        const { data, error: rpcError } = await supabase.rpc('receive_inventory_stock', {
+          p_room_id: roomId,
+          p_name: itemData.name || '',
+          p_brand: itemData.brand || '',
+          p_code: itemData.code || '',
+          p_qty: qty,
+          p_price: price,
+          p_uom: normalizeUom(itemData.uom),
+          p_vendor: itemData.vendor || '',
+          p_category: normalizeCategory(itemData.category),
+          p_description: itemData.description || '',
+          p_idempotency_key: key,
+          p_expiry_date: expiry || null,
+          p_purchase_date: purchaseDate || null,
+          p_create_new_batch: createNewBatch === true,
+        });
+        if (rpcError) throw rpcError;
+        return data;
       });
-      if (rpcError) throw rpcError;
-      rpcResult = data;
     } catch (err) {
       console.error('Failed to persist received stock:', err);
       setSyncStatus('error');
@@ -2404,6 +2408,49 @@ const handleLogout = async () => {
   // safe boundary. Different items are never blocked by each other.
   const quantityAdjustInFlightRef = useRef<Set<string>>(new Set());
 
+  // Phase INVENTORY-RETRY-UI-AFFORDANCE-AND-MESSAGING-HARDENING: one
+  // logical action = one idempotency key, action-local (never a global
+  // recovery framework/history). Keyed by a fingerprint of the exact
+  // action (target + payload) so retrying the IDENTICAL action reuses
+  // its key (safe for an unknown/ambiguous outcome), while a genuinely
+  // different action (different item, different delta, different form
+  // values) always gets its own fresh key — this Map never causes two
+  // different actions to collide. An entry is removed the moment its
+  // action either succeeds or is confirmed definitely rejected; it is
+  // deliberately LEFT IN PLACE after an ambiguous/unclassified failure,
+  // which is exactly what lets the next identical retry reuse the key.
+  const pendingActionKeysRef = useRef<Map<string, string>>(new Map());
+  const getOrCreateActionKey = (fingerprint: string): string => {
+    const existing = pendingActionKeysRef.current.get(fingerprint);
+    if (existing) return existing;
+    const key = crypto.randomUUID();
+    pendingActionKeysRef.current.set(fingerprint, key);
+    return key;
+  };
+  const clearActionKey = (fingerprint: string) => {
+    pendingActionKeysRef.current.delete(fingerprint);
+  };
+  // Shared by every function below: resolve the key to actually send
+  // (an explicitly-supplied key always wins — this is how
+  // InventoryActionConfirm's own stable per-dialog key keeps working
+  // unchanged), then release or retain the fingerprint's pending entry
+  // based on the outcome once the RPC settles.
+  const resolveAndTrackActionKey = async <T,>(
+    fingerprint: string,
+    explicitKey: string | undefined,
+    run: (key: string) => Promise<T>
+  ): Promise<T> => {
+    const key = explicitKey || getOrCreateActionKey(fingerprint);
+    try {
+      const result = await run(key);
+      if (!explicitKey) clearActionKey(fingerprint);
+      return result;
+    } catch (err) {
+      if (!explicitKey && isDefiniteMutationFailure(err)) clearActionKey(fingerprint);
+      throw err;
+    }
+  };
+
   // idempotencyKey: same lifetime contract as moveItem/receiveStock — a
   // caller retrying after an UNKNOWN outcome (e.g. a network failure
   // where the RPC's response never arrived) should pass the SAME key
@@ -2426,14 +2473,17 @@ const handleLogout = async () => {
     setSyncStatus('syncing');
     syncInFlight.current = true;
     let rpcResult: any;
+    const fingerprint = `qty:${itemId}:${delta}`;
     try {
-      const { data, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
-        p_item_id: itemId,
-        p_delta: delta,
-        p_idempotency_key: idempotencyKey || crypto.randomUUID(),
+      rpcResult = await resolveAndTrackActionKey(fingerprint, idempotencyKey, async (key) => {
+        const { data, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
+          p_item_id: itemId,
+          p_delta: delta,
+          p_idempotency_key: key,
+        });
+        if (rpcError) throw rpcError;
+        return data;
       });
-      if (rpcError) throw rpcError;
-      rpcResult = data;
     } catch (err) {
       console.error('Failed to update item quantity:', err);
       setSyncStatus('error');
@@ -2485,15 +2535,18 @@ const handleLogout = async () => {
     setSyncStatus('syncing');
     syncInFlight.current = true;
     let rpcResult: any;
+    const fingerprint = `batchqty:${itemId}:${targetBatchId}:${delta}`;
     try {
-      const { data, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
-        p_item_id: itemId,
-        p_delta: delta,
-        p_idempotency_key: idempotencyKey || crypto.randomUUID(),
-        p_batch_id: targetBatchId,
+      rpcResult = await resolveAndTrackActionKey(fingerprint, idempotencyKey, async (key) => {
+        const { data, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
+          p_item_id: itemId,
+          p_delta: delta,
+          p_idempotency_key: key,
+          p_batch_id: targetBatchId,
+        });
+        if (rpcError) throw rpcError;
+        return data;
       });
-      if (rpcError) throw rpcError;
-      rpcResult = data;
     } catch (err) {
       console.error('Failed to update batch qty:', err);
       setSyncStatus('error');
@@ -2631,15 +2684,22 @@ const handleLogout = async () => {
     isDirty.current = true;
     setSyncStatus('syncing');
     syncInFlight.current = true;
+    // Fingerprint includes every semantic field the save can change —
+    // if the user edits any of qty/unitPrice/expiryDate after a failed
+    // attempt and resubmits, this is a DIFFERENT fingerprint and
+    // therefore a fresh key, never a reuse of the stale one.
+    const fingerprint = `batchmeta:${batchId}:${batchData.qty}:${batchData.unitPrice}:${batchData.expiryDate ?? ''}`;
     try {
-      const { error: rpcError } = await supabase.rpc('update_inventory_batch_metadata', {
-        p_batch_id: batchId,
-        p_qty: batchData.qty,
-        p_unit_price: batchData.unitPrice,
-        p_expiry_date: batchData.expiryDate ?? null,
-        p_idempotency_key: idempotencyKey || crypto.randomUUID(),
+      await resolveAndTrackActionKey(fingerprint, idempotencyKey, async (key) => {
+        const { error: rpcError } = await supabase.rpc('update_inventory_batch_metadata', {
+          p_batch_id: batchId,
+          p_qty: batchData.qty,
+          p_unit_price: batchData.unitPrice,
+          p_expiry_date: batchData.expiryDate ?? null,
+          p_idempotency_key: key,
+        });
+        if (rpcError) throw rpcError;
       });
-      if (rpcError) throw rpcError;
     } catch (err) {
       console.error('Failed to update batch metadata:', err);
       setSyncStatus('error');
@@ -2868,26 +2928,30 @@ const handleLogout = async () => {
       const existingInTarget = toRoom.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
 
       // Phase INVENTORY-STOCK-MUTATION-IDEMPOTENCY-HARDENING: this key
-      // identifies ONE logical transfer action, not its payload. Callers
-      // that can retry the same action (InventoryActionConfirm) generate
-      // it once and pass it in so a retry reuses the same key; callers
-      // with no retry path (the manual UI handlers) fall through to a
-      // fresh key here, which is correct since each of their invocations
-      // is already a genuinely new action.
-      const transferIdempotencyKey = idempotencyKey || crypto.randomUUID();
+      // identifies ONE logical transfer action, not its payload.
+      // InventoryActionConfirm generates it once and passes it in so a
+      // retry within that same dialog reuses the same key; manual UI
+      // callers with no explicit key get one tracked by fingerprint
+      // (below), so an identical resubmission after an ambiguous
+      // outcome reuses it too. Fingerprint mirrors exactly what the RPC
+      // itself hashes into its own fingerprint (including the resolved
+      // destination_item_id) so a client-side "same action" match can
+      // never disagree with the server's own reuse/mismatch decision.
+      const transferFingerprint = `transfer:${itemId}:${fromRoomId}:${toRoomId}:${quantity}:${sourceBatchId}:${existingInTarget?.id ?? null}`;
 
-      const { data, error: rpcError } = await supabase.rpc('transfer_inventory_stock', {
-        p_source_item_id: itemId,
-        p_from_room_id: fromRoomId,
-        p_to_room_id: toRoomId,
-        p_quantity: quantity,
-        p_idempotency_key: transferIdempotencyKey,
-        p_source_batch_id: sourceBatchId,
-        p_destination_item_id: existingInTarget?.id ?? null,
+      rpcResult = await resolveAndTrackActionKey(transferFingerprint, idempotencyKey, async (key) => {
+        const { data, error: rpcError } = await supabase.rpc('transfer_inventory_stock', {
+          p_source_item_id: itemId,
+          p_from_room_id: fromRoomId,
+          p_to_room_id: toRoomId,
+          p_quantity: quantity,
+          p_idempotency_key: key,
+          p_source_batch_id: sourceBatchId,
+          p_destination_item_id: existingInTarget?.id ?? null,
+        });
+        if (rpcError) throw rpcError;
+        return data;
       });
-
-      if (rpcError) throw rpcError;
-      rpcResult = data;
     } catch (err) {
       console.error('Failed to persist item move:', err);
       setSyncStatus('error');
