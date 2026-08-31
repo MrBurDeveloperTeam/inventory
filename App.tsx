@@ -2492,77 +2492,42 @@ const handleLogout = async () => {
     }
   };
 
+  // Phase INVENTORY-BATCH-METADATA-STALE-RECOMPUTE-HARDENING: the parent
+  // item summary is now recomputed server-side from the item's actual,
+  // locked batches — never from this client's cached `item.batches`,
+  // which could be stale relative to a sibling batch a concurrent
+  // writer changed. RPC-first, then read-only reconciliation, matching
+  // every other hardened mutation path in this file.
   const updateBatchMetadata = async (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => {
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
     const room = rooms.find(r => r.id === roomId);
     const item = room?.items.find(i => i.id === itemId);
-    if (!room || !item) {
+    if (!room || !item || !currentInventoryOwnerId) return;
+    if (batchData.qty === undefined || batchData.unitPrice === undefined) return;
+
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+    try {
+      const { error: rpcError } = await supabase.rpc('update_inventory_batch_metadata', {
+        p_batch_id: batchId,
+        p_qty: batchData.qty,
+        p_unit_price: batchData.unitPrice,
+        p_expiry_date: batchData.expiryDate ?? null,
+        p_idempotency_key: crypto.randomUUID(),
+      });
+      if (rpcError) throw rpcError;
+
+      addActivity(roomId, room.name, 'edit', `Updated batch details for "${item.name}"`);
+      await reconcileAdjustedItem(roomId, itemId);
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('Failed to update batch metadata:', err);
+      setSyncStatus('error');
+      throw err;
+    } finally {
       isDirty.current = false;
-      return;
-    }
-
-    const batches = item.batches ? item.batches.map(b => b.id === batchId ? { ...b, ...batchData } : b) : [];
-
-    // Recalculate item totals
-    let totalQty = 0;
-    let totalCost = 0;
-    let earliestExpiry: string | null = null;
-
-    batches.forEach(b => {
-      totalQty += b.qty;
-      totalCost += b.qty * b.unitPrice;
-      if (b.expiryDate) {
-        if (!earliestExpiry || b.expiryDate < earliestExpiry) {
-          earliestExpiry = b.expiryDate;
-        }
-      }
-    });
-
-    const avgPrice = totalQty > 0 ? totalCost / totalQty : 0;
-    const updatedItem = { ...item, batches, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
-
-    // Optimistic Update
-    setRooms(prev => prev.map(r => {
-      if (r.id !== roomId) return r;
-      return {
-        ...r,
-        items: r.items.map(i => i.id === itemId ? updatedItem : i)
-      };
-    }));
-
-    addActivity(roomId, room.name, 'edit', `Updated batch details for "${item.name}"`);
-
-    if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
-      try {
-        // 1. Update batch
-        const { error: batchErr } = await supabase.from('inventory_item_batches').update({
-          qty: batchData.qty,
-          unit_price: batchData.unitPrice,
-          expiry_date: batchData.expiryDate,
-        }).eq('id', batchId);
-        if (batchErr) throw batchErr;
-
-        // 2. Update parent item summary
-        const { error: itemErr } = await supabase.from('inventory_items').update({
-          quantity: updatedItem.quantity,
-          price: updatedItem.price,
-          expiry_date: updatedItem.expiryDate,
-        }).eq('id', itemId);
-        if (itemErr) throw itemErr;
-
-        setSyncStatus('synced');
-      } catch (err) {
-        console.error('Failed to update batch metadata:', err);
-        setSyncStatus('error');
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
-      }
-    } else {
-      isDirty.current = false;
+      syncInFlight.current = false;
     }
   };
 
@@ -3088,7 +3053,7 @@ const handleLogout = async () => {
                 onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
                 onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
-                onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
+                onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); }); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
                 readOnly={!canEditItems || isLoadingMain}
@@ -3122,7 +3087,7 @@ const handleLogout = async () => {
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
           onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
           onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
-          onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
+          onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); }); }}
           readOnly={!canEditItems}
         />
       )}
