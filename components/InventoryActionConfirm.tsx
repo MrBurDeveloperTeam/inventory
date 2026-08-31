@@ -28,7 +28,8 @@ interface InventoryActionConfirmProps {
     price: number,
     purchaseDate: string,
     expiry?: string,
-    createNewBatch?: boolean
+    createNewBatch?: boolean,
+    idempotencyKey?: string
   ) => Promise<void>;
   removeStock: (
     roomId: string,
@@ -42,7 +43,8 @@ interface InventoryActionConfirmProps {
     toRoomId: string,
     itemId: string,
     quantity: number,
-    batchIndex?: number
+    batchIndex?: number,
+    idempotencyKey?: string
   ) => Promise<void>;
 }
 
@@ -71,6 +73,14 @@ const InventoryActionConfirm: React.FC<InventoryActionConfirmProps> = ({
   // event handler invocation regardless of render timing, so it is the
   // actual execution authority below.
   const processingRef = useRef(false);
+  // Phase INVENTORY-STOCK-MUTATION-IDEMPOTENCY-HARDENING: one logical
+  // action = one key, generated once when this dialog instance mounts
+  // (i.e. once per distinct `action` prop, since the parent only ever
+  // renders this component while a pending action exists and unmounts it
+  // on cancel/confirm) and reused on every retry click within that same
+  // mount — a genuinely new proposed action always gets a fresh
+  // component instance and therefore a fresh key.
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -104,7 +114,10 @@ const InventoryActionConfirm: React.FC<InventoryActionConfirmProps> = ({
           { name: action.itemName },
           action.quantity,
           action.price,
-          new Date().toISOString().split('T')[0]
+          new Date().toISOString().split('T')[0],
+          undefined,
+          undefined,
+          idempotencyKeyRef.current
         );
         setSuccessMessage(`Received ${action.quantity} of "${action.itemName}" in ${room.name}.`);
         setIsProcessing(false);
@@ -166,7 +179,7 @@ const InventoryActionConfirm: React.FC<InventoryActionConfirmProps> = ({
         setIsProcessing(false);
         return;
       }
-      await moveItem(fromRoom.id, toRoom.id, item.id, action.quantity);
+      await moveItem(fromRoom.id, toRoom.id, item.id, action.quantity, undefined, idempotencyKeyRef.current);
       setSuccessMessage(`Transferred ${action.quantity} of "${item.name}" from ${fromRoom.name} to ${toRoom.name}.`);
       setIsProcessing(false);
     } catch (err) {

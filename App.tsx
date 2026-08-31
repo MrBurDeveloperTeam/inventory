@@ -1807,7 +1807,7 @@ const handleLogout = async () => {
     }
   };
 
-  const receiveStock = async (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string, createNewBatch?: boolean) => {
+  const receiveStock = async (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string, createNewBatch?: boolean, idempotencyKey?: string) => {
     // Defensive quantity guard — reject before any mutation flag/state
     // change. Zero, negative, NaN, and non-finite (Infinity/-Infinity)
     // quantities are all rejected outright; never silently clamped.
@@ -1834,6 +1834,9 @@ const handleLogout = async () => {
     syncInFlight.current = true;
 
     try {
+      // See moveItem's identical comment on idempotencyKey lifetime.
+      const receiveIdempotencyKey = idempotencyKey || crypto.randomUUID();
+
       const { data: rpcResult, error: rpcError } = await supabase.rpc('receive_inventory_stock', {
         p_room_id: roomId,
         p_name: itemData.name || '',
@@ -1845,6 +1848,7 @@ const handleLogout = async () => {
         p_vendor: itemData.vendor || '',
         p_category: normalizeCategory(itemData.category),
         p_description: itemData.description || '',
+        p_idempotency_key: receiveIdempotencyKey,
         p_expiry_date: expiry || null,
         p_purchase_date: purchaseDate || null,
         p_create_new_batch: createNewBatch === true,
@@ -1986,6 +1990,14 @@ const handleLogout = async () => {
       for (const { itemData, qty, price, purchaseDate, expiry } of items) {
         if (!itemData.name) continue;
 
+        // Each item in this batch is a distinct logical receive action, so
+        // each gets its own fresh key here — this path has no retry
+        // wrapper today (a full submission failure surfaces to the
+        // caller, who would resubmit the whole batch as a new action, not
+        // replay individual items), so per-call fresh generation is
+        // correct. See INVENTORY-STOCK-MUTATION-IDEMPOTENCY-HARDENING's
+        // Final Report for the residual gap this leaves for mid-batch
+        // partial-failure retry.
         const { data: rpcResult, error: rpcError } = await supabase.rpc('receive_inventory_stock', {
           p_room_id: roomId,
           p_name: itemData.name,
@@ -1997,6 +2009,7 @@ const handleLogout = async () => {
           p_vendor: itemData.vendor || '',
           p_category: normalizeCategory(itemData.category),
           p_description: itemData.description || '',
+          p_idempotency_key: crypto.randomUUID(),
           p_expiry_date: expiry || null,
           p_purchase_date: purchaseDate || null,
           p_create_new_batch: false,
@@ -2725,7 +2738,7 @@ const handleLogout = async () => {
   // RPC independently re-validates everything (quantity, stock
   // sufficiency, same-room, ownership) against the database's own current
   // state, which is the sole authority.
-  const moveItem = async (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => {
+  const moveItem = async (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number, idempotencyKey?: string) => {
     if (typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity <= 0) {
       console.error('moveItem: rejected invalid quantity', quantity);
       return;
@@ -2772,11 +2785,21 @@ const handleLogout = async () => {
       // revalidate, exactly like the previous client-side logic did.
       const existingInTarget = toRoom.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
 
+      // Phase INVENTORY-STOCK-MUTATION-IDEMPOTENCY-HARDENING: this key
+      // identifies ONE logical transfer action, not its payload. Callers
+      // that can retry the same action (InventoryActionConfirm) generate
+      // it once and pass it in so a retry reuses the same key; callers
+      // with no retry path (the manual UI handlers) fall through to a
+      // fresh key here, which is correct since each of their invocations
+      // is already a genuinely new action.
+      const transferIdempotencyKey = idempotencyKey || crypto.randomUUID();
+
       const { data: rpcResult, error: rpcError } = await supabase.rpc('transfer_inventory_stock', {
         p_source_item_id: itemId,
         p_from_room_id: fromRoomId,
         p_to_room_id: toRoomId,
         p_quantity: quantity,
+        p_idempotency_key: transferIdempotencyKey,
         p_source_batch_id: sourceBatchId,
         p_destination_item_id: existingInTarget?.id ?? null,
       });
