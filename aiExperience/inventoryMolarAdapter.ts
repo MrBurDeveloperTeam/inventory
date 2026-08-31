@@ -227,62 +227,31 @@ export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDep
       let finalResponseText = response;
       const actionMatch = response.match(/<ACTION>(.*?)<\/ACTION>/s);
 
+      // CONTAINMENT (Phase INVENTORY-AI-MUTATION-AUTHORITY-CONTAINMENT-1):
+      // Gemini-produced `<ACTION>` blocks are NEVER dispatched to
+      // receiveStock/removeStock/moveItem anymore — model output must not
+      // choose or authorize a real inventory mutation. This is a
+      // structural removal of the dispatch call sites below, not a
+      // prompt-level restriction: even a well-formed, well-intentioned
+      // `<ACTION>` block from Gemini has no code path left that can reach
+      // a mutation method. Deterministic, host-confirmed AI-assisted
+      // mutations are a separate, later phase (see
+      // INVENTORY_DETERMINISTIC_CONFIRMED_AI_ACTIONS_PENDING) — until then
+      // AI-assisted stock changes are intentionally unavailable; manual
+      // inventory UI controls are untouched and still call these same
+      // executor functions directly.
       if (actionMatch && actionMatch[1]) {
-        try {
-          const actionData = JSON.parse(actionMatch[1]);
-          if (actionData.type === 'receive') {
-            await receiveStock(
-              actionData.roomId,
-              {
-                name: actionData.itemName,
-                brand: actionData.brand || '',
-                code: actionData.code || '',
-                uom: (actionData.uom || 'pcs').toLowerCase() as any,
-                vendor: actionData.vendor || '',
-                category: (actionData.category || 'consumables').toLowerCase() as any
-              },
-              actionData.qty,
-              actionData.price,
-              new Date().toISOString().split('T')[0],
-              actionData.expiry,
-              actionData.createNewBatch
-            );
-          } else if (actionData.type === 'remove') {
-            await removeStock(
-              actionData.roomId,
-              actionData.itemName,
-              actionData.brand,
-              actionData.qty,
-              actionData.expiry
-            );
-          } else if (actionData.type === 'transfer') {
-            const fromRoom = rooms.find(r => r.id === actionData.fromRoomId || r.name === (actionData.fromRoomName || actionData.fromRoom));
-            const toRoom = rooms.find(r => r.id === actionData.toRoomId || r.name === (actionData.toRoomName || actionData.toRoom));
-            if (fromRoom && toRoom) {
-              const item = fromRoom.items.find(i =>
-                i.name.toLowerCase() === actionData.itemName.toLowerCase() &&
-                (actionData.brand ? i.brand.toLowerCase() === actionData.brand.toLowerCase() : true)
-              );
-              if (item) {
-                await moveItem(fromRoom.id, toRoom.id, item.id, actionData.qty);
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Failed to parse AI action:', err);
-        }
-        // Strip the `<ACTION>` block from the visible/stored response
-        // unconditionally — on both successful dispatch AND a parse/
-        // dispatch failure. The pre-migration UI (MolarChat.tsx's
-        // MemoizedMessage) always re-stripped this at render time as a
-        // safety net even when the parse failed and the raw markup was
-        // still present in stored chat history; SharedMolarAI has no
-        // equivalent render-time stripping, so this adapter now guarantees
-        // the same effective user-visible result by stripping once here,
-        // regardless of parse outcome. A malformed/failed action NEVER
-        // mutates anything either way — only the console.error above and
-        // this stripping happen on failure.
+        console.warn('[inventoryMolarAdapter] Gemini returned a legacy <ACTION> block; mutation execution is disabled pending the deterministic confirmed-action phase.');
+        // Strip the block from the visible/stored response unconditionally
+        // — mirrors the prior stripping behavior so no raw JSON markup is
+        // ever shown, but no parse/dispatch of its contents occurs at all.
         finalResponseText = response.replace(/<ACTION>.*?<\/ACTION>/s, '').trim();
+        // The remaining prose (if any) may still claim the change was
+        // made, since it was generated before this containment existed in
+        // the model's own reasoning — never let that stand as the final
+        // user-facing answer. Replace with an explicit, honest host
+        // message instead of trusting/echoing Gemini's success wording.
+        finalResponseText = "Inventory changes require confirmation and aren't available through chat right now. No stock was changed. Please use the inventory screens to receive, remove, or transfer stock.";
       }
 
       return { text: finalResponseText };

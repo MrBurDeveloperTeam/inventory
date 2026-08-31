@@ -1806,6 +1806,14 @@ const handleLogout = async () => {
   };
 
   const receiveStock = async (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string, createNewBatch?: boolean) => {
+    // Defensive quantity guard — reject before any mutation flag/state
+    // change. Zero, negative, NaN, and non-finite (Infinity/-Infinity)
+    // quantities are all rejected outright; never silently clamped.
+    if (typeof qty !== 'number' || !Number.isFinite(qty) || qty <= 0) {
+      console.error('receiveStock: rejected invalid qty', qty);
+      return;
+    }
+
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
     let affectedItemToSync: Item | null = null;
@@ -2150,6 +2158,16 @@ const handleLogout = async () => {
   };
 
   const removeStock = async (roomId: string, itemName: string, brand: string | undefined, qty: number, targetExpiry?: string) => {
+    // Defensive quantity guard — reject before any mutation flag/state
+    // change. This specifically closes the bug where a negative qty would
+    // pass the "insufficient quantity" check below (since it's always
+    // less than the available amount) and invert into a positive delta,
+    // effectively adding stock through the remove path.
+    if (typeof qty !== 'number' || !Number.isFinite(qty) || qty <= 0) {
+      console.error('removeStock: rejected invalid qty', qty);
+      return;
+    }
+
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
     let affectedItemToSync: Item | null = null;
@@ -2753,6 +2771,13 @@ const handleLogout = async () => {
   };
 
   const moveItem = async (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => {
+    // Defensive quantity guard — reject before any mutation flag/state
+    // change. Never silently clamped into some other value.
+    if (typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity <= 0) {
+      console.error('moveItem: rejected invalid quantity', quantity);
+      return;
+    }
+
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
     if (fromRoomId === toRoomId) {
@@ -2769,6 +2794,18 @@ const handleLogout = async () => {
 
     const item = fromRoom.items.find(i => i.id === itemId);
     if (!item) {
+      isDirty.current = false;
+      return;
+    }
+
+    // Available-quantity guard — explicit rejection, never an implicit
+    // clamp. When targeting a specific batch, the available amount is
+    // that batch's own qty; otherwise it's the item's total quantity.
+    const availableQty = (typeof batchIndex === 'number')
+      ? (item.batches?.[batchIndex]?.qty ?? 0)
+      : item.quantity;
+    if (quantity > availableQty) {
+      console.error('moveItem: rejected transfer exceeding available quantity', { requested: quantity, available: availableQty });
       isDirty.current = false;
       return;
     }
