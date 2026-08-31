@@ -2781,148 +2781,174 @@ const handleLogout = async () => {
     };
   };
 
+  // Phase INVENTORY-TRANSFER-ATOMIC-RPC-IMPLEMENTATION: the previous
+  // multi-request source/destination/batch write sequence (proven to leave
+  // TRANSFER_PARTIAL_WRITE_RISK — a failure partway through could reduce
+  // source stock without ever crediting the destination) is replaced with
+  // exactly one call to the atomic `transfer_inventory_stock` Postgres RPC
+  // (supabase/migrations/20260831194244_transfer_inventory_stock.sql). All
+  // source/destination item+batch writes now commit or roll back together
+  // inside that single database transaction — there is no longer a
+  // sequence of independent browser-issued writes to interleave with a
+  // failure.
+  //
+  // ORDERING: local state is no longer optimistically applied before
+  // persistence for transfers. The RPC is called first; only once it
+  // durably succeeds does this function reconcile `rooms` — via a targeted
+  // refetch of just the two affected items — from the database's own
+  // authoritative post-transfer state, rather than recomputing the exact
+  // batch composition client-side a second time (which would risk drifting
+  // from whatever the RPC's own FEFO/merge logic actually did). If the RPC
+  // rejects, local state is never touched, so it remains at its
+  // pre-transfer value — no false "transferred" UI is possible.
+  //
+  // Client-side validation below remains as a fast-fail UX layer only; the
+  // RPC independently re-validates everything (quantity, stock
+  // sufficiency, same-room, ownership) against the database's own current
+  // state, which is the sole authority.
   const moveItem = async (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => {
-    // Defensive quantity guard — reject before any mutation flag/state
-    // change. Never silently clamped into some other value.
     if (typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity <= 0) {
       console.error('moveItem: rejected invalid quantity', quantity);
       return;
     }
 
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
     if (fromRoomId === toRoomId) {
-      isDirty.current = false;
       return;
     }
 
     const fromRoom = rooms.find(r => r.id === fromRoomId);
     const toRoom = rooms.find(r => r.id === toRoomId);
     if (!fromRoom || !toRoom) {
-      isDirty.current = false;
       return;
     }
 
     const item = fromRoom.items.find(i => i.id === itemId);
     if (!item) {
-      isDirty.current = false;
       return;
     }
 
-    // Available-quantity guard — explicit rejection, never an implicit
-    // clamp. When targeting a specific batch, the available amount is
-    // that batch's own qty; otherwise it's the item's total quantity.
     const availableQty = (typeof batchIndex === 'number')
       ? (item.batches?.[batchIndex]?.qty ?? 0)
       : item.quantity;
     if (quantity > availableQty) {
       console.error('moveItem: rejected transfer exceeding available quantity', { requested: quantity, available: availableQty });
-      isDirty.current = false;
       return;
     }
 
-    // 1. Calculate Movements
-    const { kept, moved } = (typeof batchIndex === 'number')
-      ? {
-        kept: item.batches?.map((b, idx) => idx === batchIndex ? { ...b, qty: Math.max(0, b.qty - quantity) } : b).filter(b => b.qty > 0) || [],
-        moved: [{ ...item.batches![batchIndex], qty: quantity, id: generateId() }]
+    if (!currentInventoryOwnerId) return;
+
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+
+    try {
+      const sourceBatchId = typeof batchIndex === 'number' ? (item.batches?.[batchIndex]?.id ?? null) : null;
+
+      // Attempt to reuse the client's already-resolved merge target so the
+      // RPC's destination-merge behavior matches what the UI showed the
+      // user — the RPC independently revalidates this id before trusting
+      // it (existence, room, owner, exact name/brand/category match) and
+      // silently falls back to creating a new item if it doesn't
+      // revalidate, exactly like the previous client-side logic did.
+      const existingInTarget = toRoom.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
+
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('transfer_inventory_stock', {
+        p_source_item_id: itemId,
+        p_from_room_id: fromRoomId,
+        p_to_room_id: toRoomId,
+        p_quantity: quantity,
+        p_source_batch_id: sourceBatchId,
+        p_destination_item_id: existingInTarget?.id ?? null,
+      });
+
+      if (rpcError) throw rpcError;
+
+      // Reconcile local state from the database's own authoritative
+      // post-transfer rows — a targeted refetch of just the two affected
+      // items, not a full inventory reload.
+      const [{ data: sourceRow }, { data: destRow }, { data: destBatchRows }] = await Promise.all([
+        supabase.from('inventory_items').select('*').eq('id', itemId).maybeSingle(),
+        supabase.from('inventory_items').select('*').eq('id', rpcResult.destination_item_id).maybeSingle(),
+        supabase.from('inventory_item_batches').select('*').eq('item_id', rpcResult.destination_item_id),
+      ]);
+
+      let sourceBatchRows: any[] | null = null;
+      if (sourceRow) {
+        const { data } = await supabase.from('inventory_item_batches').select('*').eq('item_id', itemId);
+        sourceBatchRows = data;
       }
-      : splitBatchesForTransfer(item.batches, quantity);
 
-    const keptSummary = summarizeBatches(kept);
-    const updatedFromItem = { ...item, batches: kept, quantity: keptSummary.totalQty, price: keptSummary.avgPrice, expiryDate: keptSummary.earliestExpiry };
+      const reconciledSourceItem: Item | null = sourceRow ? ensureBatches({
+        id: sourceRow.id,
+        name: sourceRow.name || '',
+        brand: sourceRow.brand || '',
+        code: sourceRow.code || '',
+        quantity: Number(sourceRow.quantity) || 0,
+        uom: sourceRow.uom || 'pcs',
+        price: Number(sourceRow.price) || 0,
+        vendor: sourceRow.vendor || '',
+        category: (sourceRow.category as any) || 'other',
+        description: sourceRow.description || '',
+        expiryDate: sourceRow.expiry_date || null,
+        createdAt: sourceRow.created_at,
+        batches: (sourceBatchRows || []).map((b: any) => ({ id: b.id, qty: Number(b.qty) || 0, unitPrice: Number(b.unit_price) || 0, expiryDate: b.expiry_date || null })),
+      }) : null;
 
-    const movedSummary = summarizeBatches(moved);
-    const movedItemTemplate = { ...item, id: generateId(), batches: moved, quantity: movedSummary.totalQty, price: movedSummary.avgPrice, expiryDate: movedSummary.earliestExpiry, roomId: toRoomId };
+      const reconciledDestItem: Item | null = destRow ? ensureBatches({
+        id: destRow.id,
+        name: destRow.name || '',
+        brand: destRow.brand || '',
+        code: destRow.code || '',
+        quantity: Number(destRow.quantity) || 0,
+        uom: destRow.uom || 'pcs',
+        price: Number(destRow.price) || 0,
+        vendor: destRow.vendor || '',
+        category: (destRow.category as any) || 'other',
+        description: destRow.description || '',
+        expiryDate: destRow.expiry_date || null,
+        createdAt: destRow.created_at,
+        batches: (destBatchRows || []).map((b: any) => ({ id: b.id, qty: Number(b.qty) || 0, unitPrice: Number(b.unit_price) || 0, expiryDate: b.expiry_date || null })),
+      }) : null;
 
-    let finalMovedItem: Item = movedItemTemplate;
-    const existingInTarget = toRoom.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
-    if (existingInTarget) {
-      finalMovedItem = mergeBatchAdd(existingInTarget, movedItemTemplate.quantity, movedItemTemplate.price, movedItemTemplate.expiryDate);
-    }
-
-    // 2. Optimistic Update
-    setRooms(prev => prev.map(r => {
-      if (r.id === fromRoomId) {
-        return { ...r, items: updatedFromItem.quantity > 0 ? r.items.map(i => i.id === itemId ? updatedFromItem : i) : r.items.filter(i => i.id !== itemId) };
-      }
-      if (r.id === toRoomId) {
-        if (existingInTarget) {
-          return { ...r, items: r.items.map(i => i.id === existingInTarget.id ? finalMovedItem : i) };
+      setRooms(prev => prev.map(r => {
+        if (r.id === fromRoomId) {
+          return {
+            ...r,
+            items: reconciledSourceItem
+              ? r.items.map(i => i.id === itemId ? reconciledSourceItem : i)
+              : r.items.filter(i => i.id !== itemId),
+          };
         }
-        return { ...r, items: [...r.items, finalMovedItem] };
-      }
-      return r;
-    }));
-
-    addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Moved ${quantity} of "${item.name}" to ${toRoom.name}`);
-    addActivity(toRoomId, toRoom.name, 'transfer_in', `Received ${quantity} of "${item.name}" from ${fromRoom.name}`);
-
-    // 3. Direct Persistence
-    if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
-      try {
-        // A. PERSIST SOURCE (Update or Delete)
-        if (updatedFromItem.quantity > 0) {
-          await supabase.from('inventory_items').update({
-            quantity: updatedFromItem.quantity,
-            price: updatedFromItem.price,
-            expiry_date: updatedFromItem.expiryDate,
-          }).eq('id', updatedFromItem.id);
-
-          // Update batches for source
-          const { data: dbBatches } = await supabase.from('inventory_item_batches').select('id').eq('item_id', updatedFromItem.id);
-          const currentBatchIds = new Set(updatedFromItem.batches!.map(b => b.id));
-          const idsToDelete = dbBatches ? dbBatches.filter(dbB => !currentBatchIds.has(dbB.id)).map(dbB => dbB.id) : [];
-          if (idsToDelete.length > 0) await supabase.from('inventory_item_batches').delete().in('id', idsToDelete);
-          for (const b of updatedFromItem.batches!) {
-            await supabase.from('inventory_item_batches').upsert({ id: b.id, item_id: updatedFromItem.id, qty: b.qty, unit_price: b.unitPrice, expiry_date: b.expiryDate });
-          }
-        } else {
-          // Full move - delete source
-          await supabase.from('inventory_item_batches').delete().eq('item_id', item.id);
-          await supabase.from('inventory_items').delete().eq('id', item.id);
+        if (r.id === toRoomId && reconciledDestItem) {
+          const alreadyPresent = r.items.some(i => i.id === reconciledDestItem.id);
+          return {
+            ...r,
+            items: alreadyPresent
+              ? r.items.map(i => i.id === reconciledDestItem.id ? reconciledDestItem : i)
+              : [...r.items, reconciledDestItem],
+          };
         }
+        return r;
+      }));
 
-        // B. PERSIST DESTINATION
-        await supabase.from('inventory_items').upsert({
-          id: finalMovedItem.id,
-          room_id: toRoomId,
-          name: finalMovedItem.name,
-          brand: finalMovedItem.brand,
-          category: normalizeCategory(finalMovedItem.category),
-          uom: normalizeUom(finalMovedItem.uom),
-          quantity: finalMovedItem.quantity,
-          price: finalMovedItem.price,
-          expiry_date: finalMovedItem.expiryDate,
-          code: finalMovedItem.code,
-          vendor: finalMovedItem.vendor,
-          description: finalMovedItem.description,
-          user_id: currentInventoryOwnerId
-        });
+      addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Moved ${quantity} of "${item.name}" to ${toRoom.name}`);
+      addActivity(toRoomId, toRoom.name, 'transfer_in', `Received ${quantity} of "${item.name}" from ${fromRoom.name}`);
 
-        if (finalMovedItem.batches) {
-          for (const b of finalMovedItem.batches) {
-            await supabase.from('inventory_item_batches').upsert({ id: b.id, item_id: finalMovedItem.id, qty: b.qty, unit_price: b.unitPrice, expiry_date: b.expiryDate });
-          }
-        }
-
-        setSyncStatus('synced');
-      } catch (err) {
-        console.error('Failed to persist item move:', err);
-        setSyncStatus('error');
-        // See receiveStock's identical comment — durable-save failure must
-        // be observable by the caller instead of swallowed. Note: this
-        // does NOT make the source→destination write sequence atomic —
-        // TRANSFER_PARTIAL_WRITE_RISK remains open — it only ensures a
-        // failure anywhere in that sequence is no longer silently reported
-        // as success.
-        throw err;
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
-      }
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('Failed to persist item move:', err);
+      setSyncStatus('error');
+      // No local state was ever applied above this catch, so a rejected
+      // RPC call leaves `rooms` unchanged at its pre-transfer value — the
+      // false-success/false-transfer risk this phase targets does not
+      // apply here regardless of where inside the RPC the failure
+      // occurred, since the RPC's own transaction guarantees it never
+      // partially applied its writes either.
+      throw err;
+    } finally {
+      isDirty.current = false;
+      syncInFlight.current = false;
     }
   };
 
