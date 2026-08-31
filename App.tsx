@@ -2251,184 +2251,130 @@ const handleLogout = async () => {
     }
   };
 
-  const updateItemQty = async (roomId: string, itemId: string, delta: number) => {
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    const room = rooms.find(r => r.id === roomId);
-    const item = room?.items.find(i => i.id === itemId);
-    if (!room || !item) {
-      isDirty.current = false;
+  // Phase INVENTORY-DIRECT-MUTATION-RELIABILITY-HARDENING: both quantity
+  // adjustment paths now go through adjust_inventory_item_quantity — a
+  // delta on the whole item is genuinely non-idempotent, was previously
+  // computed from this client's own possibly-stale `rooms` state, and
+  // wrote item+batches as several non-transactional calls whose errors
+  // were never even rethrown. The RPC locks the item (and, in whole-item
+  // mode, all its batches) row-for-update, applies the delta from
+  // DB-authoritative state, and recomputes the item summary — closing
+  // the lost-update/partial-write risk the old client-side version had.
+  const reconcileAdjustedItem = async (roomId: string, itemId: string) => {
+    const [{ data: itemRow }, { data: batchRows }] = await Promise.all([
+      supabase.from('inventory_items').select('*').eq('id', itemId).maybeSingle(),
+      supabase.from('inventory_item_batches').select('*').eq('item_id', itemId),
+    ]);
+    if (!itemRow) {
+      // Deleted (quantity reached zero and no batches remain isn't
+      // actually how this RPC behaves — the item row itself is never
+      // deleted by adjust_inventory_item_quantity — but guard anyway.
       return;
     }
+    const batches: ItemBatch[] = (batchRows || []).map((b: any) => ({
+      id: b.id, qty: Number(b.qty) || 0, unitPrice: Number(b.unit_price) || 0, expiryDate: b.expiry_date || null,
+    }));
+    const syncedItem: Item = ensureBatches({
+      id: itemRow.id,
+      name: itemRow.name || '',
+      brand: itemRow.brand || '',
+      code: itemRow.code || '',
+      quantity: Number(itemRow.quantity) || 0,
+      uom: itemRow.uom || 'pcs',
+      price: Number(itemRow.price) || 0,
+      vendor: itemRow.vendor || '',
+      category: (itemRow.category as any) || 'other',
+      description: itemRow.description || '',
+      expiryDate: itemRow.expiry_date || null,
+      createdAt: itemRow.created_at,
+      batches,
+    });
+    setRooms(prev => prev.map(r => {
+      if (r.id !== roomId) return r;
+      return { ...r, items: r.items.map(i => i.id === itemId ? syncedItem : i) };
+    }));
+  };
 
-    const updatedItem = adjustBatchesWithDelta(item, delta);
+  const updateItemQty = async (roomId: string, itemId: string, delta: number) => {
+    if (typeof delta !== 'number' || !Number.isFinite(delta) || delta === 0) return;
+    const room = rooms.find(r => r.id === roomId);
+    const item = room?.items.find(i => i.id === itemId);
+    if (!room || !item || !currentInventoryOwnerId) return;
 
-    if (updatedItem.quantity !== item.quantity) {
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+    try {
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
+        p_item_id: itemId,
+        p_delta: delta,
+        p_idempotency_key: crypto.randomUUID(),
+      });
+      if (rpcError) throw rpcError;
+
       addActivity(
         roomId,
         room.name,
         'edit',
-        `Adjusted qty of "${item.name}" to ${updatedItem.quantity}`,
-        { beforeValue: String(item.quantity), afterValue: String(updatedItem.quantity) }
+        `Adjusted qty of "${item.name}" to ${rpcResult.quantity}`,
+        { beforeValue: String(item.quantity), afterValue: String(rpcResult.quantity) }
       );
-    }
 
-    setRooms(prev => prev.map(r => {
-      if (r.id !== roomId) return r;
-      const items = r.items.map(i => {
-        if (i.id !== itemId) return i;
-        return updatedItem!;
-      });
-      return { ...r, items };
-    }));
-
-    if (updatedItem && currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
-      try {
-        const itm = updatedItem as Item;
-        // 1. Update parent item
-        const { error } = await supabase.from('inventory_items').update({
-          quantity: itm.quantity,
-          price: itm.price,
-          expiry_date: itm.expiryDate,
-        }).eq('id', itm.id);
-
-        if (error) throw error;
-
-        // 2. Sync batches (Upsert remaining, Delete missing)
-        if (itm.batches) {
-          // Get current batch IDs for this item to identify which ones to delete
-          const { data: dbBatches } = await supabase
-            .from('inventory_item_batches')
-            .select('id')
-            .eq('item_id', itm.id);
-
-          const currentBatchIds = new Set(itm.batches.map(b => b.id));
-          const idsToDelete = dbBatches
-            ? dbBatches.filter(dbB => !currentBatchIds.has(dbB.id)).map(dbB => dbB.id)
-            : [];
-
-          if (idsToDelete.length > 0) {
-            await supabase.from('inventory_item_batches').delete().in('id', idsToDelete);
-          }
-
-          for (const b of itm.batches) {
-            await supabase.from('inventory_item_batches').upsert({
-              id: b.id,
-              item_id: itm.id,
-              qty: b.qty,
-              unit_price: b.unitPrice,
-              expiry_date: b.expiryDate
-            });
-          }
-        }
-        setSyncStatus('synced');
-      } catch (err) {
-        console.error('Failed to update item quantity:', err);
-        setSyncStatus('error');
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
-      }
-    } else {
+      await reconcileAdjustedItem(roomId, itemId);
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('Failed to update item quantity:', err);
+      setSyncStatus('error');
+      throw err;
+    } finally {
       isDirty.current = false;
+      syncInFlight.current = false;
     }
   };
 
   const updateItemBatchQty = async (roomId: string, itemId: string, batchIndex: number, delta: number) => {
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
+    if (typeof delta !== 'number' || !Number.isFinite(delta) || delta === 0) return;
     const room = rooms.find(r => r.id === roomId);
     const item = room?.items.find(i => i.id === itemId);
-    if (!room || !item) {
-      isDirty.current = false;
-      return;
-    }
+    if (!room || !item || !currentInventoryOwnerId) return;
 
     const normalized = ensureBatches(item);
-    const batches = normalized.batches ? normalized.batches.map(b => ({ ...b })) : [];
-    if (batchIndex < 0 || batchIndex >= batches.length) {
-      isDirty.current = false;
-      return;
-    }
-    const b = batches[batchIndex];
-    const targetBatchId = b.id;
+    const batches = normalized.batches || [];
+    if (batchIndex < 0 || batchIndex >= batches.length) return;
+    const targetBatchId = batches[batchIndex].id;
+    const beforeQty = batches[batchIndex].qty;
 
-    if (delta === 0) {
-      isDirty.current = false;
-      return;
-    }
-    const newQty = Math.max(0, b.qty + delta);
-    if (newQty === b.qty) {
-      isDirty.current = false;
-      return;
-    }
-    batches[batchIndex] = { ...b, qty: newQty };
-    const filtered = batches.filter(x => x.qty > 0);
-    const { totalQty, avgPrice, earliestExpiry } = summarizeBatches(filtered);
-    const updatedItem = { ...normalized, batches: filtered, quantity: totalQty, price: avgPrice, expiryDate: earliestExpiry };
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+    try {
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
+        p_item_id: itemId,
+        p_delta: delta,
+        p_idempotency_key: crypto.randomUUID(),
+        p_batch_id: targetBatchId,
+      });
+      if (rpcError) throw rpcError;
 
-    if (newQty !== b.qty) {
       addActivity(
         roomId,
         room.name,
         'edit',
-        `Adjusted Batch ${batchIndex + 1} of "${item.name}" from ${b.qty} to ${newQty}`,
-        { beforeValue: String(b.qty), afterValue: String(newQty) }
+        `Adjusted Batch ${batchIndex + 1} of "${item.name}" from ${beforeQty} to ${Math.max(beforeQty + delta, 0)}`,
+        { beforeValue: String(beforeQty), afterValue: String(Math.max(beforeQty + delta, 0)) }
       );
-    }
 
-    setRooms(prev => prev.map(r => {
-      if (r.id !== roomId) return r;
-      return {
-        ...r,
-        items: r.items.map(i => i.id === itemId ? updatedItem! : i)
-      };
-    }));
-
-    if (updatedItem && currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
-      try {
-        const itm = updatedItem as Item;
-        // 1. Update parent item
-        const { error: itemUpdateError } = await supabase.from('inventory_items').update({
-          quantity: itm.quantity,
-          price: itm.price,
-          expiry_date: itm.expiryDate,
-        }).eq('id', itm.id);
-
-        if (itemUpdateError) throw itemUpdateError;
-
-        // 2. Update specific batch (If newly zero, delete from DB. If > 0, upsert.)
-        const targetBatchInStore = itm.batches?.find(b => b.id === targetBatchId);
-
-        if (!targetBatchInStore || targetBatchInStore.qty <= 0) {
-          // It was filtered out or set to 0, so delete it from DB
-          const { error: batchDeleteError } = await supabase.from('inventory_item_batches').delete().eq('id', targetBatchId);
-          if (batchDeleteError) throw batchDeleteError;
-        } else {
-          // Upsert the updated batch
-          const { error: batchUpsertError } = await supabase.from('inventory_item_batches').upsert({
-            id: targetBatchInStore.id,
-            item_id: itm.id,
-            qty: targetBatchInStore.qty,
-            unit_price: targetBatchInStore.unitPrice,
-            expiry_date: targetBatchInStore.expiryDate
-          });
-          if (batchUpsertError) throw batchUpsertError;
-        }
-        setSyncStatus('synced');
-      } catch (err) {
-        console.error('Failed to update batch qty:', err);
-        setSyncStatus('error');
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
-      }
-    } else {
+      await reconcileAdjustedItem(roomId, itemId);
+      setSyncStatus('synced');
+    } catch (err) {
+      console.error('Failed to update batch qty:', err);
+      setSyncStatus('error');
+      throw err;
+    } finally {
       isDirty.current = false;
+      syncInFlight.current = false;
     }
   };
 
@@ -2645,6 +2591,11 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to delete item:', err);
         setSyncStatus('error');
+        // Naturally retry-safe (history archive is an idempotent SET,
+        // the item delete cascades batches via an existing FK and is a
+        // no-op if already gone) — surfacing the failure just lets a
+        // caller distinguish it, matching every other mutation path.
+        throw err;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
@@ -3108,10 +3059,10 @@ const handleLogout = async () => {
                 history={history}
                 logs={logs}
                 onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return receiveStock(rid, data, q, p, date, exp).catch((err) => { console.error('Manual receive stock failed:', err); throw err; }); }}
-                onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
-                onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
+                onUpdateQty={(rid, iid, d) => { updateItemQty(rid, iid, d).catch((err) => { console.error('Manual quantity adjust failed:', err); }); }}
+                onUpdateBatchQty={(rid, iid, bidx, d) => { updateItemBatchQty(rid, iid, bidx, d).catch((err) => { console.error('Manual batch quantity adjust failed:', err); }); }}
                 onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
-                onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
+                onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
@@ -3145,7 +3096,7 @@ const handleLogout = async () => {
           onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
           onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
-          onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
+          onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
           onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
           onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
           readOnly={!canEditItems}
