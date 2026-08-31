@@ -1971,6 +1971,12 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to persist received stock:', err);
         setSyncStatus('error');
+        // Phase INVENTORY-PERSISTENCE-FAILED-SAVE-SURFACING: durable-save
+        // failure must be observable by the caller — previously this was
+        // swallowed here, so a caller `await`ing this function could never
+        // tell a failed write from a successful one. Local optimistic
+        // state and sync-status behavior are otherwise unchanged.
+        throw err;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
@@ -2303,6 +2309,9 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to persist removed stock:', err);
         setSyncStatus('error');
+        // See receiveStock's identical comment — durable-save failure must
+        // be observable by the caller instead of swallowed.
+        throw err;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
@@ -2903,6 +2912,13 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to persist item move:', err);
         setSyncStatus('error');
+        // See receiveStock's identical comment — durable-save failure must
+        // be observable by the caller instead of swallowed. Note: this
+        // does NOT make the source→destination write sequence atomic —
+        // TRANSFER_PARTIAL_WRITE_RISK remains open — it only ensures a
+        // failure anywhere in that sequence is no longer silently reported
+        // as success.
+        throw err;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
@@ -3123,10 +3139,10 @@ const handleLogout = async () => {
                 rooms={rooms}
                 history={history}
                 logs={logs}
-                onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
+                onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp).catch((err) => { console.error('Manual receive stock failed:', err); }); }}
                 onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
                 onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
-                onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
+                onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); }); }}
                 onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
@@ -3156,11 +3172,11 @@ const handleLogout = async () => {
           logs={logs.filter(l => l.roomId === activeRoomId)}
           onClose={() => setActiveRoomId(null)}
           onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateRoomName(id, name); }}
-          onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
+          onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp).catch((err) => { console.error('Manual receive stock failed:', err); }); }}
           onReceiveBatch={(rid, items) => receiveStockBatch(rid, items)}
           onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
           onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
-          onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
+          onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); }); }}
           onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
           onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
           onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
