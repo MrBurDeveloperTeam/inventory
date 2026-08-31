@@ -32,6 +32,8 @@ import PersonalizedInsight from './aiExperience/components/PersonalizedInsight';
 import { buildInventoryDialoguePool } from './aiExperience/petDialogue/buildInventoryDialoguePool';
 import type { InsightCandidate } from './aiExperience/contracts/insightCandidate';
 import { createInventoryMolarAdapter } from './aiExperience/inventoryMolarAdapter';
+import { parseInventoryActionProposal } from './aiExperience/inventoryConfirmedActionParser';
+import InventoryActionConfirm from './components/InventoryActionConfirm';
 import { jwtDecode } from 'jwt-decode';
 import {
   ARCHIVED_LOCATION_LABEL,
@@ -2925,8 +2927,16 @@ const handleLogout = async () => {
   // component) because those are `const` closures, not hoisted function
   // declarations — referencing them earlier throws a temporal-dead-zone
   // "used before declaration" error.
+  // Host-owned pending proposal state for Phase
+  // INVENTORY-DETERMINISTIC-CONFIRMED-AI-ACTIONS-1. Populated only by the
+  // deterministic parser (via onProposeAction below), never by Gemini
+  // output. Rendering InventoryActionConfirm below does not itself mutate
+  // anything — see that component for the actual confirm/cancel/execute
+  // logic and fresh-state revalidation.
+  const [pendingInventoryAction, setPendingInventoryAction] = useState<ReturnType<typeof parseInventoryActionProposal>>(null);
+
   const inventoryMolarAdapter = useMemo(
-    () => createInventoryMolarAdapter({ rooms, history, logs, isLoadingMain, receiveStock, removeStock, moveItem }),
+    () => createInventoryMolarAdapter({ rooms, history, logs, isLoadingMain, onProposeAction: setPendingInventoryAction, receiveStock, removeStock, moveItem }),
     [rooms, history, logs, isLoadingMain, receiveStock, removeStock, moveItem]
   );
 
@@ -3305,6 +3315,23 @@ const handleLogout = async () => {
           adapter={inventoryMolarAdapter}
           onPetToggle={() => setIsVirtualPetOpen(true)}
           disabled={!isAuthenticated}
+        />
+      )}
+
+      {/* Phase INVENTORY-DETERMINISTIC-CONFIRMED-AI-ACTIONS-1: explicit
+          confirm/cancel gate for a chat-proposed inventory mutation. `rooms`
+          is passed as the live App.tsx state so the component's own
+          fresh-state revalidation (at Confirm-click time) reflects current
+          data, not the snapshot the proposal was created from. */}
+      {pendingInventoryAction && (
+        <InventoryActionConfirm
+          action={pendingInventoryAction}
+          rooms={rooms}
+          onCancel={() => setPendingInventoryAction(null)}
+          onConfirmed={() => setPendingInventoryAction(null)}
+          receiveStock={receiveStock}
+          removeStock={removeStock}
+          moveItem={moveItem}
         />
       )}
 

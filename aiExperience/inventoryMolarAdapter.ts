@@ -26,12 +26,20 @@ import { classifyInventoryDataIntent } from './dataChat/router/classifyInventory
 import { resolveInventoryDataQuery } from './dataChat/resolver/resolveInventoryDataQuery';
 import { formatGroundedInventoryFallback } from './dataChat/utils/formatGroundedInventoryFallback';
 import { buildUnsupportedParameterMessage } from './dataChat/utils/unsupportedParameterMessage';
+import { parseInventoryActionProposal } from './inventoryConfirmedActionParser';
 
 interface CreateInventoryMolarAdapterDeps {
   rooms: Room[];
   history: PurchaseHistory[];
   logs: ActivityLog[];
   isLoadingMain: boolean;
+  /** Host-owned proposal sink (Phase INVENTORY-DETERMINISTIC-CONFIRMED-AI-ACTIONS-1).
+   *  Called ONLY with a proposal the deterministic parser derived from the
+   *  user's own message — never from Gemini output. The caller (App.tsx)
+   *  owns rendering the confirmation UI and performing fresh-state
+   *  revalidation before any executor runs; this adapter never mutates
+   *  inventory itself. */
+  onProposeAction: (action: ReturnType<typeof parseInventoryActionProposal>) => void;
   receiveStock: (
     roomId: string,
     itemData: Partial<Item>,
@@ -114,11 +122,28 @@ async function getPredefinedChatResponse(message: string): Promise<string | null
 }
 
 export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDeps): AIAdapter {
-  const { rooms, history, logs, isLoadingMain, receiveStock, removeStock, moveItem } = deps;
+  const { rooms, history, logs, isLoadingMain, onProposeAction, receiveStock, removeStock, moveItem } = deps;
 
   return {
     async sendMessage(request: AIRequest): Promise<AIResponse> {
       const userMsg = request.text;
+
+      // ── Phase INVENTORY-DETERMINISTIC-CONFIRMED-AI-ACTIONS-1 ──────────
+      // Deterministic parse of the RAW USER MESSAGE ONLY — no Gemini call
+      // happens for this turn at all when a proposal is produced. Runs
+      // BEFORE the Data-Driven Chat mutation-refusal below so an
+      // unambiguous, fully-specified command is handled by the real
+      // confirm/execute path instead of the read-only "can't make
+      // changes" message; anything that doesn't parse into a full
+      // proposal falls through unchanged to the existing checks below,
+      // including that same refusal for vaguer mutation-sounding text.
+      const proposal = parseInventoryActionProposal(userMsg, rooms);
+      if (proposal) {
+        onProposeAction(proposal);
+        return {
+          text: "I've prepared that for you — please review and confirm below. No stock has been changed yet.",
+        };
+      }
 
       // ── Phase-3 Data-Driven Chat (read-only pilot) ────────────────────
       // Runs BEFORE the General Chat pipeline below, and is fully separate
