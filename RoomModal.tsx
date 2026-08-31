@@ -39,8 +39,8 @@ interface RoomModalProps {
   logs: ActivityLog[];
   onClose: () => void;
   onUpdateName: (id: string, name: string) => void;
-  onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void | Promise<void>;
-  onReceiveBatch?: (roomId: string, items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>) => void | Promise<void>;
+  onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string, createNewBatch?: boolean, idempotencyKey?: string) => void | Promise<void>;
+  onReceiveBatch?: (roomId: string, items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>, itemKeys?: string[]) => void | Promise<void>;
   onUpdateQty: (roomId: string, itemId: string, delta: number) => void;
   onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
   onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void | Promise<void>;
@@ -64,6 +64,32 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const bulkTransferConfirmInFlightRef = useRef(false);
   const excelImportInFlightRef = useRef(false);
   const ocrImportInFlightRef = useRef(false);
+  // Phase INVENTORY-FAILED-SAVE-RETRY-AND-RECONCILIATION-RECOVERY-
+  // HARDENING: stable per-item idempotency keys for one parent
+  // multi-item submission. Generated once on the FIRST attempt and
+  // reused unchanged on a retry of the SAME item count, so items that
+  // already committed on a failed prior attempt resolve via the
+  // server's idempotency claim instead of being received again.
+  // Regenerated whenever the item count changes. This correctly fixes
+  // the phase's core scenario — an UNEDITED retry after a mutation
+  // failure (network blip, one row rejected) — since items that
+  // already committed resolve via the server's idempotency claim
+  // instead of repeating. It is a KNOWN, DISCLOSED gap for the case
+  // where a user removes/adds a row between attempts: all keys
+  // regenerate (length changed), so already-committed rows would be
+  // received again rather than just the genuinely-new remainder. Doing
+  // this correctly needs a stable per-row identity independent of
+  // array position, which excelPreviewData/ocrResult rows don't carry
+  // today — out of this phase's scope, tracked in the Final Report
+  // rather than silently left unhandled.
+  const excelImportKeysRef = useRef<string[] | null>(null);
+  const ocrImportKeysRef = useRef<string[] | null>(null);
+  const getStableKeys = (ref: React.MutableRefObject<string[] | null>, count: number): string[] => {
+    if (!ref.current || ref.current.length !== count) {
+      ref.current = Array.from({ length: count }, () => crypto.randomUUID());
+    }
+    return ref.current;
+  };
 
   const [isReceiving, setIsReceiving] = useState(false);
   const [receiveMode, setReceiveMode] = useState<'existing' | 'new' | 'edit'>('existing');
@@ -887,7 +913,9 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                       if (excelImportInFlightRef.current) return;
                       excelImportInFlightRef.current = true;
                       try {
-                        for (const item of excelPreviewData) {
+                        const keys = getStableKeys(excelImportKeysRef, excelPreviewData.length);
+                        for (let i = 0; i < excelPreviewData.length; i++) {
+                          const item = excelPreviewData[i];
                           if (item.name) {
                             await onReceive(
                               room.id,
@@ -904,14 +932,25 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                               item.quantity || 1,
                               item.price || 0,
                               new Date().toISOString().split('T')[0],
-                              item.expiryDate || undefined
+                              item.expiryDate || undefined,
+                              false,
+                              keys[i]
                             );
                           }
                         }
+                        // Genuine success — this submission is complete;
+                        // any future submission is a new logical action.
+                        excelImportKeysRef.current = null;
                         setIsExcelPreviewActive(false);
                         setExcelPreviewData([]);
                       } catch (err) {
                         console.error('RoomModal: Excel import failed', err);
+                        // Deliberately do NOT clear excelImportKeysRef or
+                        // excelPreviewData here — a retry of this same
+                        // unedited list reuses the same keys, so items
+                        // that already committed resolve via the
+                        // server's idempotency claim instead of being
+                        // received again.
                       } finally {
                         excelImportInFlightRef.current = false;
                       }
@@ -1459,6 +1498,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                         if (ocrImportInFlightRef.current) return;
                         ocrImportInFlightRef.current = true;
                         try {
+                          const keys = getStableKeys(ocrImportKeysRef, validItems.length);
                           if (onReceiveBatch) {
                             // Single batched call — isDirty stays true until ALL items are persisted
                             await onReceiveBatch(
@@ -1478,11 +1518,13 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                 price: item.price || 0,
                                 purchaseDate: item.purchaseDate || new Date().toISOString().split('T')[0],
                                 expiry: item.expiryDate || undefined,
-                              }))
+                              })),
+                              keys
                             );
                           } else {
                             // Fallback: individual sequential calls (legacy path)
-                            for (const item of validItems) {
+                            for (let i = 0; i < validItems.length; i++) {
+                              const item = validItems[i];
                               await onReceive(
                                 room.id,
                                 {
@@ -1498,14 +1540,23 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                 item.quantity || 1,
                                 item.price || 0,
                                 item.purchaseDate || new Date().toISOString().split('T')[0],
-                                item.expiryDate || undefined
+                                item.expiryDate || undefined,
+                                false,
+                                keys[i]
                               );
                             }
                           }
+                          // Genuine success — new future submissions are new
+                          // logical actions and get fresh keys.
+                          ocrImportKeysRef.current = null;
                           setOcrStep('upload');
                           setIsOCRActive(false);
                         } catch (err) {
                           console.error('RoomModal: OCR batch receive failed', err);
+                          // Deliberately do NOT clear ocrImportKeysRef or
+                          // ocrResult — see the identical Excel-import
+                          // comment above for the retry-safety rationale
+                          // and its disclosed edit-between-attempts gap.
                         } finally {
                           ocrImportInFlightRef.current = false;
                         }
