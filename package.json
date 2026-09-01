@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@mrburdeveloperteam/molar-experience": "0.9.0",
+    "@mrburdeveloperteam/molar-experience": "0.9.1",
     "@supabase/supabase-js": "^2.103.3",
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.5",
