@@ -3155,42 +3155,71 @@ const handleLogout = async () => {
                 onSelectTemplate={canManageStructure ? (url) => {
                   console.log('onSelectTemplate called');
                   lastLocalMutation.current = Date.now();
-                  isDirty.current = true;
                   setBlueprint(url);
 
                   if (currentInventoryOwnerId) {
-                    if (metaSyncTimer.current) window.clearTimeout(metaSyncTimer.current);
+                    // One begin() per pending debounced write, not one per
+                    // call: rapid successive selections keep collapsing
+                    // into the same still-pending timer (and therefore the
+                    // same in-flight count), matching the debounce itself
+                    // — only when no write is currently scheduled does a
+                    // new one start.
+                    if (metaSyncTimer.current) {
+                      window.clearTimeout(metaSyncTimer.current);
+                    } else {
+                      beginInventoryMutation();
+                    }
                     metaSyncTimer.current = window.setTimeout(async () => {
-                      setSyncStatus('syncing');
-                      await supabase.from('inventory_meta').upsert({
-                        user_id: currentInventoryOwnerId,
-                        blueprint: url,
-                        // Include latest cat position from state or just rely on current local state
-                        cat_position_x: catPosition.x,
-                        cat_position_y: catPosition.y
-                      }, { onConflict: 'user_id' });
-                      setSyncStatus('synced');
+                      metaSyncTimer.current = null;
+                      try {
+                        const { error } = await supabase.from('inventory_meta').upsert({
+                          user_id: currentInventoryOwnerId,
+                          blueprint: url,
+                          // Include latest cat position from state or just rely on current local state
+                          cat_position_x: catPosition.x,
+                          cat_position_y: catPosition.y
+                        }, { onConflict: 'user_id' });
+                        if (error) throw error;
+                        endInventoryMutation('synced');
+                      } catch (err) {
+                        console.error('Failed to persist selected template:', err);
+                        endInventoryMutation('error');
+                      }
                     }, 1000);
                   }
                 } : undefined}
                 catPosition={catPosition}
                 onCatPositionChange={canManageStructure ? (pos) => {
                   lastLocalMutation.current = Date.now();
-                  isDirty.current = true;
                   setCatPosition(pos);
 
                   if (currentInventoryOwnerId) {
-                    if (metaSyncTimer.current) window.clearTimeout(metaSyncTimer.current);
+                    // Same single-begin-per-pending-write rule as
+                    // onSelectTemplate above — they share metaSyncTimer, so
+                    // a template change and a cat-position change within
+                    // the same debounce window are one pending write, one
+                    // begin/end pair, whichever fires last.
+                    if (metaSyncTimer.current) {
+                      window.clearTimeout(metaSyncTimer.current);
+                    } else {
+                      beginInventoryMutation();
+                    }
                     metaSyncTimer.current = window.setTimeout(async () => {
-                      setSyncStatus('syncing');
+                      metaSyncTimer.current = null;
                       console.log('Debounced Meta Sync: Saving cat position', pos);
-                      await supabase.from('inventory_meta').upsert({
-                        user_id: currentInventoryOwnerId,
-                        cat_position_x: pos.x,
-                        cat_position_y: pos.y,
-                        blueprint: blueprint || PRESET_BLUEPRINTS[0].url
-                      }, { onConflict: 'user_id' });
-                      setSyncStatus('synced');
+                      try {
+                        const { error } = await supabase.from('inventory_meta').upsert({
+                          user_id: currentInventoryOwnerId,
+                          cat_position_x: pos.x,
+                          cat_position_y: pos.y,
+                          blueprint: blueprint || PRESET_BLUEPRINTS[0].url
+                        }, { onConflict: 'user_id' });
+                        if (error) throw error;
+                        endInventoryMutation('synced');
+                      } catch (err) {
+                        console.error('Failed to persist cat position:', err);
+                        endInventoryMutation('error');
+                      }
                     }, 1000);
                   }
                 } : undefined}
