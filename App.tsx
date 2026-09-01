@@ -1886,8 +1886,16 @@ const handleLogout = async () => {
     if (currentInventoryOwnerId) {
       beginInventoryMutation();
       const { error } = await supabase.from('inventory_rooms').update({ name }).eq('id', id);
-      if (error) console.error('Failed to update room name in DB:', error);
       endInventoryMutation(error ? 'error' : 'synced');
+      if (error) {
+        console.error('Failed to update room name in DB:', error);
+        // Previously swallowed here — the caller never saw a rejection,
+        // so a persistence failure could never be shown to the user.
+        // Rethrowing is the minimal change needed for that visibility;
+        // room rename validation/duplicate-name logic and the optimistic
+        // local rename above are unchanged.
+        throw error;
+      }
     }
   };
 
@@ -2697,6 +2705,10 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to update item metadata:', err);
         endInventoryMutation('error');
+        // Previously swallowed here — no caller ever saw a rejection.
+        // Rethrowing is the minimal change needed to make persistence
+        // failures visible; nothing else about this function changed.
+        throw err;
       }
     }
   };
@@ -3270,8 +3282,8 @@ const handleLogout = async () => {
                 onUpdateQty={(rid, iid, d) => { updateItemQty(rid, iid, d).catch((err) => { console.error('Manual quantity adjust failed:', err); showMutationFeedback(err); }); }}
                 onUpdateBatchQty={(rid, iid, bidx, d) => { updateItemBatchQty(rid, iid, bidx, d).catch((err) => { console.error('Manual batch quantity adjust failed:', err); showMutationFeedback(err); }); }}
                 onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); showMutationFeedback(err); throw err; }); }}
-                onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
-                onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); updateItemMetadata(rid, iid, data); }}
+                onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); showMutationFeedback(err); }); }}
+                onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); updateItemMetadata(rid, iid, data).catch((err) => { console.error('Manual item metadata update failed:', err); showMutationFeedback(err); }); }}
                 onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); showMutationFeedback(err); }); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
@@ -3298,7 +3310,7 @@ const handleLogout = async () => {
           allRooms={rooms}
           logs={logs.filter(l => l.roomId === activeRoomId)}
           onClose={() => setActiveRoomId(null)}
-          onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); updateRoomName(id, name); }}
+          onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); updateRoomName(id, name).catch((err) => { console.error('Manual room rename failed:', err); showMutationFeedback(err); }); }}
           onReceive={(rid, data, q, p, date, exp, createNewBatch, idempotencyKey) => { lastLocalMutation.current = Date.now(); return receiveStock(rid, data, q, p, date, exp, createNewBatch, idempotencyKey).catch((err) => { console.error('Manual receive stock failed:', err); showMutationFeedback(err); throw err; }); }}
           onReceiveBatch={(rid, items, itemKeys) => receiveStockBatch(rid, items, itemKeys).catch((err) => {
             console.error('Manual receive stock batch failed:', err);
@@ -3322,8 +3334,8 @@ const handleLogout = async () => {
           onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); updateItemQty(rid, iid, d).catch((err) => { console.error('Manual quantity adjust failed:', err); showMutationFeedback(err); }); }}
           onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); updateItemBatchQty(rid, iid, bidx, d).catch((err) => { console.error('Manual batch quantity adjust failed:', err); showMutationFeedback(err); }); }}
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); showMutationFeedback(err); throw err; }); }}
-          onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
-          onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); updateItemMetadata(rid, iid, data); }}
+          onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); showMutationFeedback(err); }); }}
+          onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); updateItemMetadata(rid, iid, data).catch((err) => { console.error('Manual item metadata update failed:', err); showMutationFeedback(err); }); }}
           onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); showMutationFeedback(err); }); }}
           readOnly={!canEditItems}
         />
