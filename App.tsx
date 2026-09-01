@@ -35,6 +35,7 @@ import { createInventoryMolarAdapter } from './aiExperience/inventoryMolarAdapte
 import { parseInventoryActionProposal } from './aiExperience/inventoryConfirmedActionParser';
 import InventoryActionConfirm from './components/InventoryActionConfirm';
 import { jwtDecode } from 'jwt-decode';
+import { AlertCircle } from 'lucide-react';
 import {
   ARCHIVED_LOCATION_LABEL,
   isPurchaseHistoryForItem,
@@ -420,6 +421,38 @@ const App: React.FC = () => {
     if (inFlightMutationCountRef.current === 0) {
       isDirty.current = false;
       syncInFlight.current = false;
+    }
+  };
+
+  // Phase INVENTORY-MANUAL-MUTATION-FEEDBACK-HARDENING
+  //
+  // Manual mutation paths (quantity/batch-quantity adjust, manual
+  // receive/transfer, Excel/OCR import) previously surfaced a failed or
+  // ambiguous outcome only via console.error — invisible to the user.
+  // This reuses the exact dismissible {title,message} modal pattern
+  // RoomModal already uses for its own local validation errors
+  // (errorModal there) as the one shared surface for manual mutation
+  // OUTCOMES specifically. It classifies using only the three states
+  // the framework already establishes (InventoryReconciliationError /
+  // isDefiniteMutationFailure / unknown) — no new error category, no
+  // retry logic, no re-run of any mutation.
+  const [mutationFeedback, setMutationFeedback] = useState<{ title: string; message: string } | null>(null);
+  const showMutationFeedback = (err: unknown) => {
+    if (err instanceof InventoryReconciliationError) {
+      setMutationFeedback({
+        title: 'Saved',
+        message: 'Stock change was saved, but the latest inventory could not be refreshed.',
+      });
+    } else if (isDefiniteMutationFailure(err)) {
+      setMutationFeedback({
+        title: 'Unable to Save',
+        message: 'Unable to save this stock change.',
+      });
+    } else {
+      setMutationFeedback({
+        title: 'Connection Issue',
+        message: "We couldn't confirm whether this stock change completed. You can safely try again.",
+      });
     }
   };
 
@@ -3233,13 +3266,13 @@ const handleLogout = async () => {
                 rooms={rooms}
                 history={history}
                 logs={logs}
-                onReceive={(rid, data, q, p, date, exp, createNewBatch, idempotencyKey) => { lastLocalMutation.current = Date.now(); return receiveStock(rid, data, q, p, date, exp, createNewBatch, idempotencyKey).catch((err) => { console.error('Manual receive stock failed:', err); throw err; }); }}
-                onUpdateQty={(rid, iid, d) => { updateItemQty(rid, iid, d).catch((err) => { console.error('Manual quantity adjust failed:', err); }); }}
-                onUpdateBatchQty={(rid, iid, bidx, d) => { updateItemBatchQty(rid, iid, bidx, d).catch((err) => { console.error('Manual batch quantity adjust failed:', err); }); }}
-                onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
+                onReceive={(rid, data, q, p, date, exp, createNewBatch, idempotencyKey) => { lastLocalMutation.current = Date.now(); return receiveStock(rid, data, q, p, date, exp, createNewBatch, idempotencyKey).catch((err) => { console.error('Manual receive stock failed:', err); showMutationFeedback(err); throw err; }); }}
+                onUpdateQty={(rid, iid, d) => { updateItemQty(rid, iid, d).catch((err) => { console.error('Manual quantity adjust failed:', err); showMutationFeedback(err); }); }}
+                onUpdateBatchQty={(rid, iid, bidx, d) => { updateItemBatchQty(rid, iid, bidx, d).catch((err) => { console.error('Manual batch quantity adjust failed:', err); showMutationFeedback(err); }); }}
+                onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); showMutationFeedback(err); throw err; }); }}
                 onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); updateItemMetadata(rid, iid, data); }}
-                onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); }); }}
+                onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); showMutationFeedback(err); }); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
                 readOnly={!canEditItems || isLoadingMain}
@@ -3266,14 +3299,32 @@ const handleLogout = async () => {
           logs={logs.filter(l => l.roomId === activeRoomId)}
           onClose={() => setActiveRoomId(null)}
           onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); updateRoomName(id, name); }}
-          onReceive={(rid, data, q, p, date, exp, createNewBatch, idempotencyKey) => { lastLocalMutation.current = Date.now(); return receiveStock(rid, data, q, p, date, exp, createNewBatch, idempotencyKey).catch((err) => { console.error('Manual receive stock failed:', err); throw err; }); }}
-          onReceiveBatch={(rid, items, itemKeys) => receiveStockBatch(rid, items, itemKeys).catch((err) => { console.error('Manual receive stock batch failed:', err); })}
-          onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); updateItemQty(rid, iid, d); }}
-          onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); updateItemBatchQty(rid, iid, bidx, d); }}
-          onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
+          onReceive={(rid, data, q, p, date, exp, createNewBatch, idempotencyKey) => { lastLocalMutation.current = Date.now(); return receiveStock(rid, data, q, p, date, exp, createNewBatch, idempotencyKey).catch((err) => { console.error('Manual receive stock failed:', err); showMutationFeedback(err); throw err; }); }}
+          onReceiveBatch={(rid, items, itemKeys) => receiveStockBatch(rid, items, itemKeys).catch((err) => {
+            console.error('Manual receive stock batch failed:', err);
+            // A partial-batch failure is a distinct case from a single
+            // mutation's outcome: some rows in this same submission may
+            // have already committed while others did not (or the whole
+            // batch committed and only the refresh failed). Row identity
+            // is unchanged here — no row-level UI, matching the phase's
+            // explicit instruction — but an InventoryReconciliationError
+            // means every row DID commit, so it must use the standard
+            // "saved" wording, never the "incomplete" one.
+            if (err instanceof InventoryReconciliationError) {
+              showMutationFeedback(err);
+            } else {
+              setMutationFeedback({
+                title: 'Import Incomplete',
+                message: 'Some inventory items could not be completed. You can retry the unchanged import safely.',
+              });
+            }
+          })}
+          onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); updateItemQty(rid, iid, d).catch((err) => { console.error('Manual quantity adjust failed:', err); showMutationFeedback(err); }); }}
+          onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); updateItemBatchQty(rid, iid, bidx, d).catch((err) => { console.error('Manual batch quantity adjust failed:', err); showMutationFeedback(err); }); }}
+          onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); showMutationFeedback(err); throw err; }); }}
           onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
           onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); updateItemMetadata(rid, iid, data); }}
-          onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); }); }}
+          onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); showMutationFeedback(err); }); }}
           readOnly={!canEditItems}
         />
       )}
@@ -3443,6 +3494,33 @@ const handleLogout = async () => {
           removeStock={removeStock}
           moveItem={moveItem}
         />
+      )}
+
+      {/* Phase INVENTORY-MANUAL-MUTATION-FEEDBACK-HARDENING: same visual
+          pattern as RoomModal's own errorModal (AlertCircle + rose-50
+          circle + single "Got it" dismiss), reused here as the one
+          shared surface for manual mutation outcomes across
+          MasterInventory and RoomModal. */}
+      {mutationFeedback && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 border border-slate-100 animate-in zoom-in-95 duration-200 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500">
+                <AlertCircle className="w-10 h-10" />
+              </div>
+            </div>
+            <h3 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight">{mutationFeedback.title}</h3>
+            <p className="text-slate-500 text-sm leading-relaxed mb-8">
+              {mutationFeedback.message}
+            </p>
+            <button
+              onClick={() => setMutationFeedback(null)}
+              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
       )}
 
       {/* INVENTORY-3: `key` forces a fresh Pet runtime mount on every
