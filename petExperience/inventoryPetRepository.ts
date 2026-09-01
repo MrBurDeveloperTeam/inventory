@@ -142,22 +142,22 @@ export const inventoryPetRepository: PetRepository = {
   },
 
   async saveInventory(userId: string, items: PetInventoryItem[]): Promise<void> {
-    // Fast full sync — delete every existing row for this user, then bulk
-    // insert exactly what was given. Matches the original's
-    // `.delete().eq('user_id', userId)` followed by a bulk `.insert(...)`.
-    const { error: deleteError } = await supabase.from('pet_inventory').delete().eq('user_id', userId);
-    if (deleteError) throw deleteError;
-
-    if (items.length === 0) return;
-
-    const rows = items.map((item) => ({
-      user_id: userId,
-      item_id: item.itemId,
-      quantity: item.quantity,
-    }));
-
-    const { error: insertError } = await supabase.from('pet_inventory').insert(rows);
-    if (insertError) throw insertError;
+    // Single atomic upsert+prune RPC (Phase
+    // SNABBB-VIRTUAL-PET-INVENTORY-ATOMICITY-AUDIT-AND-HARDENING) —
+    // replaces the prior delete-then-insert two-request sequence, which
+    // could leave this user's inventory empty if the process failed
+    // between the delete and the insert. See public.save_pet_inventory's
+    // own definition for the full rationale: it upserts every incoming
+    // item (never destroying a row for an item this snapshot didn't
+    // know about — e.g. one another app/tab just added) and only prunes
+    // rows for items absent from this list, all inside one transaction.
+    // `auth.uid()` is derived server-side from the caller's own
+    // session — this repository has no way to write another user's
+    // inventory even if `userId` here were wrong.
+    const { error } = await supabase.rpc('save_pet_inventory', {
+      p_items: items.map((item) => ({ itemId: item.itemId, quantity: item.quantity })),
+    });
+    if (error) throw error;
   },
 
   async loadCatalog(): Promise<FoodItem[]> {
