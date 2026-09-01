@@ -1873,22 +1873,18 @@ const handleLogout = async () => {
     // Local state is only updated AFTER the RPC succeeds, from a fresh
     // read of what it actually wrote — mirroring moveItem's RPC-first
     // pattern from the transfer atomicity/concurrency hardening.
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    setSyncStatus('syncing');
-    syncInFlight.current = true;
-
-    // See moveItem's identical comment on why the RPC call and its
-    // reconciliation are in separate try/catch blocks.
-    let rpcResult: any;
     // Fingerprint mirrors receive_inventory_stock's own fingerprint
     // inputs — an identical resubmission of the same room/name/brand/
     // code/qty/price/uom/vendor/category/description/expiry/purchase-
     // date/create-new-batch reuses the pending key (safe for an
     // ambiguous outcome); any changed field is a different action.
     const receiveFingerprint = `receive:${roomId}:${itemData.name}:${itemData.brand}:${itemData.code}:${qty}:${price}:${itemData.uom}:${itemData.vendor}:${itemData.category}:${itemData.description}:${expiry}:${purchaseDate}:${createNewBatch === true}`;
-    try {
-      rpcResult = await resolveAndTrackActionKey(receiveFingerprint, idempotencyKey, async (key) => {
+
+    await runInventoryMutation({
+      errorLabel: 'persist received stock',
+      fingerprint: receiveFingerprint,
+      explicitKey: idempotencyKey,
+      mutate: async (key) => {
         const { data, error: rpcError } = await supabase.rpc('receive_inventory_stock', {
           p_room_id: roomId,
           p_name: itemData.name || '',
@@ -1907,101 +1903,77 @@ const handleLogout = async () => {
         });
         if (rpcError) throw rpcError;
         return data;
-      });
-    } catch (err) {
-      console.error('Failed to persist received stock:', err);
-      setSyncStatus('error');
-      // Phase INVENTORY-PERSISTENCE-FAILED-SAVE-SURFACING: durable-save
-      // failure must be observable by the caller — a caller `await`ing
-      // this function can tell a failed write from a successful one.
-      // Since local state is not mutated before this point, a failed
-      // receive leaves local state completely unchanged.
-      isDirty.current = false;
-      syncInFlight.current = false;
-      throw err;
-    }
+      },
+      reconcile: async (rpcResult) => {
+        await reconcileWithOneRetry(async () => {
+          const [{ data: itemRow }, { data: batchRows }] = await Promise.all([
+            supabase.from('inventory_items').select('*').eq('id', rpcResult.item_id).maybeSingle(),
+            supabase.from('inventory_item_batches').select('*').eq('item_id', rpcResult.item_id),
+          ]);
 
-    // Receive is now durably committed. Everything below is read-only
-    // reconciliation — its failure is reported distinctly and never
-    // triggers a second receive RPC call.
-    try {
-      await reconcileWithOneRetry(async () => {
-        const [{ data: itemRow }, { data: batchRows }] = await Promise.all([
-          supabase.from('inventory_items').select('*').eq('id', rpcResult.item_id).maybeSingle(),
-          supabase.from('inventory_item_batches').select('*').eq('item_id', rpcResult.item_id),
-        ]);
+          if (itemRow) {
+            const batches: ItemBatch[] = (batchRows || []).map((b: any) => ({
+              id: b.id,
+              qty: Number(b.qty) || 0,
+              unitPrice: Number(b.unit_price) || 0,
+              expiryDate: b.expiry_date || null,
+            }));
+            const syncedItem: Item = ensureBatches({
+              id: itemRow.id,
+              name: itemRow.name || '',
+              brand: itemRow.brand || '',
+              code: itemRow.code || '',
+              quantity: Number(itemRow.quantity) || 0,
+              uom: itemRow.uom || 'pcs',
+              price: Number(itemRow.price) || 0,
+              vendor: itemRow.vendor || '',
+              category: (itemRow.category as any) || 'other',
+              description: itemRow.description || '',
+              expiryDate: itemRow.expiry_date || null,
+              createdAt: itemRow.created_at,
+              batches,
+            });
 
-        if (itemRow) {
-          const batches: ItemBatch[] = (batchRows || []).map((b: any) => ({
-            id: b.id,
-            qty: Number(b.qty) || 0,
-            unitPrice: Number(b.unit_price) || 0,
-            expiryDate: b.expiry_date || null,
-          }));
-          const syncedItem: Item = ensureBatches({
-            id: itemRow.id,
-            name: itemRow.name || '',
-            brand: itemRow.brand || '',
-            code: itemRow.code || '',
-            quantity: Number(itemRow.quantity) || 0,
-            uom: itemRow.uom || 'pcs',
-            price: Number(itemRow.price) || 0,
-            vendor: itemRow.vendor || '',
-            category: (itemRow.category as any) || 'other',
-            description: itemRow.description || '',
-            expiryDate: itemRow.expiry_date || null,
-            createdAt: itemRow.created_at,
-            batches,
-          });
+            setRooms(prev => prev.map(r => {
+              if (r.id !== roomId) return r;
+              const exists = r.items.some(i => i.id === syncedItem.id);
+              const updatedItems = exists
+                ? r.items.map(i => i.id === syncedItem.id ? syncedItem : i)
+                : [...r.items, syncedItem];
+              return { ...r, items: updatedItems };
+            }));
+          }
+        });
 
-          setRooms(prev => prev.map(r => {
-            if (r.id !== roomId) return r;
-            const exists = r.items.some(i => i.id === syncedItem.id);
-            const updatedItems = exists
-              ? r.items.map(i => i.id === syncedItem.id ? syncedItem : i)
-              : [...r.items, syncedItem];
-            return { ...r, items: updatedItems };
-          }));
-        }
-      });
+        const finalQty = Number(rpcResult.quantity) || 0;
+        addActivity(
+          roomId,
+          roomNameForLog,
+          'receive',
+          `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" [${itemData.code || 'N/A'}] @ $${price.toFixed(2)}`,
+          { beforeValue: String(Math.max(finalQty - qty, 0)), afterValue: String(finalQty) }
+        );
 
-      const finalQty = Number(rpcResult.quantity) || 0;
-      addActivity(
-        roomId,
-        roomNameForLog,
-        'receive',
-        `Received ${qty} ${itemData.uom || 'pcs'} of "${itemData.name}" [${itemData.code || 'N/A'}] @ $${price.toFixed(2)}`,
-        { beforeValue: String(Math.max(finalQty - qty, 0)), afterValue: String(finalQty) }
-      );
-
-      const historyEntry: PurchaseHistory = {
-        id: rpcResult.history_id,
-        timestamp: new Date().toISOString(),
-        productName: itemData.name || '',
-        brand: itemData.brand || '',
-        code: itemData.code || '',
-        vendor: itemData.vendor || '',
-        qty,
-        unitPrice: price,
-        totalPrice: qty * price,
-        location: roomNameForLog,
-        category: itemData.category || 'other',
-        roomId,
-        uom: itemData.uom || 'pcs',
-        expiryDate: expiry,
-        description: itemData.description || ''
-      };
-      setHistory(h => [historyEntry, ...h]);
-
-      setSyncStatus('synced');
-    } catch (err) {
-      console.error('Receive committed, but reconciliation failed:', err);
-      setSyncStatus('error');
-      throw err;
-    } finally {
-      isDirty.current = false;
-      syncInFlight.current = false;
-    }
+        const historyEntry: PurchaseHistory = {
+          id: rpcResult.history_id,
+          timestamp: new Date().toISOString(),
+          productName: itemData.name || '',
+          brand: itemData.brand || '',
+          code: itemData.code || '',
+          vendor: itemData.vendor || '',
+          qty,
+          unitPrice: price,
+          totalPrice: qty * price,
+          location: roomNameForLog,
+          category: itemData.category || 'other',
+          roomId,
+          uom: itemData.uom || 'pcs',
+          expiryDate: expiry,
+          description: itemData.description || ''
+        };
+        setHistory(h => [historyEntry, ...h]);
+      },
+    });
   };
 
   const VALID_CATEGORIES = new Set(['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other']);
@@ -2451,6 +2423,73 @@ const handleLogout = async () => {
     }
   };
 
+  // Phase INVENTORY-MUTATION-FRAMEWORK-CONSOLIDATION
+  //
+  // Every hardened Inventory mutation (moveItem, receiveStock,
+  // receiveStockBatch, updateItemQty, updateItemBatchQty,
+  // updateBatchMetadata) had converged on the exact same five-layer
+  // shape, duplicated almost verbatim in each function:
+  //   1. an in-flight UI guard (function-specific shape: a boolean, an
+  //      itemId Set, a per-log-row Set — deliberately NOT unified here,
+  //      since forcing one guard shape onto all of them would obscure
+  //      why they differ);
+  //   2. resolveAndTrackActionKey's fingerprint/explicit-key resolution;
+  //   3. the RPC call itself, in its own try/catch (a DEFINITE_FAILURE
+  //      here never touches local state);
+  //   4. reconcileWithOneRetry-wrapped read-only reconciliation, in a
+  //      SEPARATE try/catch (its failure becomes InventoryReconciliationError,
+  //      a RECONCILIATION_FAILURE — the mutation already committed);
+  //   5. isDirty/syncInFlight/setSyncStatus bookkeeping around both.
+  // runInventoryMutation is the ONE place that shape now lives. It does
+  // NOT own the guard (guards stay in each caller, since their shapes
+  // legitimately differ) and it does NOT own business logic (the actual
+  // RPC call and reconciliation query are still each function's own
+  // `mutate`/`reconcile` callbacks) — it only owns the skeleton around
+  // them, so a future Inventory mutation has one obvious shape to follow
+  // instead of a sixth copy of this same try/catch/finally.
+  const runInventoryMutation = async <T,>(opts: {
+    errorLabel: string;
+    fingerprint: string;
+    explicitKey: string | undefined;
+    mutate: (key: string) => Promise<T>;
+    reconcile: (result: T) => Promise<void>;
+  }): Promise<T> => {
+    const { errorLabel, fingerprint, explicitKey, mutate, reconcile } = opts;
+
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+
+    let result: T;
+    try {
+      result = await resolveAndTrackActionKey(fingerprint, explicitKey, mutate);
+    } catch (err) {
+      console.error(`Failed to ${errorLabel}:`, err);
+      setSyncStatus('error');
+      isDirty.current = false;
+      syncInFlight.current = false;
+      throw err;
+    }
+
+    // The mutation is now durably committed. Reconciliation failure
+    // below is a RECONCILIATION_FAILURE (InventoryReconciliationError,
+    // via reconcileWithOneRetry) — it is never allowed to trigger a
+    // second call to `mutate`.
+    try {
+      await reconcile(result);
+      setSyncStatus('synced');
+      return result;
+    } catch (err) {
+      console.error(`${errorLabel} committed, but reconciliation failed:`, err);
+      setSyncStatus('error');
+      throw err;
+    } finally {
+      isDirty.current = false;
+      syncInFlight.current = false;
+    }
+  };
+
   // idempotencyKey: same lifetime contract as moveItem/receiveStock — a
   // caller retrying after an UNKNOWN outcome (e.g. a network failure
   // where the RPC's response never arrived) should pass the SAME key
@@ -2468,49 +2507,32 @@ const handleLogout = async () => {
     if (quantityAdjustInFlightRef.current.has(itemId)) return;
     quantityAdjustInFlightRef.current.add(itemId);
 
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    setSyncStatus('syncing');
-    syncInFlight.current = true;
-    let rpcResult: any;
-    const fingerprint = `qty:${itemId}:${delta}`;
     try {
-      rpcResult = await resolveAndTrackActionKey(fingerprint, idempotencyKey, async (key) => {
-        const { data, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
-          p_item_id: itemId,
-          p_delta: delta,
-          p_idempotency_key: key,
-        });
-        if (rpcError) throw rpcError;
-        return data;
+      await runInventoryMutation({
+        errorLabel: 'update item quantity',
+        fingerprint: `qty:${itemId}:${delta}`,
+        explicitKey: idempotencyKey,
+        mutate: async (key) => {
+          const { data, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
+            p_item_id: itemId,
+            p_delta: delta,
+            p_idempotency_key: key,
+          });
+          if (rpcError) throw rpcError;
+          return data;
+        },
+        reconcile: async (rpcResult) => {
+          addActivity(
+            roomId,
+            room.name,
+            'edit',
+            `Adjusted qty of "${item.name}" to ${rpcResult.quantity}`,
+            { beforeValue: String(item.quantity), afterValue: String(rpcResult.quantity) }
+          );
+          await reconcileWithOneRetry(() => reconcileAdjustedItem(roomId, itemId));
+        },
       });
-    } catch (err) {
-      console.error('Failed to update item quantity:', err);
-      setSyncStatus('error');
-      isDirty.current = false;
-      syncInFlight.current = false;
-      quantityAdjustInFlightRef.current.delete(itemId);
-      throw err;
-    }
-
-    try {
-      addActivity(
-        roomId,
-        room.name,
-        'edit',
-        `Adjusted qty of "${item.name}" to ${rpcResult.quantity}`,
-        { beforeValue: String(item.quantity), afterValue: String(rpcResult.quantity) }
-      );
-
-      await reconcileWithOneRetry(() => reconcileAdjustedItem(roomId, itemId));
-      setSyncStatus('synced');
-    } catch (err) {
-      console.error('Quantity adjustment committed, but reconciliation failed:', err);
-      setSyncStatus('error');
-      throw err;
     } finally {
-      isDirty.current = false;
-      syncInFlight.current = false;
       quantityAdjustInFlightRef.current.delete(itemId);
     }
   };
@@ -2530,50 +2552,33 @@ const handleLogout = async () => {
     if (quantityAdjustInFlightRef.current.has(itemId)) return;
     quantityAdjustInFlightRef.current.add(itemId);
 
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    setSyncStatus('syncing');
-    syncInFlight.current = true;
-    let rpcResult: any;
-    const fingerprint = `batchqty:${itemId}:${targetBatchId}:${delta}`;
     try {
-      rpcResult = await resolveAndTrackActionKey(fingerprint, idempotencyKey, async (key) => {
-        const { data, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
-          p_item_id: itemId,
-          p_delta: delta,
-          p_idempotency_key: key,
-          p_batch_id: targetBatchId,
-        });
-        if (rpcError) throw rpcError;
-        return data;
+      await runInventoryMutation({
+        errorLabel: 'update batch qty',
+        fingerprint: `batchqty:${itemId}:${targetBatchId}:${delta}`,
+        explicitKey: idempotencyKey,
+        mutate: async (key) => {
+          const { data, error: rpcError } = await supabase.rpc('adjust_inventory_item_quantity', {
+            p_item_id: itemId,
+            p_delta: delta,
+            p_idempotency_key: key,
+            p_batch_id: targetBatchId,
+          });
+          if (rpcError) throw rpcError;
+          return data;
+        },
+        reconcile: async () => {
+          addActivity(
+            roomId,
+            room.name,
+            'edit',
+            `Adjusted Batch ${batchIndex + 1} of "${item.name}" from ${beforeQty} to ${Math.max(beforeQty + delta, 0)}`,
+            { beforeValue: String(beforeQty), afterValue: String(Math.max(beforeQty + delta, 0)) }
+          );
+          await reconcileWithOneRetry(() => reconcileAdjustedItem(roomId, itemId));
+        },
       });
-    } catch (err) {
-      console.error('Failed to update batch qty:', err);
-      setSyncStatus('error');
-      isDirty.current = false;
-      syncInFlight.current = false;
-      quantityAdjustInFlightRef.current.delete(itemId);
-      throw err;
-    }
-
-    try {
-      addActivity(
-        roomId,
-        room.name,
-        'edit',
-        `Adjusted Batch ${batchIndex + 1} of "${item.name}" from ${beforeQty} to ${Math.max(beforeQty + delta, 0)}`,
-        { beforeValue: String(beforeQty), afterValue: String(Math.max(beforeQty + delta, 0)) }
-      );
-
-      await reconcileWithOneRetry(() => reconcileAdjustedItem(roomId, itemId));
-      setSyncStatus('synced');
-    } catch (err) {
-      console.error('Batch quantity adjustment committed, but reconciliation failed:', err);
-      setSyncStatus('error');
-      throw err;
     } finally {
-      isDirty.current = false;
-      syncInFlight.current = false;
       quantityAdjustInFlightRef.current.delete(itemId);
     }
   };
@@ -2680,17 +2685,15 @@ const handleLogout = async () => {
     if (!room || !item || !currentInventoryOwnerId) return;
     if (batchData.qty === undefined || batchData.unitPrice === undefined) return;
 
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    setSyncStatus('syncing');
-    syncInFlight.current = true;
     // Fingerprint includes every semantic field the save can change —
     // if the user edits any of qty/unitPrice/expiryDate after a failed
     // attempt and resubmits, this is a DIFFERENT fingerprint and
     // therefore a fresh key, never a reuse of the stale one.
-    const fingerprint = `batchmeta:${batchId}:${batchData.qty}:${batchData.unitPrice}:${batchData.expiryDate ?? ''}`;
-    try {
-      await resolveAndTrackActionKey(fingerprint, idempotencyKey, async (key) => {
+    await runInventoryMutation({
+      errorLabel: 'update batch metadata',
+      fingerprint: `batchmeta:${batchId}:${batchData.qty}:${batchData.unitPrice}:${batchData.expiryDate ?? ''}`,
+      explicitKey: idempotencyKey,
+      mutate: async (key) => {
         const { error: rpcError } = await supabase.rpc('update_inventory_batch_metadata', {
           p_batch_id: batchId,
           p_qty: batchData.qty,
@@ -2699,27 +2702,12 @@ const handleLogout = async () => {
           p_idempotency_key: key,
         });
         if (rpcError) throw rpcError;
-      });
-    } catch (err) {
-      console.error('Failed to update batch metadata:', err);
-      setSyncStatus('error');
-      isDirty.current = false;
-      syncInFlight.current = false;
-      throw err;
-    }
-
-    try {
-      addActivity(roomId, room.name, 'edit', `Updated batch details for "${item.name}"`);
-      await reconcileWithOneRetry(() => reconcileAdjustedItem(roomId, itemId));
-      setSyncStatus('synced');
-    } catch (err) {
-      console.error('Batch metadata committed, but reconciliation failed:', err);
-      setSyncStatus('error');
-      throw err;
-    } finally {
-      isDirty.current = false;
-      syncInFlight.current = false;
-    }
+      },
+      reconcile: async () => {
+        addActivity(roomId, room.name, 'edit', `Updated batch details for "${item.name}"`);
+        await reconcileWithOneRetry(() => reconcileAdjustedItem(roomId, itemId));
+      },
+    });
   };
 
   const deleteItem = async (roomId: string, itemId: string) => {
@@ -2900,46 +2888,33 @@ const handleLogout = async () => {
 
     if (!currentInventoryOwnerId) return;
 
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    setSyncStatus('syncing');
-    syncInFlight.current = true;
+    const sourceBatchId = typeof batchIndex === 'number' ? (item.batches?.[batchIndex]?.id ?? null) : null;
 
-    // Phase INVENTORY-FAILED-SAVE-RETRY-AND-RECONCILIATION-RECOVERY-
-    // HARDENING: the RPC call (definite success/failure) and the
-    // read-only reconciliation that follows it are now in SEPARATE
-    // try/catch blocks. A thrown rpcError here means the transfer never
-    // committed — `rooms` stays untouched and the caller may safely
-    // retry with a brand-new idempotency key. Once the RPC has
-    // succeeded, a subsequent reconciliation failure is a completely
-    // different situation — the transfer IS durably saved — so it is
-    // reported as InventoryReconciliationError, never as a generic
-    // "failed to persist" error, and never triggers a second RPC call.
-    let rpcResult: any;
-    try {
-      const sourceBatchId = typeof batchIndex === 'number' ? (item.batches?.[batchIndex]?.id ?? null) : null;
+    // Attempt to reuse the client's already-resolved merge target so the
+    // RPC's destination-merge behavior matches what the UI showed the
+    // user — the RPC independently revalidates this id before trusting
+    // it (existence, room, owner, exact name/brand/category match) and
+    // silently falls back to creating a new item if it doesn't
+    // revalidate, exactly like the previous client-side logic did.
+    const existingInTarget = toRoom.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
 
-      // Attempt to reuse the client's already-resolved merge target so the
-      // RPC's destination-merge behavior matches what the UI showed the
-      // user — the RPC independently revalidates this id before trusting
-      // it (existence, room, owner, exact name/brand/category match) and
-      // silently falls back to creating a new item if it doesn't
-      // revalidate, exactly like the previous client-side logic did.
-      const existingInTarget = toRoom.items.find(i => i.name === item.name && i.brand === item.brand && i.category === item.category);
+    // Phase INVENTORY-STOCK-MUTATION-IDEMPOTENCY-HARDENING: this key
+    // identifies ONE logical transfer action, not its payload.
+    // InventoryActionConfirm generates it once and passes it in so a
+    // retry within that same dialog reuses the same key; manual UI
+    // callers with no explicit key get one tracked by fingerprint
+    // (below), so an identical resubmission after an ambiguous outcome
+    // reuses it too. Fingerprint mirrors exactly what the RPC itself
+    // hashes into its own fingerprint (including the resolved
+    // destination_item_id) so a client-side "same action" match can
+    // never disagree with the server's own reuse/mismatch decision.
+    const transferFingerprint = `transfer:${itemId}:${fromRoomId}:${toRoomId}:${quantity}:${sourceBatchId}:${existingInTarget?.id ?? null}`;
 
-      // Phase INVENTORY-STOCK-MUTATION-IDEMPOTENCY-HARDENING: this key
-      // identifies ONE logical transfer action, not its payload.
-      // InventoryActionConfirm generates it once and passes it in so a
-      // retry within that same dialog reuses the same key; manual UI
-      // callers with no explicit key get one tracked by fingerprint
-      // (below), so an identical resubmission after an ambiguous
-      // outcome reuses it too. Fingerprint mirrors exactly what the RPC
-      // itself hashes into its own fingerprint (including the resolved
-      // destination_item_id) so a client-side "same action" match can
-      // never disagree with the server's own reuse/mismatch decision.
-      const transferFingerprint = `transfer:${itemId}:${fromRoomId}:${toRoomId}:${quantity}:${sourceBatchId}:${existingInTarget?.id ?? null}`;
-
-      rpcResult = await resolveAndTrackActionKey(transferFingerprint, idempotencyKey, async (key) => {
+    await runInventoryMutation({
+      errorLabel: 'persist item move',
+      fingerprint: transferFingerprint,
+      explicitKey: idempotencyKey,
+      mutate: async (key) => {
         const { data, error: rpcError } = await supabase.rpc('transfer_inventory_stock', {
           p_source_item_id: itemId,
           p_from_room_id: fromRoomId,
@@ -2951,104 +2926,79 @@ const handleLogout = async () => {
         });
         if (rpcError) throw rpcError;
         return data;
-      });
-    } catch (err) {
-      console.error('Failed to persist item move:', err);
-      setSyncStatus('error');
-      // No local state was ever applied above this catch, so a rejected
-      // RPC call leaves `rooms` unchanged at its pre-transfer value — the
-      // false-success/false-transfer risk this phase targets does not
-      // apply here regardless of where inside the RPC the failure
-      // occurred, since the RPC's own transaction guarantees it never
-      // partially applied its writes either.
-      isDirty.current = false;
-      syncInFlight.current = false;
-      throw err;
-    }
+      },
+      reconcile: async (rpcResult) => {
+        await reconcileWithOneRetry(async () => {
+          const [{ data: sourceRow }, { data: destRow }, { data: destBatchRows }] = await Promise.all([
+            supabase.from('inventory_items').select('*').eq('id', itemId).maybeSingle(),
+            supabase.from('inventory_items').select('*').eq('id', rpcResult.destination_item_id).maybeSingle(),
+            supabase.from('inventory_item_batches').select('*').eq('item_id', rpcResult.destination_item_id),
+          ]);
 
-    // The transfer is now durably committed. Everything below is
-    // read-only reconciliation — its failure must never be reported as
-    // a failed transfer, and must never trigger a second RPC call.
-    try {
-      await reconcileWithOneRetry(async () => {
-        const [{ data: sourceRow }, { data: destRow }, { data: destBatchRows }] = await Promise.all([
-          supabase.from('inventory_items').select('*').eq('id', itemId).maybeSingle(),
-          supabase.from('inventory_items').select('*').eq('id', rpcResult.destination_item_id).maybeSingle(),
-          supabase.from('inventory_item_batches').select('*').eq('item_id', rpcResult.destination_item_id),
-        ]);
-
-        let sourceBatchRows: any[] | null = null;
-        if (sourceRow) {
-          const { data } = await supabase.from('inventory_item_batches').select('*').eq('item_id', itemId);
-          sourceBatchRows = data;
-        }
-
-        const reconciledSourceItem: Item | null = sourceRow ? ensureBatches({
-          id: sourceRow.id,
-          name: sourceRow.name || '',
-          brand: sourceRow.brand || '',
-          code: sourceRow.code || '',
-          quantity: Number(sourceRow.quantity) || 0,
-          uom: sourceRow.uom || 'pcs',
-          price: Number(sourceRow.price) || 0,
-          vendor: sourceRow.vendor || '',
-          category: (sourceRow.category as any) || 'other',
-          description: sourceRow.description || '',
-          expiryDate: sourceRow.expiry_date || null,
-          createdAt: sourceRow.created_at,
-          batches: (sourceBatchRows || []).map((b: any) => ({ id: b.id, qty: Number(b.qty) || 0, unitPrice: Number(b.unit_price) || 0, expiryDate: b.expiry_date || null })),
-        }) : null;
-
-        const reconciledDestItem: Item | null = destRow ? ensureBatches({
-          id: destRow.id,
-          name: destRow.name || '',
-          brand: destRow.brand || '',
-          code: destRow.code || '',
-          quantity: Number(destRow.quantity) || 0,
-          uom: destRow.uom || 'pcs',
-          price: Number(destRow.price) || 0,
-          vendor: destRow.vendor || '',
-          category: (destRow.category as any) || 'other',
-          description: destRow.description || '',
-          expiryDate: destRow.expiry_date || null,
-          createdAt: destRow.created_at,
-          batches: (destBatchRows || []).map((b: any) => ({ id: b.id, qty: Number(b.qty) || 0, unitPrice: Number(b.unit_price) || 0, expiryDate: b.expiry_date || null })),
-        }) : null;
-
-        setRooms(prev => prev.map(r => {
-          if (r.id === fromRoomId) {
-            return {
-              ...r,
-              items: reconciledSourceItem
-                ? r.items.map(i => i.id === itemId ? reconciledSourceItem : i)
-                : r.items.filter(i => i.id !== itemId),
-            };
+          let sourceBatchRows: any[] | null = null;
+          if (sourceRow) {
+            const { data } = await supabase.from('inventory_item_batches').select('*').eq('item_id', itemId);
+            sourceBatchRows = data;
           }
-          if (r.id === toRoomId && reconciledDestItem) {
-            const alreadyPresent = r.items.some(i => i.id === reconciledDestItem.id);
-            return {
-              ...r,
-              items: alreadyPresent
-                ? r.items.map(i => i.id === reconciledDestItem.id ? reconciledDestItem : i)
-                : [...r.items, reconciledDestItem],
-            };
-          }
-          return r;
-        }));
-      });
 
-      addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Moved ${quantity} of "${item.name}" to ${toRoom.name}`);
-      addActivity(toRoomId, toRoom.name, 'transfer_in', `Received ${quantity} of "${item.name}" from ${fromRoom.name}`);
+          const reconciledSourceItem: Item | null = sourceRow ? ensureBatches({
+            id: sourceRow.id,
+            name: sourceRow.name || '',
+            brand: sourceRow.brand || '',
+            code: sourceRow.code || '',
+            quantity: Number(sourceRow.quantity) || 0,
+            uom: sourceRow.uom || 'pcs',
+            price: Number(sourceRow.price) || 0,
+            vendor: sourceRow.vendor || '',
+            category: (sourceRow.category as any) || 'other',
+            description: sourceRow.description || '',
+            expiryDate: sourceRow.expiry_date || null,
+            createdAt: sourceRow.created_at,
+            batches: (sourceBatchRows || []).map((b: any) => ({ id: b.id, qty: Number(b.qty) || 0, unitPrice: Number(b.unit_price) || 0, expiryDate: b.expiry_date || null })),
+          }) : null;
 
-      setSyncStatus('synced');
-    } catch (err) {
-      console.error('Transfer committed, but reconciliation failed:', err);
-      setSyncStatus('error');
-      throw err;
-    } finally {
-      isDirty.current = false;
-      syncInFlight.current = false;
-    }
+          const reconciledDestItem: Item | null = destRow ? ensureBatches({
+            id: destRow.id,
+            name: destRow.name || '',
+            brand: destRow.brand || '',
+            code: destRow.code || '',
+            quantity: Number(destRow.quantity) || 0,
+            uom: destRow.uom || 'pcs',
+            price: Number(destRow.price) || 0,
+            vendor: destRow.vendor || '',
+            category: (destRow.category as any) || 'other',
+            description: destRow.description || '',
+            expiryDate: destRow.expiry_date || null,
+            createdAt: destRow.created_at,
+            batches: (destBatchRows || []).map((b: any) => ({ id: b.id, qty: Number(b.qty) || 0, unitPrice: Number(b.unit_price) || 0, expiryDate: b.expiry_date || null })),
+          }) : null;
+
+          setRooms(prev => prev.map(r => {
+            if (r.id === fromRoomId) {
+              return {
+                ...r,
+                items: reconciledSourceItem
+                  ? r.items.map(i => i.id === itemId ? reconciledSourceItem : i)
+                  : r.items.filter(i => i.id !== itemId),
+              };
+            }
+            if (r.id === toRoomId && reconciledDestItem) {
+              const alreadyPresent = r.items.some(i => i.id === reconciledDestItem.id);
+              return {
+                ...r,
+                items: alreadyPresent
+                  ? r.items.map(i => i.id === reconciledDestItem.id ? reconciledDestItem : i)
+                  : [...r.items, reconciledDestItem],
+              };
+            }
+            return r;
+          }));
+        });
+
+        addActivity(fromRoomId, fromRoom.name, 'transfer_out', `Moved ${quantity} of "${item.name}" to ${toRoom.name}`);
+        addActivity(toRoomId, toRoom.name, 'transfer_in', `Received ${quantity} of "${item.name}" from ${fromRoom.name}`);
+      },
+    });
   };
 
   // PHASE 7D: the entire General Chat / Data Chat / live `<ACTION>` mutation
