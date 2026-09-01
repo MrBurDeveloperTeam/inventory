@@ -105,20 +105,27 @@ export const inventoryPetRepository: PetRepository = {
   },
 
   async saveSnapshot(snapshot: PetSaveSnapshot): Promise<void> {
-    const { error } = await supabase.from('inventory_pet').upsert({
-      user_id: snapshot.globalUserId,
-      pet_name: snapshot.identity.petName || null,
-      hunger: snapshot.stats.hunger,
-      energy: snapshot.stats.energy,
-      happiness: snapshot.stats.happiness,
-      hygiene: snapshot.stats.hygiene,
-      level: snapshot.stats.level,
-      xp: snapshot.stats.xp,
-      coins: snapshot.stats.coins,
-      is_sleeping: snapshot.identity.isSleeping,
-      active_ball_id: snapshot.identity.activeBallId,
-      active_bed_id: snapshot.identity.activeBedId,
-      updated_at: snapshot.updatedAt,
+    // Atomic snapshot upsert RPC (Phase
+    // SNABBB-SHARED-VIRTUAL-PET-COINS-CONCURRENCY-HARDENING) — replaces
+    // the prior raw `.upsert()`, which wrote `coins` as an absolute
+    // value on every call, including this routine debounced call that
+    // fires on ANY stat change (not just coin activity). See
+    // public.save_pet_snapshot's own definition: `coins` is accepted
+    // only to seed a brand-new row on first adoption and is otherwise a
+    // guaranteed no-op — coins are managed exclusively by
+    // `mutateCoins`/`purchasePetItem`'s atomic deltas below.
+    const { error } = await supabase.rpc('save_pet_snapshot', {
+      p_pet_name: snapshot.identity.petName || null,
+      p_hunger: snapshot.stats.hunger,
+      p_energy: snapshot.stats.energy,
+      p_happiness: snapshot.stats.happiness,
+      p_hygiene: snapshot.stats.hygiene,
+      p_level: snapshot.stats.level,
+      p_xp: snapshot.stats.xp,
+      p_coins: snapshot.stats.coins,
+      p_is_sleeping: snapshot.identity.isSleeping,
+      p_active_ball_id: snapshot.identity.activeBallId,
+      p_active_bed_id: snapshot.identity.activeBedId,
     });
     if (error) throw error;
   },
@@ -178,6 +185,39 @@ export const inventoryPetRepository: PetRepository = {
     });
     if (error) throw error;
     return data as number;
+  },
+
+  async mutateCoins(userId: string, delta: number): Promise<number> {
+    // Atomic coin earn/spend (Phase
+    // SNABBB-SHARED-VIRTUAL-PET-COINS-CONCURRENCY-HARDENING) — a single
+    // `UPDATE ... SET coins = coins + delta` under Postgres's own row
+    // lock, the same pattern mutateInventoryItem uses for items. Fails
+    // (throws) rather than silently clamping when a spend would take
+    // the balance below 0. `auth.uid()` is derived server-side — this
+    // repository has no way to mutate another user's balance even if
+    // `userId` here were wrong.
+    const { data, error } = await supabase.rpc('mutate_pet_coins', {
+      p_delta: delta,
+    });
+    if (error) throw error;
+    return data as number;
+  },
+
+  async purchasePetItem(userId: string, itemId: string, price: number): Promise<{ coins: number; quantity: number }> {
+    // One shop purchase as one transaction (Phase
+    // SNABBB-SHARED-VIRTUAL-PET-COINS-CONCURRENCY-HARDENING): validates
+    // affordability, deducts coins, and grants the item all inside
+    // public.purchase_pet_item, so a purchase can never leave coins
+    // deducted without the item (or vice versa), and two concurrent
+    // purchases can never both succeed against a balance that can only
+    // cover one of them.
+    const { data, error } = await supabase.rpc('purchase_pet_item', {
+      p_item_id: itemId,
+      p_price: price,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return { coins: row.out_coins, quantity: row.out_quantity };
   },
 
   async loadCatalog(): Promise<FoodItem[]> {
