@@ -1,0 +1,38 @@
+-- Phase SHARED-DB-EMAIL-LOGS-RLS-SECURITY-HARDENING
+--
+-- public.email_logs (id, email, subject, status, created_at) has no
+-- user_id/clinic_id/owner column at all — it is a write-only operational
+-- debug log for outbound transactional emails (see send_invite_email's own
+-- "Log the attempt (optional, but good for debugging)" comment), written
+-- exclusively by two SECURITY DEFINER functions owned by `postgres`:
+--   * send_invite_email(p_email, p_subject, p_html)
+--   * invite_collaborator(target_email, target_role, url_origin)
+--     (which calls send_invite_email internally)
+-- Both back the Inventory app's "invite a collaborator" flow (the emailed
+-- HTML is explicitly branded "DentaStock Pro" and references "their
+-- inventory"). No code in this repo, and no other database function,
+-- reads from email_logs — there is no legitimate client (anon or
+-- authenticated) SELECT/INSERT/UPDATE/DELETE path, only this backend
+-- write path.
+--
+-- Runtime-confirmed exposure before this migration: RLS was disabled on
+-- this table, and `SET ROLE anon` / `SET ROLE authenticated` each showed
+-- all rows via a live SELECT — i.e. any unauthenticated API caller could
+-- already read every logged recipient email address and subject line,
+-- and (per existing GRANTs) issue writes/deletes as well.
+--
+-- Fix: enable RLS with NO policies for anon/authenticated. This is safe
+-- specifically because:
+--   * There is no ownership column to build a scoped policy against, so
+--     no USING (true) or invented ownership rule is needed or created.
+--   * Both writer functions are SECURITY DEFINER, owned by `postgres`,
+--     which owns this table — table owners bypass RLS entirely,
+--     regardless of policies, so the invite-email flow is unaffected.
+--   * `service_role` and `team_readonly` both have rolbypassrls = true
+--     (confirmed via pg_roles), so existing service-role backend access
+--     and the team's read-only ops tooling are both unaffected too.
+--   * anon/authenticated are the only roles without BYPASSRLS, and they
+--     have no evidenced legitimate use of this table — enabling RLS with
+--     zero policies for them denies all direct access, which is the
+--     correct behavior, not an oversight.
+alter table public.email_logs enable row level security;
