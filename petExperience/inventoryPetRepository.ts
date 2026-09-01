@@ -220,6 +220,25 @@ export const inventoryPetRepository: PetRepository = {
     return { coins: row.out_coins, quantity: row.out_quantity };
   },
 
+  async addXP(userId: string, delta: number): Promise<{ xp: number; level: number; levelsGained: number; coins: number }> {
+    // Server-authoritative atomic XP/level progression (Phase
+    // SNABBB-SHARED-VIRTUAL-PET-XP-LEVEL-CONCURRENCY-HARDENING):
+    // public.add_pet_xp locks this user's own inventory_pet row, adds
+    // `delta` to the CURRENT server-side xp, and determines the
+    // resulting xp/level/coin-reward from that current value under the
+    // same transaction -- never from a client-supplied final level,
+    // which could be computed from a stale local snapshot. The
+    // threshold/reward rule (100 XP per level, +50 coins per level,
+    // one check per call) is a deliberate exact port of the shared
+    // runtime's own client-side addXP.
+    const { data, error } = await supabase.rpc('add_pet_xp', {
+      p_delta: delta,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return { xp: row.out_xp, level: row.out_level, levelsGained: row.out_levels_gained, coins: row.out_coins };
+  },
+
   async loadCatalog(): Promise<FoodItem[]> {
     const { data, error } = await supabase
       .from('aiboard_pricing_items')
