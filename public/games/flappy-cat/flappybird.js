@@ -317,7 +317,7 @@ function drawHUD() {
     // 1. Setup the Font
     // We scale the font size but keep a minimum size so it's always readable
     const fontSize = Math.max(24, Math.floor(35 * scale));
-    context.font = `${fontSize}px Fredoka`;
+    context.font = `${fontSize}px 'Press Start 2P', Fredoka`;
 
     // 2. Position
     // Center the text horizontally

@@ -104,9 +104,9 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    
+
     /* Font Settings */
-    font-family: 'Fredoka', system-ui, sans-serif;
+    font-family: 'Press Start 2P', 'Fredoka', system-ui, sans-serif;
     font-size: clamp(32px, 6vw, 72px); /* Responsive size */
     letter-spacing: 0.02em; /* Pull letters closer like the logo */
 }
@@ -176,7 +176,7 @@ body {
 }
 
 #start-btn {
-    font-family: 'Fredoka', system-ui, sans-serif;
+    font-family: 'Press Start 2P', 'Fredoka', system-ui, sans-serif;
     font-size: clamp(14px, 3vw, 24px);
     
     /* Text settings */

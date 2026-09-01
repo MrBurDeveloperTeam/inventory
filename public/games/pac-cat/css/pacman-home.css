@@ -24,13 +24,14 @@
 	width: 500px;
 	height: 250px;
 }
-#presentation-titles { 
+#presentation-titles {
 	position: absolute;
 	width: 360px;
 	height: 28px;
 	top: 10px;
 	left: 117px;
 	letter-spacing: 2px;
+	font-family: 'Press Start 2P', 'Fredoka', system-ui, sans-serif;
 	font-size: 20px;
 	text-transform: uppercase;
 	color: #fff;
@@ -63,9 +64,10 @@
 	font-size: 20px;
 	text-transform: uppercase;
 }
-#presentation-name-blinky, #presentation-name-pinky, #presentation-name-inky, #presentation-name-clyde { 
+#presentation-name-blinky, #presentation-name-pinky, #presentation-name-inky, #presentation-name-clyde {
 	left: 310px;
 	width: 180px;
+	font-family: 'Press Start 2P', 'Fredoka', system-ui, sans-serif;
 }
 #presentation-character-blinky, #presentation-name-blinky { 
 	top: 50px;

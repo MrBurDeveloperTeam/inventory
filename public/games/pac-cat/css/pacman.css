@@ -226,9 +226,10 @@ span.combo, span.fruits {
 
 
 
-h1 { 
+h1 {
 	margin: 0px 0px 74px 0px;
 	padding: 0px;
+	font-family: 'Press Start 2P', 'Fredoka', system-ui, sans-serif;
 	font-size: 24px;
 	letter-spacing: 3px;
 	color: #fff;
@@ -305,9 +306,10 @@ h3 {
 	right: auto;
 }
 
-#help h2 { 
+#help h2 {
 	margin: 0px 0px 10px 0px;
 	color: #d43b3b;
+	font-family: 'Press Start 2P', 'Fredoka', system-ui, sans-serif;
 	text-transform: uppercase;
 	font-weight: bold;
 	font-size: 26px;
