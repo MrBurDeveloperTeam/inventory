@@ -373,6 +373,56 @@ const App: React.FC = () => {
   /** Ref always holding the latest TBA virtual room — survives loadInventory resets. */
   const tbaRoomRef = useRef<Room | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+
+  // Phase INVENTORY-CONCURRENT-MUTATION-DIRTY-FLAG-RACE-HARDENING
+  //
+  // isDirty/syncInFlight are shared across every Inventory mutation
+  // path, but were each a plain boolean set true at that mutation's own
+  // start and false at that mutation's own end — independently of
+  // whether any OTHER mutation was still in flight. Confirmed via
+  // direct simulation: if mutation A (fast) and mutation B (slower)
+  // start concurrently, A finishing first unconditionally clears
+  // isDirty to false while B is still running. loadInventory's own
+  // `if (isDirty.current) return;` guard exists specifically to stop a
+  // realtime-triggered reload from overwriting an in-progress
+  // mutation's eventual local state with a stale read — that guard is
+  // exactly what this race defeats: a realtime event landing in the
+  // window between A's finish and B's finish would incorrectly see
+  // isDirty=false and proceed, and if its own reload's setRooms call
+  // lands after B's own reconciliation setRooms, the UI would silently
+  // revert to pre-B state even though B's mutation succeeded.
+  //
+  // Fix: a reference count, not a boolean. isDirty/syncInFlight are
+  // only cleared once the LAST concurrent mutation ends, not whenever
+  // any one of them does — so two (or more) legitimate concurrent
+  // mutations remain fully concurrent (this does NOT serialize them;
+  // it only changes when the shared flags are considered clear).
+  // beginInventoryMutation/endInventoryMutation are the ONE place this
+  // counting logic lives — every mutation path (runInventoryMutation
+  // and the handful of simpler functions that still manage these flags
+  // directly) calls these two functions rather than re-implementing
+  // count tracking itself.
+  const inFlightMutationCountRef = useRef(0);
+  const beginInventoryMutation = () => {
+    inFlightMutationCountRef.current += 1;
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    syncInFlight.current = true;
+    setSyncStatus('syncing');
+  };
+  const endInventoryMutation = (finalStatus: 'synced' | 'error') => {
+    inFlightMutationCountRef.current = Math.max(0, inFlightMutationCountRef.current - 1);
+    // Reflect this mutation's own outcome immediately — matches every
+    // prior phase's existing per-call setSyncStatus behavior exactly,
+    // unchanged. Only isDirty/syncInFlight (the actual realtime-reload
+    // guard) waits for every concurrent mutation to finish.
+    setSyncStatus(finalStatus);
+    if (inFlightMutationCountRef.current === 0) {
+      isDirty.current = false;
+      syncInFlight.current = false;
+    }
+  };
+
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
 
@@ -1444,12 +1494,10 @@ const handleLogout = async () => {
     setRooms(prev => [...prev, newRoom]);
     addActivity(newRoomId, newRoom.name, 'add', `Created "${newRoom.name}"`);
     setIsAddMode(false);
-    isDirty.current = true;
 
     // 2. Direct Persistence
     if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
+      beginInventoryMutation();
       const { error } = await supabase.from('inventory_rooms').insert({
         id: newRoomId,
         user_id: currentInventoryOwnerId,
@@ -1459,12 +1507,10 @@ const handleLogout = async () => {
       });
       if (error) {
         console.error('Failed to persist new room:', error);
-        setSyncStatus('error');
+        endInventoryMutation('error');
       } else {
-        setSyncStatus('synced');
+        endInventoryMutation('synced');
       }
-      isDirty.current = false;
-      syncInFlight.current = false;
     }
     return newRoomId;
   };
@@ -1502,14 +1548,12 @@ const handleLogout = async () => {
         ? `Deleted room "${room.name}" and transferred items to "${targetRoom.name}"`
         : `Deleted room "${room.name}" and archived its items`
     );
-    isDirty.current = true;
 
     // 2. Direct Persistence:
     //    - Update orphaned items' room_id to NULL in Supabase (preserve items)
     //    - Then delete the room
     if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
+      beginInventoryMutation();
       try {
         if (itemAction === 'transfer' && targetRoom) {
           await supabase
@@ -1561,13 +1605,10 @@ const handleLogout = async () => {
           .eq('id', id);
 
         if (error) throw error;
-        setSyncStatus('synced');
+        endInventoryMutation('synced');
       } catch (err) {
         console.error('Failed to delete room:', err);
-        setSyncStatus('error');
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
+        endInventoryMutation('error');
       }
     }
   };
@@ -1583,7 +1624,6 @@ const handleLogout = async () => {
     if (!item || !targetRoom) return;
 
     lastLocalMutation.current = Date.now();
-    isDirty.current = true;
 
     // Optimistic update — move item from TBA to target room
     setRooms(prev => prev
@@ -1607,8 +1647,7 @@ const handleLogout = async () => {
 
     // Persist
     if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
+      beginInventoryMutation();
       try {
         const { error } = await supabase
           .from('inventory_items')
@@ -1628,13 +1667,10 @@ const handleLogout = async () => {
             expiry_date: item.expiryDate,
           });
         if (error) throw error;
-        setSyncStatus('synced');
+        endInventoryMutation('synced');
       } catch (err) {
         console.error('assignTbaItemToRoom: failed to persist', err);
-        setSyncStatus('error');
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
+        endInventoryMutation('error');
       }
     }
   };
@@ -1647,9 +1683,7 @@ const handleLogout = async () => {
     if (!currentInventoryOwnerId) return;
 
     lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    setSyncStatus('syncing');
-    syncInFlight.current = true;
+    beginInventoryMutation();
 
     try {
       // 1. Create the room in Supabase directly (bypass addRoom to keep isDirty locked)
@@ -1754,13 +1788,10 @@ const handleLogout = async () => {
         );
       }
 
-      setSyncStatus('synced');
+      endInventoryMutation('synced');
     } catch (err) {
       console.error('restoreRoom failed:', err);
-      setSyncStatus('error');
-    } finally {
-      isDirty.current = false;
-      syncInFlight.current = false;
+      endInventoryMutation('error');
     }
   };
 
@@ -1791,7 +1822,7 @@ const handleLogout = async () => {
 
     // Direct Persistence
     if (currentInventoryOwnerId) {
-      syncInFlight.current = true;
+      beginInventoryMutation();
       const { error } = await supabase.from('inventory_activity_logs').insert({
         id: newLogId,
         user_id: currentInventoryOwnerId,
@@ -1805,7 +1836,7 @@ const handleLogout = async () => {
         after_value: options?.afterValue || null
       });
       if (error) console.error('Failed to persist activity log:', error);
-      syncInFlight.current = false;
+      endInventoryMutation(error ? 'error' : 'synced');
     }
   };
 
@@ -1820,21 +1851,18 @@ const handleLogout = async () => {
       addActivity(id, name, 'edit', `Renamed room "${oldName}" to "${name}"`, { beforeValue: oldName, afterValue: name });
     }
     if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
+      beginInventoryMutation();
       const { error } = await supabase.from('inventory_rooms').update({ name }).eq('id', id);
-      if (error) { console.error('Failed to update room name in DB:', error); setSyncStatus('error'); }
-      else { setSyncStatus('synced'); }
-      syncInFlight.current = false;
+      if (error) console.error('Failed to update room name in DB:', error);
+      endInventoryMutation(error ? 'error' : 'synced');
     }
   };
 
   const updateRoomPosition = async (id: string, x: number, y: number) => {
     lastLocalMutation.current = Date.now();
-    isDirty.current = true;
 
     if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
+      beginInventoryMutation();
       try {
         console.log(`Updating position for room ${id} to (${x}, ${y})`);
         // await api.patch('/inventory/rooms/position', { id, pos_x: x, pos_y: y }).catch(async err => {
@@ -1842,12 +1870,10 @@ const handleLogout = async () => {
           .from('inventory_rooms')
           .update({ pos_x: x, pos_y: y })
           .eq('id', id);
-        setSyncStatus('synced');
+        endInventoryMutation('synced');
       } catch (err) {
         console.error('Failed to update room position in DB:', err);
-        setSyncStatus('error');
-      } finally {
-        isDirty.current = false;
+        endInventoryMutation('error');
       }
     }
   };
@@ -2032,9 +2058,7 @@ const handleLogout = async () => {
     // the next begins. No raw table upserts remain in this path, and
     // local state is only mutated after every RPC call has succeeded.
     lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    setSyncStatus('syncing');
-    syncInFlight.current = true;
+    beginInventoryMutation();
 
     const affectedItemIds = new Set<string>();
     const historyEntries: PurchaseHistory[] = [];
@@ -2103,9 +2127,7 @@ const handleLogout = async () => {
       // caller knows to retry (with the SAME itemKeys, so already-
       // committed items resolve via idempotency instead of repeating)".
       console.error('receiveStockBatch: failed to persist items', err);
-      setSyncStatus('error');
-      isDirty.current = false;
-      syncInFlight.current = false;
+      endInventoryMutation('error');
       throw err;
     }
 
@@ -2154,14 +2176,11 @@ const handleLogout = async () => {
         setHistory(h => [...historyEntries, ...h]);
       }
 
-      setSyncStatus('synced');
+      endInventoryMutation('synced');
     } catch (err) {
       console.error('receiveStockBatch: all items committed, but reconciliation failed:', err);
-      setSyncStatus('error');
+      endInventoryMutation('error');
       throw err;
-    } finally {
-      isDirty.current = false;
-      syncInFlight.current = false;
     }
   };
 
@@ -2177,7 +2196,6 @@ const handleLogout = async () => {
     }
 
     lastLocalMutation.current = Date.now();
-    isDirty.current = true;
     let affectedItemToSync: Item | null = null;
     let roomNameForLog = '';
 
@@ -2185,7 +2203,6 @@ const handleLogout = async () => {
     const room = rooms.find(r => r.id === roomId);
     if (!room) {
       console.error('Room not found:', roomId);
-      isDirty.current = false;
       return;
     }
 
@@ -2197,13 +2214,11 @@ const handleLogout = async () => {
 
     if (!existingItem) {
       console.error('Item not found:', itemName);
-      isDirty.current = false;
       return;
     }
 
     if (existingItem.quantity < qty) {
       console.error('Insufficient quantity. Available:', existingItem.quantity, 'Requested:', qty);
-      isDirty.current = false;
       return;
     }
 
@@ -2269,8 +2284,7 @@ const handleLogout = async () => {
 
     // 4. Direct Persistence
     if (affectedItemToSync && currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
+      beginInventoryMutation();
       try {
         const itm = affectedItemToSync as Item;
 
@@ -2305,16 +2319,13 @@ const handleLogout = async () => {
           }
         }
 
-        setSyncStatus('synced');
+        endInventoryMutation('synced');
       } catch (err) {
         console.error('Failed to persist removed stock:', err);
-        setSyncStatus('error');
+        endInventoryMutation('error');
         // See receiveStock's identical comment — durable-save failure must
         // be observable by the caller instead of swallowed.
         throw err;
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
       }
     }
   };
@@ -2456,19 +2467,14 @@ const handleLogout = async () => {
   }): Promise<T> => {
     const { errorLabel, fingerprint, explicitKey, mutate, reconcile } = opts;
 
-    lastLocalMutation.current = Date.now();
-    isDirty.current = true;
-    setSyncStatus('syncing');
-    syncInFlight.current = true;
+    beginInventoryMutation();
 
     let result: T;
     try {
       result = await resolveAndTrackActionKey(fingerprint, explicitKey, mutate);
     } catch (err) {
       console.error(`Failed to ${errorLabel}:`, err);
-      setSyncStatus('error');
-      isDirty.current = false;
-      syncInFlight.current = false;
+      endInventoryMutation('error');
       throw err;
     }
 
@@ -2478,15 +2484,12 @@ const handleLogout = async () => {
     // second call to `mutate`.
     try {
       await reconcile(result);
-      setSyncStatus('synced');
+      endInventoryMutation('synced');
       return result;
     } catch (err) {
       console.error(`${errorLabel} committed, but reconciliation failed:`, err);
-      setSyncStatus('error');
+      endInventoryMutation('error');
       throw err;
-    } finally {
-      isDirty.current = false;
-      syncInFlight.current = false;
     }
   };
 
@@ -2585,11 +2588,9 @@ const handleLogout = async () => {
 
   const updateItemMetadata = async (roomId: string, itemId: string, itemData: Partial<Item>) => {
     lastLocalMutation.current = Date.now();
-    isDirty.current = true;
     const room = rooms.find(r => r.id === roomId);
     const item = room?.items.find(i => i.id === itemId);
     if (!room || !item) {
-      isDirty.current = false;
       return;
     }
 
@@ -2630,8 +2631,7 @@ const handleLogout = async () => {
     addActivity(roomId, room.name, 'edit', `Updated details for "${item.name}"`);
 
     if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
+      beginInventoryMutation();
       try {
         // 1. Update main item
         const { error } = await supabase.from('inventory_items').update({
@@ -2660,16 +2660,11 @@ const handleLogout = async () => {
           });
         }
 
-        setSyncStatus('synced');
+        endInventoryMutation('synced');
       } catch (err) {
         console.error('Failed to update item metadata:', err);
-        setSyncStatus('error');
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
+        endInventoryMutation('error');
       }
-    } else {
-      isDirty.current = false;
     }
   };
 
@@ -2712,7 +2707,6 @@ const handleLogout = async () => {
 
   const deleteItem = async (roomId: string, itemId: string) => {
     lastLocalMutation.current = Date.now();
-    isDirty.current = true;
     let roomName = '';
     let itemName = '';
     let beforeQty = '0';
@@ -2741,8 +2735,7 @@ const handleLogout = async () => {
     }
 
     if (currentInventoryOwnerId) {
-      setSyncStatus('syncing');
-      syncInFlight.current = true;
+      beginInventoryMutation();
       try {
         if (archivedHistoryIds.length > 0) {
           const { error: historyErr } = await supabase
@@ -2755,18 +2748,15 @@ const handleLogout = async () => {
 
         const { error } = await supabase.from('inventory_items').delete().eq('id', itemId);
         if (error) throw error;
-        setSyncStatus('synced');
+        endInventoryMutation('synced');
       } catch (err) {
         console.error('Failed to delete item:', err);
-        setSyncStatus('error');
+        endInventoryMutation('error');
         // Naturally retry-safe (history archive is an idempotent SET,
         // the item delete cascades batches via an existing FK and is a
         // no-op if already gone) — surfacing the failure just lets a
         // caller distinguish it, matching every other mutation path.
         throw err;
-      } finally {
-        isDirty.current = false;
-        syncInFlight.current = false;
       }
     }
   };
