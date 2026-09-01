@@ -64,31 +64,40 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const bulkTransferConfirmInFlightRef = useRef(false);
   const excelImportInFlightRef = useRef(false);
   const ocrImportInFlightRef = useRef(false);
-  // Phase INVENTORY-FAILED-SAVE-RETRY-AND-RECONCILIATION-RECOVERY-
-  // HARDENING: stable per-item idempotency keys for one parent
-  // multi-item submission. Generated once on the FIRST attempt and
-  // reused unchanged on a retry of the SAME item count, so items that
-  // already committed on a failed prior attempt resolve via the
-  // server's idempotency claim instead of being received again.
-  // Regenerated whenever the item count changes. This correctly fixes
-  // the phase's core scenario — an UNEDITED retry after a mutation
-  // failure (network blip, one row rejected) — since items that
-  // already committed resolve via the server's idempotency claim
-  // instead of repeating. It is a KNOWN, DISCLOSED gap for the case
-  // where a user removes/adds a row between attempts: all keys
-  // regenerate (length changed), so already-committed rows would be
-  // received again rather than just the genuinely-new remainder. Doing
-  // this correctly needs a stable per-row identity independent of
-  // array position, which excelPreviewData/ocrResult rows don't carry
-  // today — out of this phase's scope, tracked in the Final Report
-  // rather than silently left unhandled.
-  const excelImportKeysRef = useRef<string[] | null>(null);
-  const ocrImportKeysRef = useRef<string[] | null>(null);
-  const getStableKeys = (ref: React.MutableRefObject<string[] | null>, count: number): string[] => {
-    if (!ref.current || ref.current.length !== count) {
-      ref.current = Array.from({ length: count }, () => crypto.randomUUID());
-    }
-    return ref.current;
+  // Phase INVENTORY-MULTIITEM-ROW-IDENTITY-HARDENING: stable per-ROW
+  // idempotency keys for one parent multi-item submission, keyed by
+  // each row's own client-only `_rowId` (assigned once when the row is
+  // created — see the two parse handlers and the two "+ Add Item"
+  // buttons below) rather than by array position. This closes the
+  // exact gap the prior length-based tracker left open: array index
+  // is never used as identity, so editing one row no longer forces
+  // every OTHER row (including already-committed ones) to regenerate
+  // its key. A row's key is reused only when BOTH its rowId AND its
+  // current semantic payload fingerprint match what was recorded for
+  // that same rowId last time; if the fingerprint differs (the row was
+  // edited), a fresh key is minted for that row alone. Removing a row
+  // simply stops referencing its map entry (its retry state is never
+  // looked at again); reordering never touches this map at all, since
+  // it's keyed by rowId, not position.
+  const excelRowKeysRef = useRef<Map<string, { fingerprint: string; key: string }>>(new Map());
+  const ocrRowKeysRef = useRef<Map<string, { fingerprint: string; key: string }>>(new Map());
+  type ImportRow = Partial<Item> & { purchaseDate?: string; quantity?: number; price?: number; _rowId?: string };
+  const withRowId = (row: ImportRow): ImportRow => ({ ...row, _rowId: row._rowId || crypto.randomUUID() });
+  // Mirrors App.tsx's receiveStock fingerprint fields exactly (room is
+  // constant across one import session, so it's included for parity
+  // but never varies within a single submit).
+  const buildRowFingerprint = (row: ImportRow, roomId: string): string =>
+    `receive:${roomId}:${row.name}:${row.brand}:${row.code}:${row.quantity ?? 1}:${row.price ?? 0}:${row.uom}:${row.vendor}:${row.category}:${row.description}:${row.expiryDate}:${row.purchaseDate}:false`;
+  const getRowKey = (
+    ref: React.MutableRefObject<Map<string, { fingerprint: string; key: string }>>,
+    rowId: string,
+    fingerprint: string
+  ): string => {
+    const existing = ref.current.get(rowId);
+    if (existing && existing.fingerprint === fingerprint) return existing.key;
+    const key = crypto.randomUUID();
+    ref.current.set(rowId, { fingerprint, key });
+    return key;
   };
 
   const [isReceiving, setIsReceiving] = useState(false);
@@ -394,7 +403,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
           message: 'The Excel file did not contain valid rows. Please include at least Product and Quantity columns.'
         });
       } else {
-        setExcelPreviewData(parsedItems);
+        setExcelPreviewData(parsedItems.map(withRowId));
         setIsExcelPreviewActive(true);
       }
     } catch (err) {
@@ -493,7 +502,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
         description: i.description || ''
       }));
 
-      setOcrResult(parsed);
+      setOcrResult(parsed.map(withRowId));
       setOcrStep('review');
     } catch (err) {
       console.error(err);
@@ -913,10 +922,32 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                       if (excelImportInFlightRef.current) return;
                       excelImportInFlightRef.current = true;
                       try {
-                        const keys = getStableKeys(excelImportKeysRef, excelPreviewData.length);
-                        for (let i = 0; i < excelPreviewData.length; i++) {
-                          const item = excelPreviewData[i];
+                        // Captured once so the fingerprint used for key
+                        // resolution matches exactly what's sent to the
+                        // RPC below, and stays stable across a same-day
+                        // retry of an unedited row.
+                        const purchaseDate = new Date().toISOString().split('T')[0];
+                        const rowIds: string[] = [];
+                        for (const item of excelPreviewData) {
                           if (item.name) {
+                            const row: ImportRow = { ...item, purchaseDate };
+                            const rowId = row._rowId || crypto.randomUUID();
+                            rowIds.push(rowId);
+                            const key = getRowKey(excelRowKeysRef, rowId, buildRowFingerprint(row, room.id));
+                            // IMPORTANT: this row's key entry is NOT
+                            // removed here, even though this call just
+                            // succeeded. If a LATER row in this same loop
+                            // fails, the whole submission throws and the
+                            // user retries the unedited list from the
+                            // top — this row must still resolve to the
+                            // SAME key so the server's idempotency claim
+                            // recognizes it as already-committed instead
+                            // of receiving it a second time. Entries are
+                            // only dropped once the ENTIRE submission
+                            // succeeds (below) or naturally become
+                            // unreachable once excelPreviewData is
+                            // cleared and this row's rowId is never
+                            // referenced again.
                             await onReceive(
                               room.id,
                               {
@@ -931,26 +962,29 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                               },
                               item.quantity || 1,
                               item.price || 0,
-                              new Date().toISOString().split('T')[0],
+                              purchaseDate,
                               item.expiryDate || undefined,
                               false,
-                              keys[i]
+                              key
                             );
                           }
                         }
-                        // Genuine success — this submission is complete;
-                        // any future submission is a new logical action.
-                        excelImportKeysRef.current = null;
+                        // Genuine success — every row in THIS submission
+                        // committed, so their retry state can be dropped.
+                        rowIds.forEach(id => excelRowKeysRef.current.delete(id));
                         setIsExcelPreviewActive(false);
                         setExcelPreviewData([]);
                       } catch (err) {
                         console.error('RoomModal: Excel import failed', err);
-                        // Deliberately do NOT clear excelImportKeysRef or
-                        // excelPreviewData here — a retry of this same
-                        // unedited list reuses the same keys, so items
-                        // that already committed resolve via the
-                        // server's idempotency claim instead of being
-                        // received again.
+                        // Deliberately do NOT clear excelPreviewData or
+                        // any excelRowKeysRef entries here — a retry of
+                        // this same unedited list reuses every row's
+                        // recorded key (including rows that already
+                        // committed this attempt, per the comment above:
+                        // the server resolves those via its idempotency
+                        // claim rather than receiving them again), and
+                        // an edited row gets a fresh key because its
+                        // fingerprint no longer matches.
                       } finally {
                         excelImportInFlightRef.current = false;
                       }
@@ -1295,7 +1329,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                         </div>
                       ))}
                       <button
-                        onClick={() => setOcrResult([...ocrResult, { name: '', quantity: 1, price: 0, purchaseDate: new Date().toISOString().split('T')[0] }])}
+                        onClick={() => setOcrResult([...ocrResult, withRowId({ name: '', quantity: 1, price: 0, purchaseDate: new Date().toISOString().split('T')[0] })])}
                         className="w-full py-4 bg-emerald-50 text-emerald-600 border-2 border-dashed border-emerald-200 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-100 transition-all flex items-center justify-center gap-2"
                       >
                         <Plus className="w-4 h-4" /> Add Another Item
@@ -1479,7 +1513,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                         </tbody>
                       </table>
                       <button
-                        onClick={() => setOcrResult([...ocrResult, { name: '', quantity: 1, price: 0, purchaseDate: new Date().toISOString().split('T')[0] }])}
+                        onClick={() => setOcrResult([...ocrResult, withRowId({ name: '', quantity: 1, price: 0, purchaseDate: new Date().toISOString().split('T')[0] })])}
                         className="w-full py-2 text-[10px] font-bold text-emerald-600 hover:bg-emerald-50 border-t border-slate-100 uppercase tracking-widest transition-colors"
                       >
                         + Add Item
@@ -1498,7 +1532,15 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                         if (ocrImportInFlightRef.current) return;
                         ocrImportInFlightRef.current = true;
                         try {
-                          const keys = getStableKeys(ocrImportKeysRef, validItems.length);
+                          // Captured once so every row's fingerprint is
+                          // consistent within this submission and stable
+                          // across a same-day retry of an unedited row.
+                          const purchaseDateFallback = new Date().toISOString().split('T')[0];
+                          const rowIds = validItems.map(item => item._rowId || crypto.randomUUID());
+                          const keys = validItems.map((item, i) => {
+                            const row: ImportRow = { ...item, purchaseDate: item.purchaseDate || purchaseDateFallback };
+                            return getRowKey(ocrRowKeysRef, rowIds[i], buildRowFingerprint(row, room.id));
+                          });
                           if (onReceiveBatch) {
                             // Single batched call — isDirty stays true until ALL items are persisted
                             await onReceiveBatch(
@@ -1546,17 +1588,29 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                               );
                             }
                           }
-                          // Genuine success — new future submissions are new
-                          // logical actions and get fresh keys.
-                          ocrImportKeysRef.current = null;
+                          // Genuine success — every row committed, so
+                          // their retry state is no longer needed.
+                          rowIds.forEach(id => ocrRowKeysRef.current.delete(id));
                           setOcrStep('upload');
                           setIsOCRActive(false);
                         } catch (err) {
                           console.error('RoomModal: OCR batch receive failed', err);
-                          // Deliberately do NOT clear ocrImportKeysRef or
-                          // ocrResult — see the identical Excel-import
-                          // comment above for the retry-safety rationale
-                          // and its disclosed edit-between-attempts gap.
+                          // Deliberately do NOT clear ocrResult or any
+                          // remaining ocrRowKeysRef entries here — a
+                          // retry of this same unedited list reuses each
+                          // row's recorded key; an edited row gets a
+                          // fresh key because its fingerprint no longer
+                          // matches. Note: unlike the sequential Excel
+                          // (and the individual-call fallback here)
+                          // path, the onReceiveBatch path cannot tell
+                          // which individual rows within the batch RPC
+                          // committed before a mid-batch failure, so all
+                          // rowIds are conservatively retained on
+                          // failure rather than selectively cleared —
+                          // safe either way, since a stale retained key
+                          // for an already-committed row just resolves
+                          // via the server's idempotency claim instead
+                          // of mutating again.
                         } finally {
                           ocrImportInFlightRef.current = false;
                         }
