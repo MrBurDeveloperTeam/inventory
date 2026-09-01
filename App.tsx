@@ -3204,12 +3204,12 @@ const handleLogout = async () => {
                 rooms={rooms}
                 history={history}
                 logs={logs}
-                onReceive={(rid, data, q, p, date, exp, createNewBatch, idempotencyKey) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return receiveStock(rid, data, q, p, date, exp, createNewBatch, idempotencyKey).catch((err) => { console.error('Manual receive stock failed:', err); throw err; }); }}
+                onReceive={(rid, data, q, p, date, exp, createNewBatch, idempotencyKey) => { lastLocalMutation.current = Date.now(); return receiveStock(rid, data, q, p, date, exp, createNewBatch, idempotencyKey).catch((err) => { console.error('Manual receive stock failed:', err); throw err; }); }}
                 onUpdateQty={(rid, iid, d) => { updateItemQty(rid, iid, d).catch((err) => { console.error('Manual quantity adjust failed:', err); }); }}
                 onUpdateBatchQty={(rid, iid, bidx, d) => { updateItemBatchQty(rid, iid, bidx, d).catch((err) => { console.error('Manual batch quantity adjust failed:', err); }); }}
-                onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
+                onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
                 onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
-                onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
+                onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); }); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
@@ -3236,14 +3236,14 @@ const handleLogout = async () => {
           allRooms={rooms}
           logs={logs.filter(l => l.roomId === activeRoomId)}
           onClose={() => setActiveRoomId(null)}
-          onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateRoomName(id, name); }}
-          onReceive={(rid, data, q, p, date, exp, createNewBatch, idempotencyKey) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return receiveStock(rid, data, q, p, date, exp, createNewBatch, idempotencyKey).catch((err) => { console.error('Manual receive stock failed:', err); throw err; }); }}
+          onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); updateRoomName(id, name); }}
+          onReceive={(rid, data, q, p, date, exp, createNewBatch, idempotencyKey) => { lastLocalMutation.current = Date.now(); return receiveStock(rid, data, q, p, date, exp, createNewBatch, idempotencyKey).catch((err) => { console.error('Manual receive stock failed:', err); throw err; }); }}
           onReceiveBatch={(rid, items, itemKeys) => receiveStockBatch(rid, items, itemKeys).catch((err) => { console.error('Manual receive stock batch failed:', err); })}
-          onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
-          onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
-          onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
+          onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); updateItemQty(rid, iid, d); }}
+          onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); updateItemBatchQty(rid, iid, bidx, d); }}
+          onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); return moveItem(frid, trid, iid, q).catch((err) => { console.error('Manual transfer stock failed:', err); throw err; }); }}
           onDeleteItem={(rid, iid) => { deleteItem(rid, iid).catch((err) => { console.error('Manual item delete failed:', err); }); }}
-          onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
+          onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); updateItemMetadata(rid, iid, data); }}
           onUpdateBatch={(rid, iid, bid, data) => { updateBatchMetadata(rid, iid, bid, data).catch((err) => { console.error('Manual batch metadata update failed:', err); }); }}
           readOnly={!canEditItems}
         />
