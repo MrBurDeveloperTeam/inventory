@@ -160,6 +160,26 @@ export const inventoryPetRepository: PetRepository = {
     if (error) throw error;
   },
 
+  async mutateInventoryItem(userId: string, itemId: string, delta: number): Promise<number> {
+    // Atomic, item-level increment/decrement (Phase
+    // SNABBB-SHARED-VIRTUAL-PET-CROSS-APP-CONCURRENCY-HARDENING) — the
+    // narrow persistence path SharedPetRuntime now uses for buyItem/
+    // consumeItem instead of the full-list saveInventory above. See
+    // public.mutate_pet_inventory_item's own definition: a single
+    // `UPDATE ... SET quantity = quantity + delta` under Postgres's own
+    // row lock, so concurrent calls for the SAME item from another
+    // app/tab never lose an update, and calls for a DIFFERENT item
+    // never contend at all (they touch a different row). `auth.uid()`
+    // is derived server-side — this repository has no way to mutate
+    // another user's inventory even if `userId` here were wrong.
+    const { data, error } = await supabase.rpc('mutate_pet_inventory_item', {
+      p_item_id: itemId,
+      p_delta: delta,
+    });
+    if (error) throw error;
+    return data as number;
+  },
+
   async loadCatalog(): Promise<FoodItem[]> {
     const { data, error } = await supabase
       .from('aiboard_pricing_items')
