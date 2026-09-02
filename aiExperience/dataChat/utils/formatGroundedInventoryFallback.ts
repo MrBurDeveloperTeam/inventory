@@ -10,6 +10,7 @@
 
 import type { InventoryDataIntent } from '../contracts/groundedDataResult';
 import type { ExpiredDataFacts } from '../providers/expiredDataProvider';
+import type { OutOfStockDataFacts } from '../providers/outOfStockDataProvider';
 import type { LowStockDataFacts } from '../providers/lowStockDataProvider';
 import type { ExpiringSoonDataFacts } from '../providers/expiringSoonDataProvider';
 import type { SummaryDataFacts } from '../providers/summaryDataProvider';
@@ -26,6 +27,12 @@ function formatExpired(facts: ExpiredDataFacts): string {
   if (facts.count === 0) return 'No expired inventory items were found.';
   const lines = facts.items.map((item) => `${item.itemName} (${item.roomName}) — expired ${item.expiryDate}`);
   return `You have ${pluralize(facts.count, 'expired inventory item')}.${truncationNote(facts.count, facts.shownCount)}\n${lines.join('\n')}`;
+}
+
+function formatOutOfStock(facts: OutOfStockDataFacts): string {
+  if (facts.count === 0) return 'No out-of-stock inventory items were found.';
+  const lines = facts.items.map((item) => `${item.itemName} (${item.roomName})`);
+  return `You have ${pluralize(facts.count, 'out-of-stock inventory item')}.${truncationNote(facts.count, facts.shownCount)}\n${lines.join('\n')}`;
 }
 
 function formatLowStock(facts: LowStockDataFacts): string {
@@ -56,6 +63,8 @@ export function formatGroundedInventoryFallback(intent: InventoryDataIntent, fac
   switch (intent) {
     case 'inventory_expired':
       return formatExpired(facts as ExpiredDataFacts);
+    case 'inventory_out_of_stock':
+      return formatOutOfStock(facts as OutOfStockDataFacts);
     case 'inventory_low_stock':
       return formatLowStock(facts as LowStockDataFacts);
     case 'inventory_expiring_soon':

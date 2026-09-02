@@ -63,6 +63,7 @@ import { classifyItem } from '../../providers/inventorySummaryProvider';
 import { buildRoomNameLookup } from '../utils/dataChatHelpers';
 import { hasMalformedExpiryData } from '../utils/checkMalformedExpiry';
 import { buildExpiredDataFacts } from '../providers/expiredDataProvider';
+import { buildOutOfStockDataFacts } from '../providers/outOfStockDataProvider';
 import { buildLowStockDataFacts } from '../providers/lowStockDataProvider';
 import { buildExpiringSoonDataFacts } from '../providers/expiringSoonDataProvider';
 import { buildSummaryDataFacts } from '../providers/summaryDataProvider';
@@ -118,6 +119,16 @@ export function resolveInventoryDataQuery(
           // genuinely globally unique across every room, not merely
           // "unique within its own nested TS array" — no composite
           // room+item+batch id is needed for traceability.
+          sourceRecordIds: facts.items.map((item) => item.itemId),
+        };
+      }
+      case 'inventory_out_of_stock': {
+        const facts = buildOutOfStockDataFacts(snapshot, roomNames);
+        return {
+          status: 'ok',
+          intent,
+          facts,
+          evaluatedAt,
           sourceRecordIds: facts.items.map((item) => item.itemId),
         };
       }

@@ -16,6 +16,7 @@ import type { InventoryDataIntent } from '../contracts/groundedDataResult';
  *  iteration order. */
 const INTENT_PRIORITY: InventoryDataIntent[] = [
   'inventory_expired',
+  'inventory_out_of_stock',
   'inventory_low_stock',
   'inventory_expiring_soon',
   'inventory_summary',
@@ -29,6 +30,14 @@ const INTENT_KEYWORDS: Record<InventoryDataIntent, string[]> = {
     'expired items',
     'expired stock',
     'expired',
+  ],
+  inventory_out_of_stock: [
+    'which items are out of stock',
+    'what is out of stock',
+    'out of stock items',
+    'out of stock',
+    'zero stock',
+    'no stock left',
   ],
   inventory_low_stock: [
     'what is low in stock',

@@ -9,6 +9,7 @@
 
 export type InventoryDataIntent =
   | 'inventory_expired'
+  | 'inventory_out_of_stock'
   | 'inventory_low_stock'
   | 'inventory_expiring_soon'
   | 'inventory_summary';
