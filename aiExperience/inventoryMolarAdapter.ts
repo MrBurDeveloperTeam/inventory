@@ -28,7 +28,17 @@ import { formatGroundedInventoryFallback } from './dataChat/utils/formatGrounded
 import { buildUnsupportedParameterMessage } from './dataChat/utils/unsupportedParameterMessage';
 import { parseInventoryActionProposal } from './inventoryConfirmedActionParser';
 import { resolveInventoryFollowUp } from './dataChat/router/resolveInventoryFollowUp';
+import { matchInventoryCapability } from './dataChat/semantic/matchInventoryCapability';
 import type { GroundedConversationContext } from './dataChat/context/groundedConversationContext';
+import type { InventoryDataIntent } from './dataChat/contracts/groundedDataResult';
+
+const CLARIFICATION_LABEL: Record<InventoryDataIntent, string> = {
+  inventory_expired: 'expired items',
+  inventory_out_of_stock: 'out-of-stock items',
+  inventory_low_stock: 'low-stock items',
+  inventory_expiring_soon: 'items expiring soon',
+  inventory_summary: 'an inventory summary',
+};
 
 interface CreateInventoryMolarAdapterDeps {
   rooms: Room[];
@@ -131,6 +141,36 @@ export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDep
   // dataChat/context/groundedConversationContext.ts's header).
   let groundedContext: GroundedConversationContext | null = null;
 
+  // Shared by the fast-path classifier match AND the semantic capability
+  // matcher below — a matched capability executes identically regardless
+  // of which tier selected it.
+  async function executeGroundedIntent(intent: InventoryDataIntent, userMsg: string): Promise<AIResponse> {
+    const result = resolveInventoryDataQuery(intent, rooms, isLoadingMain);
+
+    let dataChatResponseText: string;
+    if (result.status === 'unavailable') {
+      dataChatResponseText = "I couldn't check your inventory data right now.";
+    } else {
+      try {
+        dataChatResponseText = await chatWithGroundedInventoryFacts(userMsg, result.intent, result.facts);
+      } catch (groundedErr) {
+        console.error('Grounded inventory response failed:', groundedErr);
+        dataChatResponseText = formatGroundedInventoryFallback(result.intent, result.facts);
+      }
+    }
+
+    groundedContext = {
+      appId: 'inventory',
+      lastIntent: intent,
+      presentedOrder: 'display',
+      lastUserQuestion: userMsg,
+      generation: (groundedContext?.generation ?? 0) + 1,
+      createdAt: new Date().toISOString(),
+    };
+
+    return { text: dataChatResponseText };
+  }
+
   return {
     reset() {
       groundedContext = null;
@@ -183,42 +223,7 @@ export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDep
 
       // 2b. Approved standard data intent -> grounded provider -> grounded response.
       if (dataRoute.kind === 'matched') {
-        const result = resolveInventoryDataQuery(dataRoute.intent, rooms, isLoadingMain);
-
-        let dataChatResponseText: string;
-        if (result.status === 'unavailable') {
-          // Unknown/unavailable inventory state is never reinterpreted as a
-          // zero-result answer — a matched grounded intent owns this
-          // request even when its provider is temporarily unavailable; it
-          // does not fall through to General Chat.
-          dataChatResponseText = "I couldn't check your inventory data right now.";
-        } else {
-          try {
-            // 3. Grounded Gemini phrasing — receives ONLY the question, the
-            // approved intent, and the already-minimized facts. Plain text
-            // only; never scanned for `<ACTION>` blocks.
-            dataChatResponseText = await chatWithGroundedInventoryFacts(userMsg, result.intent, result.facts);
-          } catch (groundedErr) {
-            // Mandatory deterministic fallback — never falls through to
-            // General Chat on a Gemini failure at this stage.
-            console.error('Grounded inventory response failed:', groundedErr);
-            dataChatResponseText = formatGroundedInventoryFallback(result.intent, result.facts);
-          }
-        }
-
-        // A new explicit grounded question always starts a fresh
-        // conversation context, never merged with whatever was active
-        // before.
-        groundedContext = {
-          appId: 'inventory',
-          lastIntent: dataRoute.intent,
-          presentedOrder: 'display',
-          lastUserQuestion: userMsg,
-          generation: (groundedContext?.generation ?? 0) + 1,
-          createdAt: new Date().toISOString(),
-        };
-
-        return { text: dataChatResponseText };
+        return executeGroundedIntent(dataRoute.intent, userMsg);
       }
 
       // ── Tier C: Grounded conversational follow-up ─────────────────────
@@ -236,6 +241,21 @@ export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDep
           generation: groundedContext.generation + 1,
         };
         return { text: followUp.text };
+      }
+
+      // ── Tier D: Semantic capability router ─────────────────────────────
+      // Local, network-free keyword-overlap matcher over the capability
+      // registry (see semantic/matchInventoryCapability.ts) — an
+      // optimization/compatibility fast-path already exists above; this
+      // catches genuinely novel phrasing without needing a Gemini call or
+      // live inventory data.
+      const semanticRoute = matchInventoryCapability(userMsg);
+      if (semanticRoute.type === 'grounded_capability') {
+        return executeGroundedIntent(semanticRoute.capability, userMsg);
+      }
+      if (semanticRoute.type === 'clarification') {
+        const [a, b] = semanticRoute.candidates;
+        return { text: `Do you mean ${CLARIFICATION_LABEL[a]} or ${CLARIFICATION_LABEL[b]}?` };
       }
       // ── End Phase-3 Data-Driven Chat ──────────────────────────────────
 
