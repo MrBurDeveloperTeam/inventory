@@ -122,3 +122,53 @@ export const chatWithGroundedInventoryFacts = async (
   const { text } = await invokeMolarChatInventory({ mode: 'grounded', question, intent, facts });
   return text;
 };
+
+// ─────────────────────────────────────────────────────────────
+// SEMANTIC CAPABILITY ROUTING — selection only, never data.
+//
+// Calls the Edge Function's "capability_route" mode: the message, a
+// small set of {id, description} capability descriptors, a few recent
+// model-safe conversation turns, and the previously-selected capability
+// id (if any). The Edge Function NEVER sees an inventory row and
+// returns structured JSON, already validated server-side against the
+// supplied capability id allowlist.
+//
+// THROWS on any failure exactly like chatWithGroundedInventoryFacts —
+// the caller (see dataChat/semantic/matchInventoryCapabilityLLM.ts)
+// must fall back to the local keyword capability matcher on any throw.
+export interface CapabilityRouteResult {
+  route: 'grounded' | 'general_chat' | 'clarification';
+  capability: string | null;
+  confidence: 'high' | 'low';
+  clarification: string | null;
+}
+
+interface CapabilityDescriptor {
+  id: string;
+  description: string;
+}
+
+export const routeInventoryCapability = async (
+  message: string,
+  capabilities: CapabilityDescriptor[],
+  recentContext: string[],
+  previousCapability: string | null,
+): Promise<CapabilityRouteResult> => {
+  const data = await invokeMolarChatInventory({
+    mode: 'capability_route',
+    message,
+    capabilities,
+    recentContext,
+    previousCapability,
+  });
+
+  const { route, capability, confidence, clarification } = data as CapabilityRouteResult;
+  if (route !== 'grounded' && route !== 'general_chat' && route !== 'clarification') {
+    throw new Error('Capability routing returned an unsupported route');
+  }
+  if (confidence !== 'high' && confidence !== 'low') {
+    throw new Error('Capability routing returned an invalid confidence');
+  }
+
+  return { route, capability: route === 'grounded' ? capability : null, confidence, clarification: clarification ?? null };
+};

@@ -29,6 +29,7 @@ import { buildUnsupportedParameterMessage } from './dataChat/utils/unsupportedPa
 import { parseInventoryActionProposal } from './inventoryConfirmedActionParser';
 import { resolveInventoryFollowUp } from './dataChat/router/resolveInventoryFollowUp';
 import { matchInventoryCapability } from './dataChat/semantic/matchInventoryCapability';
+import { matchInventoryCapabilityLLM } from './dataChat/semantic/matchInventoryCapabilityLLM';
 import type { GroundedConversationContext } from './dataChat/context/groundedConversationContext';
 import type { InventoryDataIntent } from './dataChat/contracts/groundedDataResult';
 
@@ -243,19 +244,37 @@ export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDep
         return { text: followUp.text };
       }
 
-      // ── Tier D: Semantic capability router ─────────────────────────────
-      // Local, network-free keyword-overlap matcher over the capability
-      // registry (see semantic/matchInventoryCapability.ts) — an
-      // optimization/compatibility fast-path already exists above; this
-      // catches genuinely novel phrasing without needing a Gemini call or
-      // live inventory data.
-      const semanticRoute = matchInventoryCapability(userMsg);
-      if (semanticRoute.type === 'grounded_capability') {
-        return executeGroundedIntent(semanticRoute.capability, userMsg);
+      // ── Tier D: Server-side LLM semantic capability router ─────────────
+      // For genuinely natural wording the fast path/follow-up tier can't
+      // resolve. Sends ONLY the message, capability descriptions, and a
+      // few of the USER's OWN recent chat messages (never rendered
+      // assistant text) to the Edge Function's capability_route mode.
+      // Any failure resolves to 'unavailable' and falls through to the
+      // local keyword router below — a Gemini routing outage must never
+      // make a previously-supported grounded question stop working.
+      const recentUserContext = request.history
+        .filter((m) => m.role === 'user')
+        .slice(-3)
+        .map((m) => m.text);
+      const llmRoute = await matchInventoryCapabilityLLM(userMsg, recentUserContext, groundedContext?.lastIntent ?? null);
+
+      if (llmRoute.type === 'grounded_capability') {
+        return executeGroundedIntent(llmRoute.capability, userMsg);
       }
-      if (semanticRoute.type === 'clarification') {
-        const [a, b] = semanticRoute.candidates;
-        return { text: `Do you mean ${CLARIFICATION_LABEL[a]} or ${CLARIFICATION_LABEL[b]}?` };
+      if (llmRoute.type === 'clarification') {
+        return { text: llmRoute.text };
+      }
+      if (llmRoute.type !== 'general_chat') {
+        // ── Tier E: Local keyword capability router (fallback) ──────────
+        // Only reached when the LLM router was unavailable.
+        const semanticRoute = matchInventoryCapability(userMsg);
+        if (semanticRoute.type === 'grounded_capability') {
+          return executeGroundedIntent(semanticRoute.capability, userMsg);
+        }
+        if (semanticRoute.type === 'clarification') {
+          const [a, b] = semanticRoute.candidates;
+          return { text: `Do you mean ${CLARIFICATION_LABEL[a]} or ${CLARIFICATION_LABEL[b]}?` };
+        }
       }
       // ── End Phase-3 Data-Driven Chat ──────────────────────────────────
 
