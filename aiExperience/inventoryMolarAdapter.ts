@@ -27,6 +27,8 @@ import { resolveInventoryDataQuery } from './dataChat/resolver/resolveInventoryD
 import { formatGroundedInventoryFallback } from './dataChat/utils/formatGroundedInventoryFallback';
 import { buildUnsupportedParameterMessage } from './dataChat/utils/unsupportedParameterMessage';
 import { parseInventoryActionProposal } from './inventoryConfirmedActionParser';
+import { resolveInventoryFollowUp } from './dataChat/router/resolveInventoryFollowUp';
+import type { GroundedConversationContext } from './dataChat/context/groundedConversationContext';
 
 interface CreateInventoryMolarAdapterDeps {
   rooms: Room[];
@@ -124,7 +126,15 @@ async function getPredefinedChatResponse(message: string): Promise<string | null
 export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDeps): AIAdapter {
   const { rooms, history, logs, isLoadingMain, onProposeAction, receiveStock, removeStock, moveItem } = deps;
 
+  // Grounded conversation context — lives only inside this closure (one
+  // per authenticated user; see
+  // dataChat/context/groundedConversationContext.ts's header).
+  let groundedContext: GroundedConversationContext | null = null;
+
   return {
+    reset() {
+      groundedContext = null;
+    },
     async sendMessage(request: AIRequest): Promise<AIResponse> {
       const userMsg = request.text;
 
@@ -196,7 +206,36 @@ export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDep
           }
         }
 
+        // A new explicit grounded question always starts a fresh
+        // conversation context, never merged with whatever was active
+        // before.
+        groundedContext = {
+          appId: 'inventory',
+          lastIntent: dataRoute.intent,
+          presentedOrder: 'display',
+          lastUserQuestion: userMsg,
+          generation: (groundedContext?.generation ?? 0) + 1,
+          createdAt: new Date().toISOString(),
+        };
+
         return { text: dataChatResponseText };
+      }
+
+      // ── Tier C: Grounded conversational follow-up ─────────────────────
+      // Tried BEFORE falling through to General Chat — e.g. "which
+      // should I restock first?" or "what about the second one?" never
+      // matches classifyInventoryDataIntent's own phrase tables, but is
+      // answerable deterministically from the active groundedContext,
+      // revalidated against the CURRENT live `rooms` array.
+      const followUp = resolveInventoryFollowUp(userMsg, groundedContext, rooms, isLoadingMain);
+      if (followUp && groundedContext) {
+        groundedContext = {
+          ...groundedContext,
+          presentedOrder: followUp.presentedOrder,
+          lastUserQuestion: userMsg,
+          generation: groundedContext.generation + 1,
+        };
+        return { text: followUp.text };
       }
       // ── End Phase-3 Data-Driven Chat ──────────────────────────────────
 
