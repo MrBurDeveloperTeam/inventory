@@ -56,6 +56,9 @@ interface MasterInventoryProps {
    */
   onTabChange?: (tab: 'all' | 'receive' | 'history' | 'expiring' | 'analytics') => void;
   readOnly?: boolean;
+  canManageStock?: boolean;
+  canViewInsights?: boolean;
+  canExport?: boolean;
 }
 
 const MasterInventory: React.FC<MasterInventoryProps> = ({
@@ -72,7 +75,10 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   onRestoreRoom,
   onAssignTbaItem,
   onTabChange,
-  readOnly = false
+  readOnly = false,
+  canManageStock = false,
+  canViewInsights = false,
+  canExport = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -83,6 +89,15 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   useEffect(() => {
     onTabChange?.(activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    const stockTabBlocked =
+      !canManageStock && (activeTab === 'receive' || activeTab === 'history');
+    const insightsTabBlocked =
+      !canViewInsights && (activeTab === 'analytics' || activeTab === 'expiring');
+
+    if (stockTabBlocked || insightsTabBlocked) setActiveTab('all');
+  }, [activeTab, canManageStock, canViewInsights]);
 
   // History Filter State
   const [historyCategory, setHistoryCategory] = useState('all');
@@ -451,7 +466,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="md:hidden">Inventory</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'all' ? 'bg-[#4d9678] scale-x-100' : 'bg-transparent scale-x-0'}`} />
           </button>
-          {!readOnly && (
+          {canManageStock && (
             <button
               onClick={() => setActiveTab('receive')}
               className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'receive' ? 'md:bg-[#3498db] md:text-white md:shadow-md text-[#3498db]' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -462,7 +477,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
               <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'receive' ? 'bg-[#3498db] scale-x-100' : 'bg-transparent scale-x-0'}`} />
             </button>
           )}
-          <button
+          {canManageStock && <button
             onClick={() => setActiveTab('history')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'history' ? 'md:bg-[#9b59b6] md:text-white md:shadow-md text-[#9b59b6]' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -470,8 +485,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="hidden md:inline">Purchase History</span>
             <span className="md:hidden">History</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'history' ? 'bg-[#9b59b6] scale-x-100' : 'bg-transparent scale-x-0'}`} />
-          </button>
-          <button
+          </button>}
+          {canViewInsights && <button
             onClick={() => setActiveTab('analytics')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'analytics' ? 'md:bg-indigo-600 md:text-white md:shadow-md text-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -479,8 +494,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             <span className="hidden md:inline">Usage Stats</span>
             <span className="md:hidden">Stats</span>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'analytics' ? 'bg-indigo-600 scale-x-100' : 'bg-transparent scale-x-0'}`} />
-          </button>
-          <button
+          </button>}
+          {canViewInsights && <button
             onClick={() => setActiveTab('expiring')}
             className={`relative flex-1 md:flex-none flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 md:px-6 pt-2 pb-3 md:py-3 rounded-none md:rounded-xl font-bold text-[11px] md:text-sm transition-all whitespace-nowrap ${activeTab === 'expiring' ? 'md:bg-[#f39c12] md:text-white md:shadow-md text-[#f39c12]' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -491,13 +506,13 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
               {expiringItems.length > 0 && <span className={`flex h-4 w-4 md:h-5 md:w-5 items-center justify-center rounded-full text-[8px] md:text-[10px] font-black ${activeTab === 'expiring' ? 'md:bg-white md:text-[#f39c12] bg-[#f39c12] text-white' : 'bg-[#f39c12] text-white'}`}>{expiringItems.length}</span>}
             </div>
             <div className={`absolute bottom-0 left-0 right-0 h-[3px] md:hidden transition-all duration-300 ${activeTab === 'expiring' ? 'bg-[#f39c12] scale-x-100' : 'bg-transparent scale-x-0'}`} />
-          </button>
+          </button>}
         </div>
-        <div className="hidden md:flex px-4 border-l border-slate-100">
+        {canExport && <div className="hidden md:flex px-4 border-l border-slate-100">
           <button onClick={downloadAllPdf} className="text-slate-400 hover:text-[#4d9678] transition-colors p-2 rounded-lg" title="Export All Data">
             <FileDown className="w-5 h-5" />
           </button>
-        </div>
+        </div>}
       </div>
       <div className="bg-white rounded-none md:rounded-[2rem] shadow-xl overflow-hidden border-x-0 md:border border-slate-100 px-4 py-6 md:p-8 min-h-[500px]">
 
@@ -1091,7 +1106,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
         {/* VIEW: RECEIVE STOCK */}
         {
-          activeTab === 'receive' && (
+          activeTab === 'receive' && canManageStock && (
             <div className="animate-in zoom-in-95 duration-200 w-full">
               <div className="flex items-center gap-3 mb-8">
                 <div className="bg-blue-100 p-3 rounded-2xl text-[#3498db]"><Package className="w-6 h-6" /></div>
@@ -1246,7 +1261,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
         {/* VIEW: PURCHASE HISTORY */}
         {
-          activeTab === 'history' && (
+          activeTab === 'history' && canManageStock && (
             <div className="flex flex-col gap-6 animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center gap-3">
                 <div className="bg-purple-100 p-3 rounded-2xl text-[#9b59b6]"><ClipboardList className="w-6 h-6" /></div>
@@ -1455,14 +1470,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
         {/* VIEW: CLINIC ANALYTICS */}
         {
-          activeTab === 'analytics' && (
+          activeTab === 'analytics' && canViewInsights && (
             <ClinicAnalytics history={history} inventory={rooms.filter(r => r.id !== TBA_ROOM_ID).flatMap(r => r.items)} />
           )
         }
 
         {/* VIEW: EXPIRING ITEMS - TABLE DESIGN */}
         {
-          activeTab === 'expiring' && (
+          activeTab === 'expiring' && canViewInsights && (
             <div className="flex flex-col gap-6 animate-in slide-in-from-right-4 duration-500">
               <div className="flex items-center gap-3">
                 <div className="bg-amber-100 p-3 rounded-2xl text-[#f39c12]"><AlertTriangle className="w-6 h-6" /></div>

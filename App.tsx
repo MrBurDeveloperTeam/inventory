@@ -29,6 +29,12 @@ import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { api } from './services/api';
 import { logActivityToOdoo } from './services/logActivityToOdoo';
+import {
+  INVENTORY_PERMISSIONS,
+  type InventoryAccess,
+  getInventoryAccess,
+  hasInventoryPermission,
+} from './services/inventoryAccess';
 import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
 import { jwtDecode } from 'jwt-decode';
@@ -226,6 +232,9 @@ const App: React.FC = () => {
   const [blueprint, setBlueprint] = useState<string | null>(null);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [inventoryAccess, setInventoryAccess] = useState<InventoryAccess | null>(null);
+  const [inventoryAccessLoading, setInventoryAccessLoading] = useState(false);
+  const [inventoryAccessError, setInventoryAccessError] = useState('');
   const [isBootstrapped, setIsBootstrapped] = useState<boolean>(false);
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -287,6 +296,41 @@ const App: React.FC = () => {
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
   const { profileImageUrl } = useProfileImage(isAuthenticated);
+
+  useEffect(() => {
+    if (!isAuthenticated || !supabaseUserId) {
+      setInventoryAccess(null);
+      setInventoryAccessLoading(false);
+      setInventoryAccessError('');
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadInventoryAccess = async () => {
+      setInventoryAccessLoading(true);
+      setInventoryAccessError('');
+
+      try {
+        const result = await getInventoryAccess();
+        if (!cancelled) setInventoryAccess(result);
+      } catch (error) {
+        if (!cancelled) {
+          setInventoryAccess(null);
+          setInventoryAccessError(
+            error instanceof Error ? error.message : 'Unable to load Inventory access.'
+          );
+        }
+      } finally {
+        if (!cancelled) setInventoryAccessLoading(false);
+      }
+    };
+
+    loadInventoryAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, supabaseUserId]);
   /**
    * Auto-reorder check: every time the user logs in (and once their
    * inventory has finished loading), scan for non-liquid items at/below the
@@ -3366,8 +3410,12 @@ const handleLogout = async () => {
     return inv?.role || 'viewer';
   }, [currentInventoryOwnerId, user, availableInventories]);
 
-  const canManageStructure = currentRole === 'owner' || currentRole === 'admin';
-  const canEditItems = currentRole === 'owner' || currentRole === 'admin' || currentRole === 'editor';
+  const canAccessInventory = hasInventoryPermission(inventoryAccess, INVENTORY_PERMISSIONS.ACCESS);
+  const canManageClinic = hasInventoryPermission(inventoryAccess, INVENTORY_PERMISSIONS.CLINIC);
+  const canManageItems = hasInventoryPermission(inventoryAccess, INVENTORY_PERMISSIONS.ITEMS);
+  const canManageStock = hasInventoryPermission(inventoryAccess, INVENTORY_PERMISSIONS.STOCK);
+  const canViewInsights = hasInventoryPermission(inventoryAccess, INVENTORY_PERMISSIONS.INSIGHTS);
+  const canExportInventory = hasInventoryPermission(inventoryAccess, INVENTORY_PERMISSIONS.EXPORT);
 
   if (authInitializing) {
     return (
@@ -3404,6 +3452,37 @@ const handleLogout = async () => {
         adminError={adminDataError}
         onRefreshAdminData={() => fetchAdminData(true)}
       />
+    );
+  }
+
+  if (inventoryAccessLoading || (!inventoryAccess && !inventoryAccessError)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-700 font-medium">Loading Inventory access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (inventoryAccessError || !canAccessInventory) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-slate-900">Inventory access unavailable</h1>
+          <p className="mt-2 text-slate-500">
+            {inventoryAccessError || 'You do not have permission to access Inventory.'}
+          </p>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="mt-6 rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -3459,14 +3538,14 @@ const handleLogout = async () => {
                 onAddRoom={addRoom}
                 onDeleteRoom={requestDeleteRoom}
                 onSelectRoom={setActiveRoomId}
-                onDragEnd={canManageStructure ? updateRoomPosition : undefined}
-                onUpdateRooms={canManageStructure ? (newRooms) => {
+                onDragEnd={canManageClinic ? updateRoomPosition : undefined}
+                onUpdateRooms={canManageClinic ? (newRooms) => {
                   console.log('onUpdateRooms (drag/update) called');
                   lastLocalMutation.current = Date.now();
                   isDirty.current = true;
                   setRooms(newRooms);
                 } : undefined}
-                onSelectTemplate={canManageStructure ? (url) => {
+                onSelectTemplate={canManageClinic ? (url) => {
                   console.log('onSelectTemplate called');
                   lastLocalMutation.current = Date.now();
                   isDirty.current = true;
@@ -3488,7 +3567,7 @@ const handleLogout = async () => {
                   }
                 } : undefined}
                 catPosition={catPosition}
-                onCatPositionChange={canManageStructure ? (pos) => {
+                onCatPositionChange={canManageClinic ? (pos) => {
                   lastLocalMutation.current = Date.now();
                   isDirty.current = true;
                   setCatPosition(pos);
@@ -3511,7 +3590,7 @@ const handleLogout = async () => {
                 onReceive={receiveStock}
                 onOpenChat={() => setIsChatOpen(true)}
                 onOpenVirtualPet={() => setIsVirtualPetOpen(true)}
-                readOnly={!canManageStructure || isLoadingMain}
+                readOnly={!canManageClinic || isLoadingMain}
                 syncStatus={syncStatus}
               />
 
@@ -3529,7 +3608,10 @@ const handleLogout = async () => {
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
                 onTabChange={setDashboardTab}
-                readOnly={!canEditItems || isLoadingMain}
+                readOnly={!canManageItems || isLoadingMain}
+                canManageStock={canManageStock}
+                canViewInsights={canViewInsights}
+                canExport={canExportInventory}
               />
             </>
           ) : (
@@ -3560,7 +3642,7 @@ const handleLogout = async () => {
           onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
           onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
           onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
-          readOnly={!canEditItems}
+          readOnly={!canManageItems}
         />
       )}
 
