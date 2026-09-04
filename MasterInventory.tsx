@@ -59,6 +59,12 @@ interface MasterInventoryProps {
   canManageStock?: boolean;
   canViewInsights?: boolean;
   canExport?: boolean;
+  /** Bumped by App.tsx's Personalized Insight / Cat Reminder CTA
+   *  (`inventory_expiring` action) to jump to the existing `activeTab ===
+   *  'expiring'` tab below, even if this component is already mounted (a
+   *  fresh mount alone wouldn't re-trigger a tab switch). Undefined/
+   *  unchanged = no effect, so every other caller/render is unaffected. */
+  focusExpiringTabRequestId?: number;
 }
 
 const MasterInventory: React.FC<MasterInventoryProps> = ({
@@ -79,6 +85,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   canManageStock = false,
   canViewInsights = false,
   canExport = false,
+  focusExpiringTabRequestId,
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,6 +96,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   useEffect(() => {
     onTabChange?.(activeTab);
   }, [activeTab]);
+
+  // See the prop's own doc — only ever fires on an actual increment, never
+  // on mount with an undefined/unset value, so this never overrides a
+  // user's own manual tab choice made independently of the CTA.
+  useEffect(() => {
+    if (focusExpiringTabRequestId !== undefined) setActiveTab('expiring');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusExpiringTabRequestId]);
 
   useEffect(() => {
     const stockTabBlocked =
