@@ -1,8 +1,34 @@
 import { useEffect, useState } from 'react';
+import { Mail } from 'lucide-react';
 import { SharedMolarAI } from '@mrburdeveloperteam/molar-experience/ai';
 import type { AIAdapter } from '@mrburdeveloperteam/molar-experience/contracts';
 import { supabase } from '../supabaseClient';
 import { MOLAR_LOGO_URL } from '../aiExperience/molarExperienceAssets';
+
+const SUPPORT_MAILTO_URL = 'https://mail.google.com/mail/?view=cm&fs=1&to=support%40snabbb.com&su=Customer%20Inquiry';
+
+/** Inventory-local support card rendered inside the Molar AI panel via
+ *  `footerContent` (0.9.5) — below messages/suggestions, above the
+ *  composer. Follows the same E-learning-approved pattern: a single
+ *  Gmail-compose link, no separate floating support launcher. */
+function MolarSupportFooter() {
+  return (
+    <a
+      href={SUPPORT_MAILTO_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inventory-support-link flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors"
+    >
+      <span className="inventory-support-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full border">
+        <Mail className="h-4 w-4" />
+      </span>
+      <span className="min-w-0">
+        <span className="inventory-support-title block text-sm font-semibold">Email Support</span>
+        <span className="inventory-support-meta block text-xs">Contact support@snabbb.com</span>
+      </span>
+    </a>
+  );
+}
 
 interface MolarAIFloatProps {
   adapter: AIAdapter;
@@ -88,6 +114,7 @@ export default function MolarAIFloat({ adapter, onPetToggle, disabled = false }:
       onPetToggle={onPetToggle}
       emptyState={emptyState}
       logoUrl={MOLAR_LOGO_URL}
+      footerContent={<MolarSupportFooter />}
     />
   );
 }

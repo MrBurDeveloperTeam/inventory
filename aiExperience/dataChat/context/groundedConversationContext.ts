@@ -19,3 +19,23 @@ export interface GroundedConversationContext {
   generation: number;
   createdAt: string;
 }
+
+// Host-owned (App.tsx `useRef`) small store so the grounded context
+// survives `createInventoryMolarAdapter` being rebuilt when its
+// rooms/history/logs/isLoadingMain deps change on an ordinary rerender —
+// only the store's own `clear()` (wired to explicit reset + identity
+// changes, see App.tsx) ever drops the context, never adapter recreation.
+export interface GroundedContextStore {
+  get(): GroundedConversationContext | null;
+  set(ctx: GroundedConversationContext | null): void;
+  clear(): void;
+}
+
+export function createGroundedContextStore(): GroundedContextStore {
+  let current: GroundedConversationContext | null = null;
+  return {
+    get: () => current,
+    set: (ctx) => { current = ctx; },
+    clear: () => { current = null; },
+  };
+}

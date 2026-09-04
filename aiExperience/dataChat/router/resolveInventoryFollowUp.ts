@@ -57,6 +57,11 @@ const RESTOCK_FIRST_PHRASES = [
   'which one should i restock first',
   'what should i order first',
   'which is most urgent',
+  'which one is most urgent',
+  'which item is most urgent',
+  'what is most urgent',
+  'what is the most urgent',
+  'which one is the most urgent',
   'what should i prioritize',
 ];
 const WHY_PHRASES = ['why', 'why that one', 'why is that'];
