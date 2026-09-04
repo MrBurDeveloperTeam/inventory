@@ -11,6 +11,8 @@ import ProfilePage from './ProfilePage';
 import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
 import InventoryVirtualPet from './petExperience/InventoryVirtualPet';
+import MeowdokuLauncher from './games/MeowdokuLauncher';
+import type { ExtraGame } from '@mrburdeveloperteam/molar-experience/pet';
 import CatMascot from './components/CatMascot';
 import MolarAIFloat from './components/MolarAIFloat';
 import LowStockReorderModal from './components/LowStockReorderModal';
@@ -40,6 +42,7 @@ import { usePromotions } from './hooks/usePromotions';
 import { buildInventoryDialoguePool } from './aiExperience/petDialogue/buildInventoryDialoguePool';
 import type { InsightCandidate } from './aiExperience/contracts/insightCandidate';
 import { createInventoryMolarAdapter } from './aiExperience/inventoryMolarAdapter';
+import { createGroundedContextStore } from './aiExperience/dataChat/context/groundedConversationContext';
 import { parseInventoryActionProposal } from './aiExperience/inventoryConfirmedActionParser';
 import InventoryActionConfirm from './components/InventoryActionConfirm';
 import { jwtDecode } from 'jwt-decode';
@@ -454,6 +457,11 @@ const App: React.FC = () => {
 
   // Virtual Pet State
   const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
+  // INVENTORY-MOLAR-PRODUCTION-PARITY-HOTFIX-1: Meowdoku predates the
+  // shared Games catalog (only Flappy/Pac-Cat/Tetris) — wired in via
+  // SharedVirtualPet's `extraGames` as a 4th card; the host owns opening
+  // it via MeowdokuLauncher, stacked above the Pet overlay.
+  const [isMeowdokuOpen, setIsMeowdokuOpen] = useState(false);
 
   // Global Chat State
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -3445,10 +3453,31 @@ const handleLogout = async () => {
   // logic and fresh-state revalidation.
   const [pendingInventoryAction, setPendingInventoryAction] = useState<ReturnType<typeof parseInventoryActionProposal>>(null);
 
+  // Grounded follow-up context store — owned here (stable for the whole
+  // mount) so it survives `inventoryMolarAdapter` below being rebuilt on
+  // ordinary rooms/history/logs changes. Only cleared explicitly: via
+  // `reset()` (wired through the adapter) or the identity-change effect
+  // just below, never by adapter recreation itself.
+  const groundedContextStoreRef = useRef(createGroundedContextStore());
+
   const inventoryMolarAdapter = useMemo(
-    () => createInventoryMolarAdapter({ rooms, history, logs, isLoadingMain, onProposeAction: setPendingInventoryAction, receiveStock, removeStock, moveItem }),
+    () => createInventoryMolarAdapter({ rooms, history, logs, isLoadingMain, onProposeAction: setPendingInventoryAction, receiveStock, removeStock, moveItem, groundedContextStore: groundedContextStoreRef.current }),
     [rooms, history, logs, isLoadingMain, receiveStock, removeStock, moveItem]
   );
+
+  // Clear grounded follow-up context on an actual identity change
+  // (authenticated user or switched inventory owner) so it can never leak
+  // user A -> user B or inventory A -> inventory B. Deliberately does NOT
+  // fire on the initial mount (nothing to leak from) or on ordinary
+  // rerenders where identity is unchanged.
+  const molarIdentityRef = useRef<string | null>(null);
+  useEffect(() => {
+    const identity = `${user?.id ?? 'anon'}::${currentInventoryOwnerId ?? 'self'}`;
+    if (molarIdentityRef.current !== null && molarIdentityRef.current !== identity) {
+      groundedContextStoreRef.current.clear();
+    }
+    molarIdentityRef.current = identity;
+  }, [user?.id, currentInventoryOwnerId]);
 
   // Thin adapters only — InventoryActionConfirm's contract accepts an
   // optional trailing idempotencyKey it generates itself
@@ -3482,6 +3511,18 @@ const handleLogout = async () => {
       _idempotencyKey?: string
     ) => moveItem(fromRoomId, toRoomId, itemId, quantity, batchIndex),
     [moveItem]
+  );
+
+  const extraGames = useMemo<ExtraGame[]>(
+    () => [
+      {
+        id: 'meowdoku',
+        title: 'Meowdoku',
+        iconUrl: '/games/meowdoku/cover-148.png',
+        onSelect: () => setIsMeowdokuOpen(true),
+      },
+    ],
+    []
   );
 
   const navigatetoSnabbb = () => {
@@ -3884,6 +3925,17 @@ const handleLogout = async () => {
         key={supabaseUserId ?? 'guest'}
         isOpen={isVirtualPetOpen}
         onClose={() => setIsVirtualPetOpen(false)}
+        userId={supabaseUserId}
+        extraGames={extraGames}
+      />
+
+      {/* Rendered as a sibling, outside SharedVirtualPet's own overlay, so
+          it stacks above it (higher z-index) rather than being clipped by
+          or nested inside the Pet's own DOM subtree. */}
+      <MeowdokuLauncher
+        key={`meowdoku-${supabaseUserId ?? 'guest'}`}
+        isOpen={isMeowdokuOpen}
+        onClose={() => setIsMeowdokuOpen(false)}
         userId={supabaseUserId}
       />
 

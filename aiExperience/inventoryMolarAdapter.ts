@@ -30,7 +30,7 @@ import { parseInventoryActionProposal } from './inventoryConfirmedActionParser';
 import { resolveInventoryFollowUp } from './dataChat/router/resolveInventoryFollowUp';
 import { matchInventoryCapability } from './dataChat/semantic/matchInventoryCapability';
 import { matchInventoryCapabilityLLM } from './dataChat/semantic/matchInventoryCapabilityLLM';
-import type { GroundedConversationContext } from './dataChat/context/groundedConversationContext';
+import type { GroundedContextStore } from './dataChat/context/groundedConversationContext';
 import type { InventoryDataIntent } from './dataChat/contracts/groundedDataResult';
 
 const CLARIFICATION_LABEL: Record<InventoryDataIntent, string> = {
@@ -46,6 +46,11 @@ interface CreateInventoryMolarAdapterDeps {
   history: PurchaseHistory[];
   logs: ActivityLog[];
   isLoadingMain: boolean;
+  /** Host-owned (App.tsx `useRef`) store — keeps the grounded follow-up
+   *  context alive across adapter recreation (see this file's own header
+   *  and groundedConversationContext.ts). Cleared by App.tsx on
+   *  user/inventory identity changes and by this adapter's `reset()`. */
+  groundedContextStore: GroundedContextStore;
   /** Host-owned proposal sink (Phase INVENTORY-DETERMINISTIC-CONFIRMED-AI-ACTIONS-1).
    *  Called ONLY with a proposal the deterministic parser derived from the
    *  user's own message — never from Gemini output. The caller (App.tsx)
@@ -135,12 +140,7 @@ async function getPredefinedChatResponse(message: string): Promise<string | null
 }
 
 export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDeps): AIAdapter {
-  const { rooms, history, logs, isLoadingMain, onProposeAction, receiveStock, removeStock, moveItem } = deps;
-
-  // Grounded conversation context — lives only inside this closure (one
-  // per authenticated user; see
-  // dataChat/context/groundedConversationContext.ts's header).
-  let groundedContext: GroundedConversationContext | null = null;
+  const { rooms, history, logs, isLoadingMain, onProposeAction, receiveStock, removeStock, moveItem, groundedContextStore } = deps;
 
   // Shared by the fast-path classifier match AND the semantic capability
   // matcher below — a matched capability executes identically regardless
@@ -160,21 +160,21 @@ export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDep
       }
     }
 
-    groundedContext = {
+    groundedContextStore.set({
       appId: 'inventory',
       lastIntent: intent,
       presentedOrder: 'display',
       lastUserQuestion: userMsg,
-      generation: (groundedContext?.generation ?? 0) + 1,
+      generation: (groundedContextStore.get()?.generation ?? 0) + 1,
       createdAt: new Date().toISOString(),
-    };
+    });
 
     return { text: dataChatResponseText };
   }
 
   return {
     reset() {
-      groundedContext = null;
+      groundedContextStore.clear();
     },
     async sendMessage(request: AIRequest): Promise<AIResponse> {
       const userMsg = request.text;
@@ -233,14 +233,15 @@ export function createInventoryMolarAdapter(deps: CreateInventoryMolarAdapterDep
       // matches classifyInventoryDataIntent's own phrase tables, but is
       // answerable deterministically from the active groundedContext,
       // revalidated against the CURRENT live `rooms` array.
+      const groundedContext = groundedContextStore.get();
       const followUp = resolveInventoryFollowUp(userMsg, groundedContext, rooms, isLoadingMain);
       if (followUp && groundedContext) {
-        groundedContext = {
+        groundedContextStore.set({
           ...groundedContext,
           presentedOrder: followUp.presentedOrder,
           lastUserQuestion: userMsg,
           generation: groundedContext.generation + 1,
-        };
+        });
         return { text: followUp.text };
       }
 

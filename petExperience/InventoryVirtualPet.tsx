@@ -36,6 +36,7 @@
 // not a behavior difference.
 import { useEffect, useRef, useState } from 'react';
 import { SharedVirtualPet } from '@mrburdeveloperteam/molar-experience/pet';
+import type { ExtraGame } from '@mrburdeveloperteam/molar-experience/pet';
 import { supabase } from '../supabaseClient';
 import { inventoryPetRepository } from './inventoryPetRepository';
 import { PET_ASSET_URLS } from '../aiExperience/molarExperienceAssets';
@@ -165,9 +166,14 @@ interface InventoryVirtualPetProps {
    * this component noticing a change on its own.
    */
   userId: string | null;
+  /** Host-local games (e.g. Meowdoku, which predates this package's
+   *  shared Games catalog) rendered as extra cards after the 3 built-in
+   *  games. See `ExtraGame`'s own doc — this package never opens or
+   *  tracks state for these, only calls `onSelect`. */
+  extraGames?: ExtraGame[];
 }
 
-export default function InventoryVirtualPet({ isOpen, onClose, userId }: InventoryVirtualPetProps) {
+export default function InventoryVirtualPet({ isOpen, onClose, userId, extraGames }: InventoryVirtualPetProps) {
   const hasLoggedRef = useRef(false);
   const [detectedCurrency, setDetectedCurrency] = useState(DEFAULT_CURRENCY_CODE);
 
@@ -193,6 +199,7 @@ export default function InventoryVirtualPet({ isOpen, onClose, userId }: Invento
       userId={userId}
       currencyCode={detectedCurrency}
       assetUrls={PET_ASSET_URLS}
+      extraGames={extraGames}
     />
   );
 }

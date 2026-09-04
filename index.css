@@ -418,6 +418,18 @@ body {
 .dark .inventory-support-meta { color: #94a3b8; }
 .dark .inventory-support-link:hover .inventory-support-title { color: #a7f3d0; }
 
+/* ── Molar AI text selection ──────────────────────────────────────────────
+   Inventory's app root intentionally uses `select-none` (protects
+   drag/interactive UI elsewhere). Molar AI chat text should remain
+   selectable/copyable regardless — scoped narrowly to the message bubbles
+   themselves so surrounding chrome (header, composer, buttons/icons) keeps
+   its normal non-text-selecting drag/click behavior. */
+.molar-chat-bubble--user,
+.molar-chat-bubble--model {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* ── INVENTORY-4B: Shared 0.6.7 gradient compatibility ───────────────────
    Proven runtime collision: Tailwind CDN v3.4.17's live JIT engine
    re-generates its own `--tw-gradient-from`/`--tw-gradient-to` rules for
