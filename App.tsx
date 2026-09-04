@@ -10,7 +10,7 @@ import TutorialVideoModal from './TutorialVideoModal';
 import ProfilePage from './ProfilePage';
 import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
-import { VirtualPetContainer } from './VirtualPet/VirtualPetContainer';
+import InventoryVirtualPet from './petExperience/InventoryVirtualPet';
 import CatMascot from './components/CatMascot';
 import MolarAIFloat from './components/MolarAIFloat';
 import LowStockReorderModal from './components/LowStockReorderModal';
@@ -37,6 +37,11 @@ import {
 } from './services/inventoryAccess';
 import PromoBanner from './component/PromoBanner';
 import { usePromotions } from './hooks/usePromotions';
+import { buildInventoryDialoguePool } from './aiExperience/petDialogue/buildInventoryDialoguePool';
+import type { InsightCandidate } from './aiExperience/contracts/insightCandidate';
+import { createInventoryMolarAdapter } from './aiExperience/inventoryMolarAdapter';
+import { parseInventoryActionProposal } from './aiExperience/inventoryConfirmedActionParser';
+import InventoryActionConfirm from './components/InventoryActionConfirm';
 import { jwtDecode } from 'jwt-decode';
 import {
   ARCHIVED_LOCATION_LABEL,
@@ -266,6 +271,47 @@ const App: React.FC = () => {
   const syncInFlight = useRef(false);
   const [isLoadingMain, setIsLoadingMain] = useState(true);
   const [isReloading, setIsReloading] = useState(false);
+  // Dismissal-aware ordered candidate pool for Cat only (starvation fix) —
+  // reuses the same already-loaded `rooms`/`isLoadingMain`, no second
+  // fetch. See aiExperience/petDialogue/buildInventoryDialoguePool.ts. Pure
+  // business ordering only; CatMascot itself does the actual
+  // seen/dismissed suppression scan once it knows the current userId — see
+  // personalizedInsightState.candidates below.
+  const inventoryDialoguePool = useMemo(
+    () => (isLoadingMain ? [] : buildInventoryDialoguePool(rooms)),
+    [rooms, isLoadingMain]
+  );
+  // Bumped by handleInventoryInsightAction below to jump MasterInventory to
+  // its existing 'expiring' tab — see that state's own prop doc in
+  // MasterInventory.tsx. Undefined until first used, so mounting
+  // MasterInventory never itself triggers a tab switch.
+  const [focusExpiringTabRequestId, setFocusExpiringTabRequestId] = useState<number | undefined>(undefined);
+  // Takes the candidate to act on explicitly — invoked by CatMascot with
+  // whichever candidate it is currently showing (its own dismissal-aware
+  // scan over `inventoryDialoguePool` above). Only navigates (existing
+  // `currentView`/MasterInventory tab state) — never mutates inventory
+  // data.
+  const handleInventoryInsightAction = useCallback((candidate: InsightCandidate<unknown> | null) => {
+    if (!candidate?.action) return;
+    setCurrentView('dashboard');
+    if (candidate.action.view === 'inventory_expiring') {
+      setFocusExpiringTabRequestId((id) => (id ?? 0) + 1);
+    }
+  }, []);
+  const personalizedInsightState = isLoadingMain
+    ? { status: 'not_ready' as const }
+    : {
+        status: 'ready' as const,
+        // Ordered pool across all four record-specific families (plus
+        // Inventory Summary fallback) for CatMascot's own dismissal-aware
+        // pool scan — see aiExperience/petDialogue/buildInventoryDialoguePool.ts.
+        candidates: inventoryDialoguePool,
+        // Home's own existing action logic (view/tab navigation only,
+        // above) — reused verbatim, never reimplemented in CatMascot. Takes
+        // the candidate to act on explicitly so Cat always executes the
+        // action belonging to the exact candidate it is currently showing.
+        onAction: handleInventoryInsightAction,
+      };
   const lastLocalMutation = useRef(0);
   const isDirty = useRef(false);
   const lastLoadRequestId = useRef(0);
@@ -3385,6 +3431,59 @@ const handleLogout = async () => {
     }
   };
 
+  // PHASE 7D: General Chat / Data Chat / live `<ACTION>` mutation
+  // orchestration lives in `aiExperience/inventoryMolarAdapter.ts`'s
+  // `createInventoryMolarAdapter`. <SharedMolarAI> owns open/closed state,
+  // chat history, input draft, loading state, and auto-scroll; this
+  // adapter is the only thing it calls to produce a response. Rebuilt each
+  // render so it always closes over the current `rooms`/`history`/`logs`.
+  // Host-owned pending proposal state for Phase
+  // INVENTORY-DETERMINISTIC-CONFIRMED-AI-ACTIONS-1. Populated only by the
+  // deterministic parser (via onProposeAction below), never by Gemini
+  // output. Rendering InventoryActionConfirm below does not itself mutate
+  // anything — see that component for the actual confirm/cancel/execute
+  // logic and fresh-state revalidation.
+  const [pendingInventoryAction, setPendingInventoryAction] = useState<ReturnType<typeof parseInventoryActionProposal>>(null);
+
+  const inventoryMolarAdapter = useMemo(
+    () => createInventoryMolarAdapter({ rooms, history, logs, isLoadingMain, onProposeAction: setPendingInventoryAction, receiveStock, removeStock, moveItem }),
+    [rooms, history, logs, isLoadingMain, receiveStock, removeStock, moveItem]
+  );
+
+  // Thin adapters only — InventoryActionConfirm's contract accepts an
+  // optional trailing idempotencyKey it generates itself
+  // (crypto.randomUUID() per mount) for defensive double-submit
+  // protection; cloudflared's receiveStock/moveItem don't accept or need
+  // that key today (their own idempotency/atomic-RPC hardening is out of
+  // scope for this release — see the shared-experience integration audit).
+  // These adapters exist purely so the confirm dialog's TypeScript
+  // contract is satisfied without changing receiveStock/moveItem's actual
+  // signatures or behavior.
+  const confirmReceiveStock = useCallback(
+    (
+      roomId: string,
+      itemData: Partial<Item>,
+      qty: number,
+      price: number,
+      purchaseDate: string,
+      expiry?: string,
+      createNewBatch?: boolean,
+      _idempotencyKey?: string
+    ) => receiveStock(roomId, itemData, qty, price, purchaseDate, expiry, createNewBatch),
+    [receiveStock]
+  );
+  const confirmMoveItem = useCallback(
+    (
+      fromRoomId: string,
+      toRoomId: string,
+      itemId: string,
+      quantity: number,
+      batchIndex?: number,
+      _idempotencyKey?: string
+    ) => moveItem(fromRoomId, toRoomId, itemId, quantity, batchIndex),
+    [moveItem]
+  );
+
   const navigatetoSnabbb = () => {
     window.open('https://app.snabbb.com', '_self');
   }
@@ -3612,6 +3711,7 @@ const handleLogout = async () => {
                 canManageStock={canManageStock}
                 canViewInsights={canViewInsights}
                 canExport={canExportInventory}
+                focusExpiringTabRequestId={focusExpiringTabRequestId}
               />
             </>
           ) : (
@@ -3733,30 +3833,59 @@ const handleLogout = async () => {
         onClose={() => setShowTutorialVideo(false)}
       />
 
+      {/* CatMascot (and therefore its Shared runtime instance) stays mounted
+          across Virtual Pet open/close so its entry walk never replays and
+          its identity-remount-only contract (see `key` below) stays
+          intact — CSS-only visibility here, never a conditional unmount. */}
+      <div className={isVirtualPetOpen ? 'hidden' : 'contents'}>
+        <CatMascot
+          // Forces a fresh mount on every distinct authenticated identity
+          // boundary (a real id, or 'signed-out') so the shared dialogue
+          // runtime's mount-scoped shown/dismissal state never leaks
+          // across a login/logout user switch in the same tab.
+          key={user?.id ?? 'signed-out'}
+          onCatClick={() => setIsVirtualPetOpen(true)}
+          disabled={!isAuthenticated}
+          personalizedInsightState={personalizedInsightState}
+          catCacheOwnerId={supabaseUserId}
+        />
+      </div>
       {!isVirtualPetOpen && (
-        <>
-        <CatMascot onCatClick={() => setIsVirtualPetOpen(true)} disabled={!isAuthenticated} />
         <MolarAIFloat
-          isOpen={isChatOpen}
-          onOpen={() => setIsChatOpen(true)}
-          onClose={() => setIsChatOpen(false)}
-          chatHistory={chatHistory}
-          isChatLoading={isChatLoading}
-          chatInput={chatInput}
-          setChatInput={setChatInput}
-          onSendMessage={handleSendChat}
-          onClearChat={handleClearChat}
-          chatEndRef={chatEndRef}
-          onPetToggle={() => {
-            setIsChatOpen(false);
-            setIsVirtualPetOpen(true);
-          }}
+          adapter={inventoryMolarAdapter}
+          onPetToggle={() => setIsVirtualPetOpen(true)}
           disabled={!isAuthenticated}
         />
-        </>
       )}
 
-      <VirtualPetContainer isOpen={isVirtualPetOpen} onClose={() => setIsVirtualPetOpen(false)} />
+      {/* Explicit user-confirmation gate for chat-proposed inventory
+          mutations. `rooms` is passed as the live App.tsx state so the
+          component's own fresh-state revalidation (at Confirm-click time)
+          reflects current data, not the snapshot the proposal was created
+          from. receiveStock/moveItem go through thin adapters only (see
+          confirmReceiveStock/confirmMoveItem above) — cloudflared's actual
+          mutation implementations are unchanged. */}
+      {pendingInventoryAction && (
+        <InventoryActionConfirm
+          action={pendingInventoryAction}
+          rooms={rooms}
+          onCancel={() => setPendingInventoryAction(null)}
+          onConfirmed={() => setPendingInventoryAction(null)}
+          receiveStock={confirmReceiveStock}
+          removeStock={removeStock}
+          moveItem={confirmMoveItem}
+        />
+      )}
+
+      {/* Forces a fresh Pet runtime mount on every distinct canonical
+          identity boundary (a real Supabase Auth uuid, or 'guest') —
+          mirroring CatMascot's own `key` boundary above. */}
+      <InventoryVirtualPet
+        key={supabaseUserId ?? 'guest'}
+        isOpen={isVirtualPetOpen}
+        onClose={() => setIsVirtualPetOpen(false)}
+        userId={supabaseUserId}
+      />
 
       {lowStockVisible && (
         <LowStockReorderModal

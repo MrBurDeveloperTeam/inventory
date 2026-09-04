@@ -1,14 +1,34 @@
-import { GoogleGenAI, Type } from "@google/genai";
+// Client-side transport layer only. This file must NEVER import
+// @google/genai, construct a GoogleGenAI client, read
+// VITE_GEMINI_API_KEY, or call generateContent directly — all of that
+// now lives exclusively in the server-only Supabase Edge Function at
+// supabase/functions/molar-chat-inventory/index.ts, which this file
+// calls via supabase.functions.invoke(). That invocation automatically
+// carries the browser's current authenticated Supabase session as the
+// Authorization bearer token — no token is ever placed into the request
+// body/prompt here. Public function signatures are preserved so
+// aiExperience/inventoryMolarAdapter.ts and RoomModal.tsx require no
+// change.
+//
+// Namespaced as "molar-chat-inventory", matching the established
+// per-app naming convention on this shared Supabase project — a shared
+// generic "molar-chat" name would let one app's deploy silently
+// overwrite another's system prompt (confirmed to have actually
+// happened to Todo/Calculator before they were each namespaced).
+import { supabase } from "../supabaseClient";
 import { ExtractedItem } from "../types";
 
-// Initialize Gemini Client
-// Using process.env.API_KEY as strictly required by guidelines.
-// if (!import.meta.env.VITE_GEMINI_API_KEY) {
-//   throw new Error("Missing Gemini API Key. Please checked VITE_GEMINI_API_KEY in the environment variables.");
-// }
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+async function invokeMolarChatInventory(payload: Record<string, unknown>): Promise<any> {
+  const { data, error } = await supabase.functions.invoke('molar-chat-inventory', {
+    body: payload,
+  });
 
-const modelId = "gemini-3-flash-preview";
+  if (error || !data?.ok) {
+    throw new Error(data?.error || error?.message || 'AI service request failed');
+  }
+
+  return data;
+}
 
 const generateId = () => {
   try {
@@ -20,79 +40,10 @@ const generateId = () => {
 
 export const extractDataFromImage = async (base64Image: string, mimeType: string): Promise<ExtractedItem[]> => {
   try {
-    const prompt = `
-      Analyze this image (invoice, receipt, or inventory list). 
-      Extract the following fields for each line item found:
-      - BRAND: The brand name of the product.
-      - PRODUCT: The name or description of the product.
-      - SKU: The SKU, UPC, or unique code.
-      - QUANTITY: The numeric quantity.
-      - UOM: Unit of measure (e.g., box, pcs, kg, ea, pack).
-      - PRICE: Unit price.
-      - TOTAL: Total price for this line item.
-      - VENDOR: The name of the vendor/supplier issuing this document.
-      - CATEGORY: Categorize the item into one of these EXACT values: Consumables, Equipment, Instruments, Materials, Medication, PPE, Other. Default to 'Consumables' if unsure.
-      - EXPIRES: Expiry date if visible (YYYY-MM-DD), otherwise empty.
-      - UOM: Unit of measure. Use one of these EXACT values: pcs, box, unit, kit. Default to 'pcs' if unsure.
-      - PURCHASE_DATE: The date of the invoice or purchase (YYYY-MM-DD). If present at the top of the document, apply it to all items.
-      - DESCRIPTION: A detailed description of the product if available. If no distinct description is found on the document (other than the product name itself), leave this field as an EMPTY STRING.
- 
-      If a field is not explicitly present, try to infer it from context or leave it as an empty string (or 0 for numbers).
-      For VENDOR and PURCHASE_DATE, if they appear at the top of the document, apply them to all items.
-      Do NOT invent descriptions or duplicate the product name into the description field.
-    `;
+    const { items } = await invokeMolarChatInventory({ mode: 'ocr', base64Image, mimeType });
 
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              data: base64Image,
-              mimeType: mimeType,
-            },
-          },
-          {
-            text: prompt,
-          },
-        ],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              brand: { type: Type.STRING },
-              product: { type: Type.STRING },
-              sku: { type: Type.STRING },
-              quantity: { type: Type.NUMBER },
-              uom: { type: Type.STRING },
-              price: { type: Type.NUMBER },
-              total: { type: Type.NUMBER },
-              vendor: { type: Type.STRING },
-              category: { type: Type.STRING },
-              expiryDate: { type: Type.STRING },
-              purchaseDate: { type: Type.STRING },
-              description: { type: Type.STRING },
-            },
-            required: ["product"],
-          },
-        },
-      },
-    });
-
-    const text = response.text;
-    if (!text) {
-      throw new Error("No data returned from API");
-    }
-
-    // Parse the JSON response
-    const rawData = JSON.parse(text);
-
-    // Add IDs to items
-    const data: ExtractedItem[] = rawData.map((item: any) => ({
+    // Add IDs to items — unchanged from the pre-migration client-side logic.
+    const data: ExtractedItem[] = (items || []).map((item: any) => ({
       ...item,
       id: generateId(),
       category: item.category || 'Consumables',
@@ -102,7 +53,6 @@ export const extractDataFromImage = async (base64Image: string, mimeType: string
     }));
 
     return data;
-
   } catch (error) {
     console.error("Gemini Extraction Error:", error);
     throw error;
@@ -123,145 +73,102 @@ export const chatWithGemini = async (
   userContext?: string,
 ): Promise<string> => {
   try {
-    const isPersonalised = !!userContext && userContext.trim().length > 30;
-
-    const systemInstruction = `
-      You are SNAI (Snabbb Assistant Intelligent), the advanced AI backbone of the universal Snabbb application ecosystem.
-      
-      Your Personality:
-      - You are strategic, analytical, and highly efficient.
-      - You communicate with clarity and precision, focusing on data accuracy and operational excellence.
-      - ${isPersonalised ? 'Address the user by their first name when available.' : ''}
-      - You NEVER hallucinate or assume data. If information is missing from the provided context, state it clearly.
-      
-      Your Goal:
-      - Provide expert guidance across the Snabbb Inventory Management system.
-      - Answer questions SPECIFICALLY about the current inventory, purchase history, and usage statistics provided in the context.
-      - If requested, assist with stock operations like receiving, removing, or transferring items.
-      - For requests outside of the Snabbb ecosystem, politely refocus the conversation on how you can help manage their professional dental operations.
-      
-      Capabilities:
-      - Can locate items and count quantities across all rooms.
-      - Can check prices, total values, and expiry dates.
-      - **Can analyze purchase history** (spending trends, vendor analysis, price changes over time).
-      - **Can provide usage statistics** (consumption patterns, most used items, activity tracking).
-      - **Can QUICK RECEIVE stock updates!**
-      - **Can REMOVE stock from rooms!**
-      - **Can TRANSFER stock between rooms!**
-      
-      Instructions for Stock Updates:
-      
-      **RECEIVING STOCK:**
-      If the user says they received an item, bought something, or wants to add stock, you MUST:
-      1. Identify as much info as possible: Room, Item Name, Brand, SKU/Code, Quantity, UOM (pcs, box, unit, kit), Price, Vendor, Category (Consumables, Equipment, Instruments, Materials, Medication, PPE, Other), and Expiry Date.
-      2. **Check if the item already exists** in the inventory (same name and brand in that room).
-      3. **If the item EXISTS**:
-         - Show the user the existing batches with their quantities, prices, and expiry dates in a clear table format
-         - Ask: "Would you like to **add to an existing batch** or **create a new batch**?"
-         - Wait for their response before proceeding
-      4. **If user wants to ADD TO EXISTING BATCH**:
-         - Ask which batch number they want to add to
-         - **IMPORTANT**: If they provide an expiry date that's DIFFERENT from the chosen batch's expiry date, politely explain:
-           * "I notice you mentioned expiry date [USER_DATE], but Batch [X] has expiry date [BATCH_DATE]."
-           * "Each batch should have a consistent expiry date. Would you like to:"
-           * "1. Add to Batch [X] using its expiry date ([BATCH_DATE])"
-           * "2. Create a new batch with your expiry date ([USER_DATE])"
-         - Once confirmed, use the batch's EXACT expiry date:
-           <ACTION>{"type": "receive", "roomId": "ROOM_ID", "itemName": "ITEM_NAME", "brand": "BRAND", "code": "SKU", "qty": NUMBER, "uom": "UOM_FROM_LIST", "price": NUMBER, "vendor": "VENDOR", "category": "CATEGORY_FROM_LIST", "expiry": "EXACT_BATCH_EXPIRY_DATE", "createNewBatch": false}</ACTION>
-      5. **If user wants to CREATE NEW BATCH** or item is NEW:
-         - Ask for expiry date and price if not provided
-         - Once all info is present:
-           <ACTION>{"type": "receive", "roomId": "ROOM_ID", "itemName": "ITEM_NAME", "brand": "BRAND", "code": "SKU", "qty": NUMBER, "uom": "UOM_FROM_LIST", "price": NUMBER, "vendor": "VENDOR", "category": "CATEGORY_FROM_LIST", "expiry": "YYYY-MM-DD", "createNewBatch": true}</ACTION>
-      6. Use the exact Room ID from the context provided below.
-      7. Inform the user you've updated the records! Be specific about which batch was updated or if a new batch was created.
-      
-      **REMOVING STOCK:**
-      If the user says they used an item, removed stock, consumed something, or wants to deduct inventory, you MUST:
-      1. Identify: Room (or search all rooms if not specified), Item Name, Brand (optional), and Quantity to remove.
-      2. If critical info is missing (Item Name or Quantity), ASK for it.
-      3. Check if the item exists in inventory and has sufficient quantity.
-      4. **Check if the item has MULTIPLE BATCHES.**
-         - If the item has multiple batches with stock (count > 1), **YOU MUST ASK** the user which batch to remove from, unless they already specified (e.g. "remove from the old batch" or "remove from exp 2025").
-         - List the batches with their expiry dates and quantities to help them choose.
-         - Wait for their specific choice.
-      5. Once you have the target batch (or if there was only one), include a hidden block at the end of your response:
-         <ACTION>{"type": "remove", "roomId": "ROOM_ID", "itemName": "ITEM_NAME", "brand": "BRAND", "qty": NUMBER, "expiry": "EXACT_BATCH_EXPIRY_DATE"}</ACTION>
-         (The 'expiry' field is optional. Use it ONLY if a specific batch was targeted. If FIFO/default is okay, omit it).
-      6. Use the exact Room ID from the context.
-      7. **IMPORTANT**: Inform the user you've updated the records! Include:
-         - What was removed (e.g. "I've removed **4 boxes** of **Dental Bur** from **Room 1256**")
-         - **How much is LEFT** in that batch or total (e.g. "You now have **16 boxes** remaining")
-         - Calculate the remaining quantity by subtracting the removed amount from the current inventory.
-
-      **TRANSFERRING STOCK:**
-      If the user wants to move, transfer, or relocate items between rooms, you MUST:
-      1. Identify: Source Room, Destination Room, Item Name, Brand (optional), and Quantity to move.
-      2. Check if the item exists in the Source Room and has sufficient quantity.
-      3. Once confirmed, include this action:
-         <ACTION>{"type": "transfer", "fromRoomId": "FROM_ROOM_ID", "toRoomId": "TO_ROOM_ID", "itemName": "ITEM_NAME", "brand": "BRAND", "qty": NUMBER}</ACTION>
-      4. Use the exact Room IDs from the context.
-      5. Inform the user you've successfully moved the items! Be specific about the source and destination.
-
-      Inventory Context (JSON):
-      ${inventoryContext}
-      
-      ${purchaseHistory ? `Purchase History (JSON - Recent purchases with dates, vendors, prices, quantities):
-      ${purchaseHistory}
-      ` : ''}
-      
-      ${activityLogs ? `Activity Logs (JSON - Recent inventory changes, additions, removals, transfers):
-      ${activityLogs}
-      ` : ''}
-
-      ${isPersonalised ? `--- USER CONTEXT ---
-      ${userContext}
-      --- END USER CONTEXT ---` : ''}
-      
-      Current Date: ${new Date().toISOString().split('T')[0]}
-      
-      Instructions:
-      - When asked "Where is X", give the Room Name.
-      - When asked "How many X", give the total quantity.
-      - **Purchase History Analysis**: When asked about spending, costs, vendors, or purchase patterns:
-        * Calculate total spending by vendor, category, or time period
-        * Show price trends for specific items
-        * Identify most expensive purchases or top vendors
-        * Use tables with columns like Vendor, Item, Qty, Price, Total, Date
-      - **Usage Statistics**: When asked about consumption, usage, or activity:
-        * Show most frequently used/received items
-        * Calculate consumption rates (items used per day/week/month)
-        * Identify high-turnover vs low-turnover items
-        * Show activity patterns (who did what, when)
-      - **Check individual batches**: For expiry-related questions, look at the \`batches\` array within each item. An item might have multiple batches with different expiry dates! List each expiring batch separately in the table.
-      - **Use Markdown tables** when presenting lists of multiple items. Tables offer much better visualization than bullet points for our dental records!
-      - **Visual Cues**: Do NOT include a separate 'Status' column. Instead, append **(EXP)** for items past their date and **(SOON)** for items expiring within 30 days directly to the **Expiry** date cell. This helps me apply special colors!
-      - **ALWAYS use Markdown bolding** (e.g. **50 boxes**, **Nitrile Gloves**, **Room 12**, **$12.99**, **(EXP)**) for quantities, item names, locations, prices, and status markers, *including when they are inside table cells*. DO NOT bold words unless they are specific data points!
-      - **DATE FORMAT**: ALWAYS use **dd/mm/yyyy** format for dates (e.g., 25/12/2025). Do not use YYYY-MM-DD or MM/DD/YYYY.
-      - Keep answers short and concise.
-      - For financial data, always use currency symbols ($ for dollars) and format numbers with 2 decimal places.
-    `;
-
-    // Construct the full conversation for the stateless API
-    const contents = [
-      { role: "system", parts: [{ text: systemInstruction }] },
-      ...history,
-      { role: "user", parts: [{ text: message }] }
-    ];
-
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: contents,
-      config: {
-        responseMimeType: "text/plain",
-      }
+    const { text } = await invokeMolarChatInventory({
+      mode: 'general',
+      history,
+      message,
+      inventoryContext,
+      purchaseHistory,
+      activityLogs,
+      userContext,
     });
-
-    const text = response.text;
-    if (!text) throw new Error("No response from Gemini");
-
     return text;
   } catch (error) {
     console.error("Gemini Chat Error:", error);
     return "I'm having trouble connecting to the Snabbb Assistant Intelligent servers right now. Please try again shortly.";
   }
+};
+
+// ─────────────────────────────────────────────────────────────
+// DATA-DRIVEN CHAT — grounded response phrasing ONLY.
+//
+// Architecturally SEPARATE from `chatWithGemini` above: this function is
+// called only AFTER a deterministic local intent router + deterministic
+// Inventory data provider have already produced minimized structured
+// facts (see aiExperience/dataChat/). The server never decides which
+// records are expired/low-stock/expiring-soon, never computes counts,
+// never picks the intent, and never receives the full inventory/purchase-
+// history/activity-log context `chatWithGemini` does — only the user's
+// question, the approved intent name, and the already-computed facts.
+//
+// CRITICAL: unlike `chatWithGemini`, this function THROWS on failure
+// (network error, empty response) rather than swallowing it into a
+// friendly fallback string — the caller (App.tsx) needs to distinguish
+// success from failure so it can render a deterministic
+// facts-only fallback instead (see
+// aiExperience/dataChat/utils/formatGroundedInventoryFallback.ts) rather
+// than ever falling through to the full General Chat pipeline.
+//
+// The returned text is plain assistant text ONLY. It is never scanned
+// for `<ACTION>` blocks and the system instruction explicitly forbids
+// emitting any — this function has no path to `receiveStock`/
+// `removeStock`/`moveItem` or any other mutation, even if the model
+// unexpectedly tried to emit one.
+export const chatWithGroundedInventoryFacts = async (
+  question: string,
+  intent: string,
+  facts: unknown,
+): Promise<string> => {
+  const { text } = await invokeMolarChatInventory({ mode: 'grounded', question, intent, facts });
+  return text;
+};
+
+// ─────────────────────────────────────────────────────────────
+// SEMANTIC CAPABILITY ROUTING — selection only, never data.
+//
+// Calls the Edge Function's "capability_route" mode: the message, a
+// small set of {id, description} capability descriptors, a few recent
+// model-safe conversation turns, and the previously-selected capability
+// id (if any). The Edge Function NEVER sees an inventory row and
+// returns structured JSON, already validated server-side against the
+// supplied capability id allowlist.
+//
+// THROWS on any failure exactly like chatWithGroundedInventoryFacts —
+// the caller (see dataChat/semantic/matchInventoryCapabilityLLM.ts)
+// must fall back to the local keyword capability matcher on any throw.
+export interface CapabilityRouteResult {
+  route: 'grounded' | 'general_chat' | 'clarification';
+  capability: string | null;
+  confidence: 'high' | 'low';
+  clarification: string | null;
+}
+
+interface CapabilityDescriptor {
+  id: string;
+  description: string;
+}
+
+export const routeInventoryCapability = async (
+  message: string,
+  capabilities: CapabilityDescriptor[],
+  recentContext: string[],
+  previousCapability: string | null,
+): Promise<CapabilityRouteResult> => {
+  const data = await invokeMolarChatInventory({
+    mode: 'capability_route',
+    message,
+    capabilities,
+    recentContext,
+    previousCapability,
+  });
+
+  const { route, capability, confidence, clarification } = data as CapabilityRouteResult;
+  if (route !== 'grounded' && route !== 'general_chat' && route !== 'clarification') {
+    throw new Error('Capability routing returned an unsupported route');
+  }
+  if (confidence !== 'high' && confidence !== 'low') {
+    throw new Error('Capability routing returned an invalid confidence');
+  }
+
+  return { route, capability: route === 'grounded' ? capability : null, confidence, clarification: clarification ?? null };
 };
