@@ -82,3 +82,21 @@ export async function syncRoomRenamedToAppointment(
     console.error('[RoomSync] Failed to rename apt_room:', error.message);
   }
 }
+
+/**
+ * Called after a room is deleted from inventory_rooms.
+ * Deletes the matching apt_rooms row by the shared UUID.
+ * No-ops silently if no matching apt_room exists.
+ */
+export async function syncRoomDeletedFromAppointment(
+  roomId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('apt_rooms')
+    .delete()
+    .eq('id', roomId);
+
+  if (error) {
+    console.error('[RoomSync] Failed to delete apt_room:', error.message);
+  }
+}

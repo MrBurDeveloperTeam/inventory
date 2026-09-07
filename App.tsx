@@ -31,7 +31,7 @@ import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { api } from './services/api';
 import { logActivityToOdoo } from './services/logActivityToOdoo';
-import { syncRoomCreatedToAppointment, syncRoomRenamedToAppointment } from './services/appointmentRoomSync';
+import { syncRoomCreatedToAppointment, syncRoomRenamedToAppointment, syncRoomDeletedFromAppointment } from './services/appointmentRoomSync';
 import {
   INVENTORY_PERMISSIONS,
   type InventoryAccess,
@@ -2044,6 +2044,9 @@ const handleLogout = async () => {
 
         if (error) throw error;
         setSyncStatus('synced');
+        // Sync deletion to appointment's apt_rooms (same UUID)
+        syncRoomDeletedFromAppointment(id)
+          .catch(err => console.error('[RoomSync] Delete sync failed:', err));
       } catch (err) {
         console.error('Failed to delete room:', err);
         setSyncStatus('error');
