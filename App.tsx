@@ -31,6 +31,7 @@ import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { api } from './services/api';
 import { logActivityToOdoo } from './services/logActivityToOdoo';
+import { syncRoomCreatedToAppointment, syncRoomRenamedToAppointment } from './services/appointmentRoomSync';
 import {
   INVENTORY_PERMISSIONS,
   type InventoryAccess,
@@ -1902,6 +1903,9 @@ const handleLogout = async () => {
         roomPersisted = false;
       } else {
         setSyncStatus('synced');
+        // Sync new room to appointment's apt_rooms (same UUID links the two)
+        syncRoomCreatedToAppointment(currentInventoryOwnerId, newRoomId, newRoom.name)
+          .catch(err => console.error('[RoomSync] Create sync failed:', err));
       }
       isDirty.current = false;
       syncInFlight.current = false;
@@ -2325,7 +2329,12 @@ const handleLogout = async () => {
       syncInFlight.current = true;
       const { error } = await supabase.from('inventory_rooms').update({ name }).eq('id', id);
       if (error) { console.error('Failed to update room name in DB:', error); setSyncStatus('error'); }
-      else { setSyncStatus('synced'); }
+      else {
+        setSyncStatus('synced');
+        // Sync rename to appointment's apt_rooms (matched by shared UUID)
+        syncRoomRenamedToAppointment(id, name)
+          .catch(err => console.error('[RoomSync] Rename sync failed:', err));
+      }
       syncInFlight.current = false;
     }
   };
