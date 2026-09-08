@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { toCalendarDateKey } from './aiExperience/utils/dateUtils';
 import {
   Search,
   Package,
@@ -134,7 +135,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   });
   const [receiveQty, setReceiveQty] = useState(0);
   const [receivePrice, setReceivePrice] = useState(0);
-  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [purchaseDate, setPurchaseDate] = useState(() => toCalendarDateKey(new Date()));
   const [expiry, setExpiry] = useState('');
   const [hasExpiry, setHasExpiry] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ roomId: string; itemId: string; name: string; batchIndex?: number; qty?: number; expiryDate?: string } | null>(null);
@@ -390,6 +391,10 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
   const handleReceiveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (receiveMode !== 'edit' && (!purchaseDate || purchaseDate > toCalendarDateKey(new Date()))) {
+      alert('Purchase date is required and cannot be later than today.');
+      return;
+    }
     console.log('MasterInventory: handleReceive called', { selectedRoomId, receiveQty, receivePrice });
     if (!selectedRoomId || receiveQty <= 0) {
       alert('Please select a room and enter a valid quantity.');
@@ -427,7 +432,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     setFormData({ name: '', brand: '', category: 'consumables', uom: 'pcs', code: '', vendor: '', description: '' });
     setReceiveQty(0);
     setReceivePrice(0);
-    setPurchaseDate(new Date().toISOString().split('T')[0]);
+    setPurchaseDate(toCalendarDateKey(new Date()));
     setExpiry('');
     setHasExpiry(false);
     setSelectedProductKey('');
@@ -1165,6 +1170,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       required
                       className="px-4 py-3 rounded-xl border border-slate-200 font-normal text-sm focus:ring-2 focus:ring-[#3498db] outline-none shadow-sm"
                       value={purchaseDate}
+                      max={toCalendarDateKey(new Date())}
                       onChange={e => setPurchaseDate(e.target.value)}
                     />
                   </div>
