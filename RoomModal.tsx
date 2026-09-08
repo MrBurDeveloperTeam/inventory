@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { toCalendarDateKey } from './aiExperience/utils/dateUtils';
 import {
   X,
   Package,
@@ -81,7 +82,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     setFormData({ name: '', brand: '', category: 'consumables', uom: 'pcs', code: '', vendor: '', description: '' });
     setDeleteProductConfirm(null);
   };
-  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [purchaseDate, setPurchaseDate] = useState(() => toCalendarDateKey(new Date()));
   const [expiry, setExpiry] = useState('');
   const [hasExpiry, setHasExpiry] = useState(false);
   const [isLogOpen, setIsLogOpen] = useState(false);
@@ -570,6 +571,10 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (receiveMode !== 'edit' && (!purchaseDate || purchaseDate > toCalendarDateKey(new Date()))) {
+      alert('Purchase date is required and cannot be later than today.');
+      return;
+    }
     if (receiveMode === 'edit') {
       const itemIndex = parseInt(selectedItemIdx);
       const originalItem = room.items[itemIndex];
@@ -600,7 +605,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     setFormData({ name: '', brand: '', category: 'consumables', uom: 'box', code: '', vendor: '', description: '' });
     setReceiveQty(0);
     setReceivePrice(0);
-    setPurchaseDate(new Date().toISOString().split('T')[0]);
+    setPurchaseDate(toCalendarDateKey(new Date()));
     setExpiry('');
     setHasExpiry(false);
     setSelectedItemIdx('');
@@ -1573,6 +1578,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                       required
                       className="px-3 py-2 rounded-lg border border-slate-200 font-semibold text-xs focus:ring-1 focus:ring-[#3498db] outline-none shadow-sm"
                       value={purchaseDate}
+                      max={toCalendarDateKey(new Date())}
                       onChange={e => setPurchaseDate(e.target.value)}
                     />
                   </div>
