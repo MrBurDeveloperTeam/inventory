@@ -616,11 +616,12 @@ const Header: React.FC<HeaderProps> = ({
                       </button>
 
                       {/* Support Tickets */}
+                      {/* Temporarily hidden until the support ticket feature is ready. */}
                       <button
                         type="button"
                         disabled={isOpeningSupportTickets}
                         onClick={openSupportTickets}
-                        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left disabled:cursor-not-allowed disabled:opacity-60"
+                        className="hidden w-full items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <div className="w-7 h-7 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
                           <i className="fa-solid fa-life-ring text-[11px] text-blue-500" aria-hidden="true"></i>
