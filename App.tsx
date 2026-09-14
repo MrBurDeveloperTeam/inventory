@@ -533,11 +533,22 @@ useEffect(() => {
 
   const checkSession = async () => {
     try{
-      const sso = await api.get('/sso/exchange');
+      const launchUrl = new URL(window.location.href);
+      const launchToken = launchUrl.searchParams.get('sso_token') || launchUrl.searchParams.get('token');
+      const exchangePath = launchToken
+        ? `/sso/exchange?sso_token=${encodeURIComponent(launchToken)}`
+        : '/sso/exchange';
+      const sso = await api.get(exchangePath);
       await supabase.auth.setSession({
         access_token: sso.data.access_token,
         refresh_token: sso.data.refresh_token
       });
+
+      if (launchToken) {
+        launchUrl.searchParams.delete('sso_token');
+        launchUrl.searchParams.delete('token');
+        window.history.replaceState({}, document.title, `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
+      }
       // Decode the token (no verification)
       const decoded_token = jwtDecode(sso.data.access_token);
 
