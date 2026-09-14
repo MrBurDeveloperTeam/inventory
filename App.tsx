@@ -1120,7 +1120,17 @@ useEffect(() => {
   };
 
   const bootstrapUser = async (sbUser: any) => {
+    // A previous user's authorization must never survive into this user's
+    // bootstrap render. Until the matching profile resolves, show only the
+    // top-level authentication loader.
+    setAuthInitializing(true);
     setIsBootstrapped(false);
+    setIsAuthenticated(false);
+    setIsAdmin(false);
+    setUser(null);
+    setFinalProfile(null);
+    setManagedProfiles([]);
+    setManagedInventories([]);
     const userId = sbUser.id;
     console.log('Bootstrapping user:', userId);
     setSupabaseUserId(userId);
@@ -1138,7 +1148,8 @@ useEffect(() => {
     if (profError && profError.code !== 'PGRST116') {
       console.error('Profile fetch error', profError);
     }
-    setFinalProfile(prof);
+    let resolvedProfile = prof;
+    setFinalProfile(resolvedProfile);
 
     // Tutorial trigger is intentionally independent of whether a `profiles`
     // row already exists — signup can provision that row server-side before
@@ -1169,13 +1180,15 @@ useEffect(() => {
       if (insertProfileError && insertProfileError.code !== '23505') {
         console.error('Profile upsert error', insertProfileError);
       } else if (insertedProfile) {
+        resolvedProfile = insertedProfile;
         setFinalProfile(insertedProfile);
       }
     }
 
     // Final check if user is admin
-    if (finalProfile?.account_type === 'admin') {
-      setIsAdmin(true);
+    const resolvedIsAdmin = resolvedProfile?.account_type === 'admin';
+    setIsAdmin(resolvedIsAdmin);
+    if (resolvedIsAdmin) {
       fetchAdminData(true);
     }
 
@@ -1184,6 +1197,7 @@ useEffect(() => {
 
     setIsAuthenticated(true);
     setIsBootstrapped(true);
+    setAuthInitializing(false);
     // Record when the session started so we can compute duration on logout/close.
     sessionStartRef.current = Date.now();
   };
