@@ -535,14 +535,23 @@ useEffect(() => {
     try{
       const launchUrl = new URL(window.location.href);
       const launchToken = launchUrl.searchParams.get('sso_token') || launchUrl.searchParams.get('token');
+
+      // No explicit handoff means the existing Supabase identity is already
+      // authoritative and avoids an unnecessary Worker/network round trip.
+      if (!launchToken) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) return session;
+      }
+
       const exchangePath = launchToken
         ? `https://sso.snabbb.com/api/sso/exchange?sso_token=${encodeURIComponent(launchToken)}`
         : 'https://sso.snabbb.com/api/sso/exchange';
-      const sso = await api.get(exchangePath);
-      await supabase.auth.setSession({
+      const sso = await api.get(exchangePath, { timeout: 3000 });
+      const { data: installedSession, error: setSessionError } = await supabase.auth.setSession({
         access_token: sso.data.access_token,
         refresh_token: sso.data.refresh_token
       });
+      if (setSessionError) throw setSessionError;
 
       if (launchToken) {
         launchUrl.searchParams.delete('sso_token');
@@ -556,6 +565,7 @@ useEffect(() => {
       const user_id = decoded_token.sub;
 
       console.log(`User ID: ${user_id}`)
+      return installedSession.session;
     } catch (err) {
       await supabase.auth.signOut();
       console.error('SSO exchange failed:', err);
@@ -1120,12 +1130,23 @@ useEffect(() => {
   };
 
   const bootstrapUser = async (sbUser: any) => {
+    // A previous user's authorization must never survive into this user's
+    // bootstrap render. Until the matching profile resolves, show only the
+    // top-level authentication loader.
+    setAuthInitializing(true);
     setIsBootstrapped(false);
+    setIsAuthenticated(false);
+    setIsAdmin(false);
+    setUser(null);
+    setFinalProfile(null);
+    setManagedProfiles([]);
+    setManagedInventories([]);
     const userId = sbUser.id;
     console.log('Bootstrapping user:', userId);
     setSupabaseUserId(userId);
-    const { data: { user } } = await supabase.auth.getUser();
-    setTheUser(user);
+    // `sbUser` came from the already-resolved session. Avoid a second
+    // network-backed getUser() validation before loading the profile.
+    setTheUser(sbUser);
 
     const { data: prof, error: profError } = await supabase
        .from('profiles')
@@ -1138,7 +1159,8 @@ useEffect(() => {
     if (profError && profError.code !== 'PGRST116') {
       console.error('Profile fetch error', profError);
     }
-    setFinalProfile(prof);
+    let resolvedProfile = prof;
+    setFinalProfile(resolvedProfile);
 
     // Tutorial trigger is intentionally independent of whether a `profiles`
     // row already exists — signup can provision that row server-side before
@@ -1169,23 +1191,29 @@ useEffect(() => {
       if (insertProfileError && insertProfileError.code !== '23505') {
         console.error('Profile upsert error', insertProfileError);
       } else if (insertedProfile) {
+        resolvedProfile = insertedProfile;
         setFinalProfile(insertedProfile);
       }
     }
 
     // Final check if user is admin
-    if (finalProfile?.account_type === 'admin') {
-      setIsAdmin(true);
-      fetchAdminData(true);
+    const resolvedIsAdmin = resolvedProfile?.account_type === 'admin';
+    setIsAdmin(resolvedIsAdmin);
+    if (resolvedIsAdmin) {
+      void fetchAdminData(true);
     }
 
-    // Load available inventories
-    await fetchAvailableInventories(userId);
-
+    // Authorization is now fully known. Release the top-level gate before
+    // loading business data so the correct dashboard appears promptly.
     setIsAuthenticated(true);
     setIsBootstrapped(true);
+    setAuthInitializing(false);
     // Record when the session started so we can compute duration on logout/close.
     sessionStartRef.current = Date.now();
+
+    // Available inventories are dashboard data, not part of authentication.
+    // Load them in the background; their own loading state handles the UI.
+    void fetchAvailableInventories(userId);
   };
 
   useEffect(() => {
