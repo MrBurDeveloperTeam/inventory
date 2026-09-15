@@ -70,30 +70,14 @@ const Header: React.FC<HeaderProps> = ({
   const [isOpeningSupportTickets, setIsOpeningSupportTickets] = useState(false);
   const { mutateAsync: createAppLink, isPending } = useGetUserId();
 
-  const openSupportTickets = useCallback(async () => {
+  const openSupportTickets = useCallback(() => {
     if (isOpeningSupportTickets) return;
 
     setIsOpen(false);
     setIsOpeningSupportTickets(true);
-
-    try {
-      const response = await fetch('/ticketing/sso', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { Accept: 'application/json' },
-      });
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok || !data?.url) {
-        throw new Error(data?.error || 'Unable to open the support portal.');
-      }
-
-      window.location.assign(data.url);
-    } catch (error) {
-      console.error('Ticketing SSO failed:', error);
-      setIsOpeningSupportTickets(false);
-    }
-  }, [isOpeningSupportTickets]);
+    const dashboardPath = user?.accountType === 'admin' ? '/admin/dashboard' : '/user/dashboard';
+    window.location.assign(`https://app.snabbb.com${dashboardPath}`);
+  }, [isOpeningSupportTickets, user?.accountType]);
 
   useEffect(() => {
     console.log('userAvatarUrl: ',userAvatarUrl)
