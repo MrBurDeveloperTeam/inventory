@@ -615,20 +615,19 @@ const Header: React.FC<HeaderProps> = ({
                         <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors"></i>
                       </button>
 
-                      {/* Support Tickets */}
-                      {/* Temporarily hidden until the support ticket feature is ready. */}
+                      {/* Role-aware App.Snabbb dashboard */}
                       <button
                         type="button"
                         disabled={isOpeningSupportTickets}
                         onClick={openSupportTickets}
-                        className="hidden w-full items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex w-full items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <div className="w-7 h-7 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
                           <i className="fa-solid fa-life-ring text-[11px] text-blue-500" aria-hidden="true"></i>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-800 leading-tight">Support Tickets</p>
-                          <p className="text-[11px] font-semibold text-slate-400 truncate">Create and track your support tickets</p>
+                          <p className="text-sm font-bold text-slate-800 leading-tight">{user?.accountType === 'admin' ? 'Admin Dashboard' : 'User Dashboard'}</p>
+                          <p className="text-[11px] font-semibold text-slate-400 truncate">{user?.accountType === 'admin' ? 'Manage all support tickets' : 'Create and track support tickets'}</p>
                         </div>
                         <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors" aria-hidden="true"></i>
                       </button>
