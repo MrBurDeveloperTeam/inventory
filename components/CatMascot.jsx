@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { normalizePetId } from '../VirtualPet/petOptions';
-import { useSharedCatDialogueRuntime, SharedCatMascot } from '@mrburdeveloperteam/molar-experience/cat';
+import { useSharedCatDialogueRuntime, SharedCatMascot } from '@mrburdeveloperteam/pet-function/cat';
 import { CAT_SPRITE_SHEET_URLS } from '../aiExperience/molarExperienceAssets';
 
 const PET_SLEEPING_KEY = 'pet_is_sleeping';
@@ -65,7 +65,7 @@ export default function CatMascot({ onCatClick, disabled = false, personalizedIn
   // component no longer decides WHICH dialogue type shows or WHEN
   // (mount-scoped shown-tracking, dismissal persistence, cross-tab sync,
   // exact-adopted-candidate binding, one-activation/no-cascade, readiness
-  // arbitration all live in @mrburdeveloperteam/molar-experience's
+  // arbitration all live in @mrburdeveloperteam/pet-function's
   // useSharedCatDialogueRuntime — unchanged since Phase 7B). This file
   // keeps only what's genuinely Inventory-specific: fetching Intro/Welcome
   // Back CONTENT from Supabase, and reshaping the `personalizedInsightState`

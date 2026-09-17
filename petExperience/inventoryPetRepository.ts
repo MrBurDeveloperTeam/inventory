@@ -1,5 +1,5 @@
 // PHASE 7E (Virtual Pet migration): this file is the LOCAL persistence
-// adapter connecting the shared `@mrburdeveloperteam/molar-experience/pet`
+// adapter connecting the shared `@mrburdeveloperteam/pet-function/pet`
 // runtime to Inventory's OWN existing database. It implements the
 // package's `PetRepository` interface — the shared runtime only ever
 // calls these methods, never `supabase` directly. Every query here is
@@ -18,11 +18,11 @@
 //   - aiboard_pricing_currencies (currency code -> rate lookup)
 //
 // This is intentionally the ONLY file in Inventory that imports both
-// `@mrburdeveloperteam/molar-experience/contracts` types and the Supabase
+// `@mrburdeveloperteam/pet-function/contracts` types and the Supabase
 // client for pet data — the shared package itself must never see any of
 // these table names.
-import type { PetRepository } from '@mrburdeveloperteam/molar-experience/contracts';
-import type { FoodItem, PetInventoryItem, PetSaveSnapshot } from '@mrburdeveloperteam/molar-experience/contracts';
+import type { PetRepository } from '@mrburdeveloperteam/pet-function/contracts';
+import type { FoodItem, PetInventoryItem, PetSaveSnapshot } from '@mrburdeveloperteam/pet-function/contracts';
 import { supabase } from '../supabaseClient';
 
 type PricingItemRow = {

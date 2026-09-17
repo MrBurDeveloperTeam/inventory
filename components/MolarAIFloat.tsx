@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Mail } from 'lucide-react';
-import { SharedMolarAI } from '@mrburdeveloperteam/molar-experience/ai';
-import type { AIAdapter } from '@mrburdeveloperteam/molar-experience/contracts';
+import { SharedMolarAI } from '@mrburdeveloperteam/pet-function/ai';
+import type { AIAdapter } from '@mrburdeveloperteam/pet-function/contracts';
 import { supabase } from '../supabaseClient';
 import { MOLAR_LOGO_URL } from '../aiExperience/molarExperienceAssets';
 
@@ -48,7 +48,7 @@ const DEFAULT_EMPTY_STATE = {
 };
 
 /**
- * Thin host wrapper around `@mrburdeveloperteam/molar-experience/ai`'s
+ * Thin host wrapper around `@mrburdeveloperteam/pet-function/ai`'s
  * <SharedMolarAI>. All generic chat UI lifecycle (open/close, history,
  * input draft, loading/error presentation, submit mechanics, scroll,
  * clear/reset, Markdown rendering) now lives in the shared package. This
