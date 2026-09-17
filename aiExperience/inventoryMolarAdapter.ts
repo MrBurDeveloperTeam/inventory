@@ -1,5 +1,5 @@
 // PHASE 7D (Molar AI migration): the LOCAL orchestration adapter connecting
-// the shared `@mrburdeveloperteam/molar-experience/ai` chat UI runtime to
+// the shared `@mrburdeveloperteam/pet-function/ai` chat UI runtime to
 // Inventory's own General Chat + Data-Driven Chat + LIVE HOST ACTION
 // pipelines. The shared package only ever calls `sendMessage` and renders
 // the returned `AIResponse.text` — every business decision below (mutation
@@ -17,7 +17,7 @@
 // adapter dependencies. There is exactly ONE parser/executor for this
 // protocol, both before and after this migration — this file does not
 // duplicate it, and no global bridge exists to remove or retain.
-import type { AIAdapter, AIMessage, AIRequest, AIResponse } from '@mrburdeveloperteam/molar-experience/contracts';
+import type { AIAdapter, AIMessage, AIRequest, AIResponse } from '@mrburdeveloperteam/pet-function/contracts';
 import type { Room, Item, PurchaseHistory, ActivityLog } from '../types';
 import { supabase } from '../supabaseClient';
 import { chatWithGemini, chatWithGroundedInventoryFacts } from '../services/geminiService';

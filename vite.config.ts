@@ -2,6 +2,8 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+// @ts-ignore Shared package's JavaScript Vite integration.
+import { sharedGamesPlugin } from './node_modules/@mrburdeveloperteam/pet-function/scripts/vite-games.mjs';
 
 export default defineConfig(() => {
   return {
@@ -14,6 +16,7 @@ export default defineConfig(() => {
     },
     plugins: [
       react(),
+      sharedGamesPlugin(),
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {
@@ -54,6 +57,7 @@ export default defineConfig(() => {
       })
     ],
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
       }

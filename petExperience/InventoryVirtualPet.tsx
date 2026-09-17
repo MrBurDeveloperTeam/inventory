@@ -1,5 +1,5 @@
 // PHASE 7E (Virtual Pet migration): thin host wrapper around
-// `@mrburdeveloperteam/molar-experience/pet`'s <SharedVirtualPet>.
+// `@mrburdeveloperteam/pet-function/pet`'s <SharedVirtualPet>.
 //
 // Everything generic (room UI, adoption UI, shop/inventory UI, stat
 // runtime/decay tick, XP/level/coin arithmetic, mini-game embedding shell,
@@ -35,8 +35,8 @@
 // too would just be a redundant second write to the same style property,
 // not a behavior difference.
 import { useEffect, useRef, useState } from 'react';
-import { SharedVirtualPet } from '@mrburdeveloperteam/molar-experience/pet';
-import type { ExtraGame } from '@mrburdeveloperteam/molar-experience/pet';
+import { SharedVirtualPet } from '@mrburdeveloperteam/pet-function/pet';
+import type { ExtraGame } from '@mrburdeveloperteam/pet-function/pet';
 import { supabase } from '../supabaseClient';
 import { inventoryPetRepository } from './inventoryPetRepository';
 import { PET_ASSET_URLS } from '../aiExperience/molarExperienceAssets';
@@ -166,10 +166,7 @@ interface InventoryVirtualPetProps {
    * this component noticing a change on its own.
    */
   userId: string | null;
-  /** Host-local games (e.g. Meowdoku, which predates this package's
-   *  shared Games catalog) rendered as extra cards after the 3 built-in
-   *  games. See `ExtraGame`'s own doc — this package never opens or
-   *  tracks state for these, only calls `onSelect`. */
+  /** Extra cards open shared launchers through Inventory-owned callbacks. */
   extraGames?: ExtraGame[];
 }
 

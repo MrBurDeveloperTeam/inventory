@@ -12,7 +12,7 @@ import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
 import InventoryVirtualPet from './petExperience/InventoryVirtualPet';
 import MeowdokuLauncher from './games/MeowdokuLauncher';
-import type { ExtraGame } from '@mrburdeveloperteam/molar-experience/pet';
+import type { ExtraGame } from '@mrburdeveloperteam/pet-function/pet';
 import CatMascot from './components/CatMascot';
 import MolarAIFloat from './components/MolarAIFloat';
 import LowStockReorderModal from './components/LowStockReorderModal';
@@ -458,10 +458,8 @@ const App: React.FC = () => {
 
   // Virtual Pet State
   const [isVirtualPetOpen, setIsVirtualPetOpen] = useState(false);
-  // INVENTORY-MOLAR-PRODUCTION-PARITY-HOTFIX-1: Meowdoku predates the
-  // shared Games catalog (only Flappy/Pac-Cat/Tetris) — wired in via
-  // SharedVirtualPet's `extraGames` as a 4th card; the host owns opening
-  // it via MeowdokuLauncher, stacked above the Pet overlay.
+  // The fourth game uses pet-function's shared launcher. Inventory only
+  // controls its opening and supplies the current authenticated account.
   const [isMeowdokuOpen, setIsMeowdokuOpen] = useState(false);
 
   // Global Chat State

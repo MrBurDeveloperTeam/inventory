@@ -2,6 +2,8 @@ node_modules
 .env.local
 dist
 dev-dist
+# Generated from the installed shared package by predev/prebuild.
+/public/molar-experience/
 # Logs
 logs
 *.log
