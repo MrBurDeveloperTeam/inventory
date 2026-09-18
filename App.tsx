@@ -27,7 +27,8 @@ import {
   readThemeCookie,
   parseTheme,
 } from './src/utils/themeSync';
-import { chatWithGemini } from './services/geminiService';
+// Legacy chat import: the active adapter now injects this transport from inventoryMolarAdapter.ts.
+// import { chatWithGemini } from './services/geminiService';
 import { supabase } from './supabaseClient';
 import { api } from './services/api';
 import { logActivityToOdoo } from './services/logActivityToOdoo';
@@ -464,12 +465,13 @@ const App: React.FC = () => {
 
   // Global Chat State
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [isChatLoading, setIsChatLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const chatAudioRef = useRef<HTMLAudioElement | null>(null);
-  const handleClearChat = () => setChatHistory([]);
+  // Archived unused legacy chat state. SharedMolarAI owns the active conversation.
+//   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
+//   const [chatInput, setChatInput] = useState("");
+//   const [isChatLoading, setIsChatLoading] = useState(false);
+//   const chatEndRef = useRef<HTMLDivElement>(null);
+//   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
+//   const handleClearChat = () => setChatHistory([]);
 
   //promotions
   const role = finalProfile?.position || 'staff';
@@ -484,10 +486,10 @@ useEffect(() => {
 
   (async () => {
     try {
-      // audio init
-      const baseUrl = import.meta.env.BASE_URL || "/";
-      const audioPath = `${baseUrl.endsWith("/") ? baseUrl : baseUrl + "/"}images/cat-meow.mp3`.replace(/\/+/g, "/");
-      chatAudioRef.current = new Audio(audioPath);
+//       // audio init
+//       const baseUrl = import.meta.env.BASE_URL || "/";
+//       const audioPath = `${baseUrl.endsWith("/") ? baseUrl : baseUrl + "/"}images/cat-meow.mp3`.replace(/\/+/g, "/");
+//       chatAudioRef.current = new Audio(audioPath);
 
       // 1) try SSO -> setSession (may fail, that's ok)
       await checkSession();
@@ -570,194 +572,195 @@ useEffect(() => {
     }
   };
 
-  const playMeowChat = () => {
-    if (chatAudioRef.current) {
-      chatAudioRef.current.currentTime = 0;
-      chatAudioRef.current.play().catch(err => console.log("Audio blocked:", err));
-    }
-  };
-
-  useEffect(() => {
-    if (isChatOpen && chatHistory.length > 0 && chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [chatHistory, isChatOpen]);
-
-  const getPredefinedChatResponse = async (message: string): Promise<string | null> => {
-    const normalizedMessage = message.toLowerCase();
-
-    const { data: targetApps, error: targetAppsError } = await supabase
-      .from('aiboard_response_target_apps')
-      .select('response_id')
-      .in('app_name', ['Inventory', 'All']);
-
-    if (targetAppsError) {
-      console.error('Failed to fetch response target apps:', targetAppsError);
-      return null;
-    }
-
-    const responseIds = [...new Set((targetApps || []).map((app: any) => app.response_id).filter(Boolean))];
-    if (responseIds.length === 0) return null;
-
-    const { data: keywords, error: keywordsError } = await supabase
-      .from('aiboard_response_keywords')
-      .select('keyword, response_id')
-      .in('response_id', responseIds);
-
-    if (keywordsError) {
-      console.error('Failed to fetch response keywords:', keywordsError);
-      return null;
-    }
-
-    const matchedKeyword = (keywords || [])
-      .filter((item: any) => item.keyword && normalizedMessage.includes(String(item.keyword).toLowerCase()))
-      .sort((a: any, b: any) => String(b.keyword).length - String(a.keyword).length)[0];
-
-    if (!matchedKeyword?.response_id) return null;
-
-    const { data: responseData, error: responseError } = await supabase
-      .from('aiboard_responses')
-      .select('response')
-      .eq('id', matchedKeyword.response_id)
-      .maybeSingle();
-
-    if (responseError) {
-      console.error('Failed to fetch predefined response:', responseError);
-      return null;
-    }
-
-    return responseData?.response || null;
-  };
-
-  const handleSendChat = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!chatInput.trim() || isChatLoading) return;
-
-    const userMsg = chatInput;
-    setChatInput("");
-
-    const newHistory: ChatHistory[] = [
-      ...chatHistory,
-      { role: "user", parts: [{ text: userMsg }] }
-    ];
-    setChatHistory(newHistory);
-    setIsChatLoading(true);
-
-    try {
-      const simpleInventory = rooms.map(r => ({
-        id: r.id,
-        room: r.name,
-        items: r.items.map(i => ({
-          name: i.name,
-          brand: i.brand,
-          code: i.code,
-          category: i.category,
-          uom: i.uom,
-          totalQty: i.quantity,
-          avgPrice: i.price,
-          location: r.name,
-          batches: i.batches?.map(b => ({
-            qty: b.qty,
-            unitPrice: b.unitPrice,
-            expiryDate: b.expiryDate
-          }))
-        }))
-      }));
-
-      // Prepare purchase history (last 100 records for performance)
-      const recentPurchases = history.slice(0, 100).map(h => ({
-        date: h.timestamp,
-        product: h.productName,
-        brand: h.brand,
-        vendor: h.vendor,
-        qty: h.qty,
-        unitPrice: h.unitPrice,
-        total: h.totalPrice,
-        location: h.location,
-        category: h.category
-      }));
-
-      // Prepare activity logs (last 100 records for performance)
-      const recentLogs = logs.slice(0, 100).map(l => ({
-        date: l.timestamp,
-        room: l.roomName,
-        action: l.action,
-        details: l.details,
-        actor: l.actorName
-      }));
-
-      const contextStr = JSON.stringify(simpleInventory);
-      const purchaseHistoryStr = recentPurchases.length ? JSON.stringify(recentPurchases) : undefined;
-      const activityLogsStr = recentLogs.length ? JSON.stringify(recentLogs) : undefined;
-
-      const response = await getPredefinedChatResponse(userMsg)
-        || await chatWithGemini(chatHistory, userMsg, contextStr, purchaseHistoryStr, activityLogsStr);
-
-      let finalResponseText = response;
-      const actionMatch = response.match(/<ACTION>(.*?)<\/ACTION>/);
-
-      if (actionMatch && actionMatch[1]) {
-        try {
-          const actionData = JSON.parse(actionMatch[1]);
-          if (actionData.type === 'receive') {
-            receiveStock(
-              actionData.roomId,
-              {
-                name: actionData.itemName,
-                brand: actionData.brand || '',
-                code: actionData.code || '',
-                uom: (actionData.uom || 'pcs').toLowerCase() as any,
-                vendor: actionData.vendor || '',
-                category: (actionData.category || 'consumables').toLowerCase() as any
-              },
-              actionData.qty,
-              actionData.price,
-              new Date().toISOString().split('T')[0],
-              actionData.expiry,
-              actionData.createNewBatch
-            );
-          } else if (actionData.type === 'remove') {
-            removeStock(
-              actionData.roomId,
-              actionData.itemName,
-              actionData.brand,
-              actionData.qty,
-              actionData.expiry
-            );
-          } else if (actionData.type === 'transfer') {
-            const fromRoom = rooms.find(r => r.id === actionData.fromRoomId || r.name === (actionData.fromRoomName || actionData.fromRoom));
-            const toRoom = rooms.find(r => r.id === actionData.toRoomId || r.name === (actionData.toRoomName || actionData.toRoom));
-            if (fromRoom && toRoom) {
-              const item = fromRoom.items.find(i => 
-                i.name.toLowerCase() === actionData.itemName.toLowerCase() &&
-                (actionData.brand ? i.brand.toLowerCase() === actionData.brand.toLowerCase() : true)
-              );
-              if (item) {
-                moveItem(fromRoom.id, toRoom.id, item.id, actionData.qty);
-              }
-            }
-          }
-          finalResponseText = response.replace(/<ACTION>.*?<\/ACTION>/s, '').trim();
-        } catch (err) {
-          console.error('Failed to parse AI action:', err);
-        }
-      }
-
-      setChatHistory(prev => [
-        ...prev,
-        { role: "model", parts: [{ text: finalResponseText }] }
-      ]);
-      // playMeowChat();
-    } catch (err) {
-      console.error(err);
-      setChatHistory([
-        ...newHistory,
-        { role: "model", parts: [{ text: "I'm having trouble processing your request at the moment. Please try again shortly." }] }
-      ]);
-    } finally {
-      setIsChatLoading(false);
-    }
-  };
+  // Archived unused legacy chat implementation. Active dialogue is in pet-function/apps/inventory.
+//   const playMeowChat = () => {
+//     if (chatAudioRef.current) {
+//       chatAudioRef.current.currentTime = 0;
+//       chatAudioRef.current.play().catch(err => console.log("Audio blocked:", err));
+//     }
+//   };
+//
+//   useEffect(() => {
+//     if (isChatOpen && chatHistory.length > 0 && chatEndRef.current) {
+//       chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+//     }
+//   }, [chatHistory, isChatOpen]);
+//
+//   const getPredefinedChatResponse = async (message: string): Promise<string | null> => {
+//     const normalizedMessage = message.toLowerCase();
+//
+//     const { data: targetApps, error: targetAppsError } = await supabase
+//       .from('aiboard_response_target_apps')
+//       .select('response_id')
+//       .in('app_name', ['Inventory', 'All']);
+//
+//     if (targetAppsError) {
+//       console.error('Failed to fetch response target apps:', targetAppsError);
+//       return null;
+//     }
+//
+//     const responseIds = [...new Set((targetApps || []).map((app: any) => app.response_id).filter(Boolean))];
+//     if (responseIds.length === 0) return null;
+//
+//     const { data: keywords, error: keywordsError } = await supabase
+//       .from('aiboard_response_keywords')
+//       .select('keyword, response_id')
+//       .in('response_id', responseIds);
+//
+//     if (keywordsError) {
+//       console.error('Failed to fetch response keywords:', keywordsError);
+//       return null;
+//     }
+//
+//     const matchedKeyword = (keywords || [])
+//       .filter((item: any) => item.keyword && normalizedMessage.includes(String(item.keyword).toLowerCase()))
+//       .sort((a: any, b: any) => String(b.keyword).length - String(a.keyword).length)[0];
+//
+//     if (!matchedKeyword?.response_id) return null;
+//
+//     const { data: responseData, error: responseError } = await supabase
+//       .from('aiboard_responses')
+//       .select('response')
+//       .eq('id', matchedKeyword.response_id)
+//       .maybeSingle();
+//
+//     if (responseError) {
+//       console.error('Failed to fetch predefined response:', responseError);
+//       return null;
+//     }
+//
+//     return responseData?.response || null;
+//   };
+//
+//   const handleSendChat = async (e?: React.FormEvent) => {
+//     e?.preventDefault();
+//     if (!chatInput.trim() || isChatLoading) return;
+//
+//     const userMsg = chatInput;
+//     setChatInput("");
+//
+//     const newHistory: ChatHistory[] = [
+//       ...chatHistory,
+//       { role: "user", parts: [{ text: userMsg }] }
+//     ];
+//     setChatHistory(newHistory);
+//     setIsChatLoading(true);
+//
+//     try {
+//       const simpleInventory = rooms.map(r => ({
+//         id: r.id,
+//         room: r.name,
+//         items: r.items.map(i => ({
+//           name: i.name,
+//           brand: i.brand,
+//           code: i.code,
+//           category: i.category,
+//           uom: i.uom,
+//           totalQty: i.quantity,
+//           avgPrice: i.price,
+//           location: r.name,
+//           batches: i.batches?.map(b => ({
+//             qty: b.qty,
+//             unitPrice: b.unitPrice,
+//             expiryDate: b.expiryDate
+//           }))
+//         }))
+//       }));
+//
+//       // Prepare purchase history (last 100 records for performance)
+//       const recentPurchases = history.slice(0, 100).map(h => ({
+//         date: h.timestamp,
+//         product: h.productName,
+//         brand: h.brand,
+//         vendor: h.vendor,
+//         qty: h.qty,
+//         unitPrice: h.unitPrice,
+//         total: h.totalPrice,
+//         location: h.location,
+//         category: h.category
+//       }));
+//
+//       // Prepare activity logs (last 100 records for performance)
+//       const recentLogs = logs.slice(0, 100).map(l => ({
+//         date: l.timestamp,
+//         room: l.roomName,
+//         action: l.action,
+//         details: l.details,
+//         actor: l.actorName
+//       }));
+//
+//       const contextStr = JSON.stringify(simpleInventory);
+//       const purchaseHistoryStr = recentPurchases.length ? JSON.stringify(recentPurchases) : undefined;
+//       const activityLogsStr = recentLogs.length ? JSON.stringify(recentLogs) : undefined;
+//
+//       const response = await getPredefinedChatResponse(userMsg)
+//         || await chatWithGemini(chatHistory, userMsg, contextStr, purchaseHistoryStr, activityLogsStr);
+//
+//       let finalResponseText = response;
+//       const actionMatch = response.match(/<ACTION>(.*?)<\/ACTION>/);
+//
+//       if (actionMatch && actionMatch[1]) {
+//         try {
+//           const actionData = JSON.parse(actionMatch[1]);
+//           if (actionData.type === 'receive') {
+//             receiveStock(
+//               actionData.roomId,
+//               {
+//                 name: actionData.itemName,
+//                 brand: actionData.brand || '',
+//                 code: actionData.code || '',
+//                 uom: (actionData.uom || 'pcs').toLowerCase() as any,
+//                 vendor: actionData.vendor || '',
+//                 category: (actionData.category || 'consumables').toLowerCase() as any
+//               },
+//               actionData.qty,
+//               actionData.price,
+//               new Date().toISOString().split('T')[0],
+//               actionData.expiry,
+//               actionData.createNewBatch
+//             );
+//           } else if (actionData.type === 'remove') {
+//             removeStock(
+//               actionData.roomId,
+//               actionData.itemName,
+//               actionData.brand,
+//               actionData.qty,
+//               actionData.expiry
+//             );
+//           } else if (actionData.type === 'transfer') {
+//             const fromRoom = rooms.find(r => r.id === actionData.fromRoomId || r.name === (actionData.fromRoomName || actionData.fromRoom));
+//             const toRoom = rooms.find(r => r.id === actionData.toRoomId || r.name === (actionData.toRoomName || actionData.toRoom));
+//             if (fromRoom && toRoom) {
+//               const item = fromRoom.items.find(i =>
+//                 i.name.toLowerCase() === actionData.itemName.toLowerCase() &&
+//                 (actionData.brand ? i.brand.toLowerCase() === actionData.brand.toLowerCase() : true)
+//               );
+//               if (item) {
+//                 moveItem(fromRoom.id, toRoom.id, item.id, actionData.qty);
+//               }
+//             }
+//           }
+//           finalResponseText = response.replace(/<ACTION>.*?<\/ACTION>/s, '').trim();
+//         } catch (err) {
+//           console.error('Failed to parse AI action:', err);
+//         }
+//       }
+//
+//       setChatHistory(prev => [
+//         ...prev,
+//         { role: "model", parts: [{ text: finalResponseText }] }
+//       ]);
+//       // playMeowChat();
+//     } catch (err) {
+//       console.error(err);
+//       setChatHistory([
+//         ...newHistory,
+//         { role: "model", parts: [{ text: "I'm having trouble processing your request at the moment. Please try again shortly." }] }
+//       ]);
+//     } finally {
+//       setIsChatLoading(false);
+//     }
+//   };
 
   // Sharing Logic
   const [currentInventoryOwnerId, setCurrentInventoryOwnerId] = useState<string | null>(null);
@@ -1251,12 +1254,12 @@ useEffect(() => {
         const { data:metadata } = await supabase
         .from('inventory_meta')
         .select('*')
-        .eq('user_id', currentInventoryOwnerId) 
+        .eq('user_id', currentInventoryOwnerId)
         .maybeSingle();
 
       meta = metadata;
 
-      
+
       const { data:roomdata, error: roomsError } = await supabase
       .from('inventory_rooms')
       .select('id, name, pos_x, pos_y')
@@ -1266,7 +1269,7 @@ useEffect(() => {
       if (roomsError) {
         console.error('Rooms fetch error', roomsError);
       }
-    
+
 
       const roomIds = (roomsData || []).map((r: any) => r.id);
       const { data: itemData } = roomIds.length
@@ -1452,7 +1455,7 @@ useEffect(() => {
               y: Number(payload.new.pos_y)
             } : r));
           } else if (payload.eventType === 'DELETE') {
-            // For DELETE, payload.old only has the ID. 
+            // For DELETE, payload.old only has the ID.
             // We just filter it out of our local state if it exists.
             setRooms(prev => prev.filter(r => r.id !== payload.old.id));
           }
@@ -3082,7 +3085,7 @@ const handleLogout = async () => {
     const updatedItem: Item = { ...item, ...itemData };
 
     // If quantity or price was provided in itemData, ensure the first batch (latest) reflects it if appropriate
-    // Or just let user manage batches separately? 
+    // Or just let user manage batches separately?
     // Usually, "Edit Item" from the simple UI should probably update the primary/summary fields and the latest batch.
     if (updatedItem.batches && updatedItem.batches.length > 0) {
       // Update the most recent batch to match the summary if they are different

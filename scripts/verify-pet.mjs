@@ -7,7 +7,7 @@ const host = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const root = dirname(require.resolve('@mrburdeveloperteam/pet-function/package.json'));
 const manifest = JSON.parse(readFileSync(join(root, 'package.json')));
-assert.equal(manifest.version, '0.9.10');
+assert.equal(manifest.version, '0.9.11');
 assert.ok(!existsSync(join(host, 'public/games')), 'Host must not retain executable game copies.');
 const canonical = join(root, 'public/games');
 const walk = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]);
