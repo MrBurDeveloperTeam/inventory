@@ -1,120 +1,128 @@
-import { useEffect, useState } from 'react';
-import { Mail } from 'lucide-react';
-import { SharedMolarAI } from '@mrburdeveloperteam/pet-function/ai';
-import type { AIAdapter } from '@mrburdeveloperteam/pet-function/contracts';
+// PET_FUNCTION_ARCHIVE_BEGIN
+// Original local implementation retained for reference only. Do not uncomment alongside the shared implementation.
+// import { useEffect, useState } from 'react';
+// import { Mail } from 'lucide-react';
+// import { SharedMolarAI } from '@mrburdeveloperteam/pet-function/ai';
+// import type { AIAdapter } from '@mrburdeveloperteam/pet-function/contracts';
+// import { supabase } from '../supabaseClient';
+// import { MOLAR_LOGO_URL } from '../aiExperience/molarExperienceAssets';
+//
+// const SUPPORT_MAILTO_URL = 'https://mail.google.com/mail/?view=cm&fs=1&to=support%40snabbb.com&su=Customer%20Inquiry';
+//
+// /** Inventory-local support card rendered inside the Molar AI panel via
+//  *  `footerContent` (0.9.5) — below messages/suggestions, above the
+//  *  composer. Follows the same E-learning-approved pattern: a single
+//  *  Gmail-compose link, no separate floating support launcher. */
+// function MolarSupportFooter() {
+//   return (
+//     <a
+//       href={SUPPORT_MAILTO_URL}
+//       target="_blank"
+//       rel="noopener noreferrer"
+//       className="inventory-support-link flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors"
+//     >
+//       <span className="inventory-support-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full border">
+//         <Mail className="h-4 w-4" />
+//       </span>
+//       <span className="min-w-0">
+//         <span className="inventory-support-title block text-sm font-semibold">Email Support</span>
+//         <span className="inventory-support-meta block text-xs">Contact support@snabbb.com</span>
+//       </span>
+//     </a>
+//   );
+// }
+//
+// interface MolarAIFloatProps {
+//   adapter: AIAdapter;
+//   onPetToggle?: () => void;
+//   disabled?: boolean;
+// }
+//
+// const DEFAULT_EMPTY_STATE = {
+//   title: 'Inventory Simulator',
+//   subtitle: 'Ask a question or try one of the suggestions below to test the Inventory AI.',
+//   prompts: [
+//     { label: 'How does it work?', iconName: 'Zap' },
+//     { label: 'Check expiring stock', iconName: 'ShieldCheck' },
+//     { label: 'Low supply alerts', iconName: 'AlertCircle' },
+//     { label: 'Usage analytics', iconName: 'BarChart3' },
+//   ],
+// };
+//
+// /**
+//  * Thin host wrapper around `@mrburdeveloperteam/pet-function/ai`'s
+//  * <SharedMolarAI>. All generic chat UI lifecycle (open/close, history,
+//  * input draft, loading/error presentation, submit mechanics, scroll,
+//  * clear/reset, Markdown rendering) now lives in the shared package. This
+//  * file keeps only what's genuinely Inventory-specific: the empty-state
+//  * content fetch. The actual General Chat / Data Chat / live `<ACTION>`
+//  * mutation orchestration lives entirely in `App.tsx`'s
+//  * `createInventoryMolarAdapter` — this component only receives the
+//  * already-built `adapter`.
+//  */
+// export default function MolarAIFloat({ adapter, onPetToggle, disabled = false }: MolarAIFloatProps) {
+//   const [emptyState, setEmptyState] = useState(DEFAULT_EMPTY_STATE);
+//
+//   // TIMING SEAM: the pre-migration MolarChat.tsx fetched this only once the
+//   // chat panel opened (`if (isOpen) fetchSimConfig()`); SharedMolarAI needs
+//   // `emptyState` already resolved, so this now fetches once at mount
+//   // instead — one additional harmless read-only Supabase query per mount,
+//   // matching the accepted precedent from every other app's Molar AI
+//   // migration in this session.
+//   useEffect(() => {
+//     const fetchSimConfig = async () => {
+//       try {
+//         const { data: configs } = await supabase
+//           .from('aiboard_simulator_configs')
+//           .select('id, title, subtitle')
+//           .eq('module_name', 'Inventory')
+//           .limit(1);
+//
+//         if (!configs || configs.length === 0) return;
+//
+//         const nextConfig = configs[0];
+//         const nextEmptyState = {
+//           title: nextConfig.title || DEFAULT_EMPTY_STATE.title,
+//           subtitle: nextConfig.subtitle || DEFAULT_EMPTY_STATE.subtitle,
+//           prompts: DEFAULT_EMPTY_STATE.prompts,
+//         };
+//
+//         const { data: promptData } = await supabase
+//           .from('aiboard_simulator_prompts')
+//           .select('text, icon_name, sort_order')
+//           .eq('config_id', nextConfig.id)
+//           .order('sort_order', { ascending: true });
+//
+//         if (promptData && promptData.length > 0) {
+//           nextEmptyState.prompts = promptData.map((prompt: any) => ({
+//             label: prompt.text,
+//             iconName: prompt.icon_name || 'Zap',
+//           }));
+//         }
+//
+//         setEmptyState(nextEmptyState);
+//       } catch (err) {
+//         console.error('Error fetching inventory simulator config:', err);
+//       }
+//     };
+//
+//     fetchSimConfig();
+//   }, []);
+//
+//   return (
+//     <SharedMolarAI
+//       adapter={adapter}
+//       disabled={disabled}
+//       onPetToggle={onPetToggle}
+//       emptyState={emptyState}
+//       logoUrl={MOLAR_LOGO_URL}
+//       footerContent={<MolarSupportFooter />}
+//     />
+//   );
+// }
+// PET_FUNCTION_ARCHIVE_END
+
+import { createInventoryMolarAIFloat } from '@mrburdeveloperteam/pet-function/apps/inventory';
 import { supabase } from '../supabaseClient';
-import { MOLAR_LOGO_URL } from '../aiExperience/molarExperienceAssets';
-
-const SUPPORT_MAILTO_URL = 'https://mail.google.com/mail/?view=cm&fs=1&to=support%40snabbb.com&su=Customer%20Inquiry';
-
-/** Inventory-local support card rendered inside the Molar AI panel via
- *  `footerContent` (0.9.5) — below messages/suggestions, above the
- *  composer. Follows the same E-learning-approved pattern: a single
- *  Gmail-compose link, no separate floating support launcher. */
-function MolarSupportFooter() {
-  return (
-    <a
-      href={SUPPORT_MAILTO_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inventory-support-link flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors"
-    >
-      <span className="inventory-support-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full border">
-        <Mail className="h-4 w-4" />
-      </span>
-      <span className="min-w-0">
-        <span className="inventory-support-title block text-sm font-semibold">Email Support</span>
-        <span className="inventory-support-meta block text-xs">Contact support@snabbb.com</span>
-      </span>
-    </a>
-  );
-}
-
-interface MolarAIFloatProps {
-  adapter: AIAdapter;
-  onPetToggle?: () => void;
-  disabled?: boolean;
-}
-
-const DEFAULT_EMPTY_STATE = {
-  title: 'Inventory Simulator',
-  subtitle: 'Ask a question or try one of the suggestions below to test the Inventory AI.',
-  prompts: [
-    { label: 'How does it work?', iconName: 'Zap' },
-    { label: 'Check expiring stock', iconName: 'ShieldCheck' },
-    { label: 'Low supply alerts', iconName: 'AlertCircle' },
-    { label: 'Usage analytics', iconName: 'BarChart3' },
-  ],
-};
-
-/**
- * Thin host wrapper around `@mrburdeveloperteam/pet-function/ai`'s
- * <SharedMolarAI>. All generic chat UI lifecycle (open/close, history,
- * input draft, loading/error presentation, submit mechanics, scroll,
- * clear/reset, Markdown rendering) now lives in the shared package. This
- * file keeps only what's genuinely Inventory-specific: the empty-state
- * content fetch. The actual General Chat / Data Chat / live `<ACTION>`
- * mutation orchestration lives entirely in `App.tsx`'s
- * `createInventoryMolarAdapter` — this component only receives the
- * already-built `adapter`.
- */
-export default function MolarAIFloat({ adapter, onPetToggle, disabled = false }: MolarAIFloatProps) {
-  const [emptyState, setEmptyState] = useState(DEFAULT_EMPTY_STATE);
-
-  // TIMING SEAM: the pre-migration MolarChat.tsx fetched this only once the
-  // chat panel opened (`if (isOpen) fetchSimConfig()`); SharedMolarAI needs
-  // `emptyState` already resolved, so this now fetches once at mount
-  // instead — one additional harmless read-only Supabase query per mount,
-  // matching the accepted precedent from every other app's Molar AI
-  // migration in this session.
-  useEffect(() => {
-    const fetchSimConfig = async () => {
-      try {
-        const { data: configs } = await supabase
-          .from('aiboard_simulator_configs')
-          .select('id, title, subtitle')
-          .eq('module_name', 'Inventory')
-          .limit(1);
-
-        if (!configs || configs.length === 0) return;
-
-        const nextConfig = configs[0];
-        const nextEmptyState = {
-          title: nextConfig.title || DEFAULT_EMPTY_STATE.title,
-          subtitle: nextConfig.subtitle || DEFAULT_EMPTY_STATE.subtitle,
-          prompts: DEFAULT_EMPTY_STATE.prompts,
-        };
-
-        const { data: promptData } = await supabase
-          .from('aiboard_simulator_prompts')
-          .select('text, icon_name, sort_order')
-          .eq('config_id', nextConfig.id)
-          .order('sort_order', { ascending: true });
-
-        if (promptData && promptData.length > 0) {
-          nextEmptyState.prompts = promptData.map((prompt: any) => ({
-            label: prompt.text,
-            iconName: prompt.icon_name || 'Zap',
-          }));
-        }
-
-        setEmptyState(nextEmptyState);
-      } catch (err) {
-        console.error('Error fetching inventory simulator config:', err);
-      }
-    };
-
-    fetchSimConfig();
-  }, []);
-
-  return (
-    <SharedMolarAI
-      adapter={adapter}
-      disabled={disabled}
-      onPetToggle={onPetToggle}
-      emptyState={emptyState}
-      logoUrl={MOLAR_LOGO_URL}
-      footerContent={<MolarSupportFooter />}
-    />
-  );
-}
+const MolarAIFloat = createInventoryMolarAIFloat(supabase);
+export default MolarAIFloat;
