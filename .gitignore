@@ -3,7 +3,7 @@ node_modules
 dist
 dev-dist
 # Generated from the installed shared package by predev/prebuild.
-/public/molar-experience/
+/public/pet-function/
 # Logs
 logs
 *.log
