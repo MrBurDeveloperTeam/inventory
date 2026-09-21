@@ -12,7 +12,7 @@ import AdminDashboard from './AdminDashboard';
 import CollaboratorModal from './CollaboratorModal';
 import InventoryVirtualPet from './petExperience/InventoryVirtualPet';
 import MeowdokuLauncher from './games/MeowdokuLauncher';
-import type { ExtraGame } from '@mrburdeveloperteam/molar-experience/pet';
+import type { ExtraGame } from '@mrburdeveloperteam/pet-function/pet';
 import CatMascot from './components/CatMascot';
 import MolarAIFloat from './components/MolarAIFloat';
 import LowStockReorderModal from './components/LowStockReorderModal';
