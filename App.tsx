@@ -1105,16 +1105,28 @@ useEffect(() => {
     const userId = sbUser.id;
     console.log('Bootstrapping user:', userId);
     setSupabaseUserId(userId);
-    const { data: { user } } = await supabase.auth.getUser();
+
+    // getUser() (a round trip to Supabase Auth to re-validate the session),
+    // the profiles lookup, and fetchAvailableInventories were previously
+    // three separate sequential awaits, even though none of them depends on
+    // another's result to start -- all three only need userId/sbUser, which
+    // we already have. Running them concurrently turns 3 round trips into 1
+    // (plus a 4th, the profile upsert, only on the rare path where a
+    // profiles row doesn't exist yet).
+    const [{ data: { user } }, profResult] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      fetchAvailableInventories(userId),
+    ]);
     setTheUser(user);
 
-    const { data: prof, error: profError } = await supabase
-       .from('profiles')
-       .select('*')
-       .eq('user_id', userId)
-       .order('updated_at', { ascending: false })
-       .limit(1)
-       .maybeSingle();
+    const { data: prof, error: profError } = profResult;
 
     if (profError && profError.code !== 'PGRST116') {
       console.error('Profile fetch error', profError);
@@ -1129,6 +1141,14 @@ useEffect(() => {
       setShowTutorialVideo(true);
       markTutorialVideoSeen(userId);
     }
+
+    // Tracks the profile value to admin-check below. Deliberately NOT the
+    // `finalProfile` React state variable: setFinalProfile() above doesn't
+    // update that binding until the next render, so the admin check that
+    // used to read `finalProfile` here was always checking the *previous*
+    // profile (or null/undefined on first login), never the one just
+    // fetched or created a few lines above.
+    let resolvedProfile = prof;
 
     if (!prof && sbUser) {
       const fallbackProfile = {
@@ -1151,17 +1171,15 @@ useEffect(() => {
         console.error('Profile upsert error', insertProfileError);
       } else if (insertedProfile) {
         setFinalProfile(insertedProfile);
+        resolvedProfile = insertedProfile;
       }
     }
 
     // Final check if user is admin
-    if (finalProfile?.account_type === 'admin') {
+    if (resolvedProfile?.account_type === 'admin') {
       setIsAdmin(true);
       fetchAdminData(true);
     }
-
-    // Load available inventories
-    await fetchAvailableInventories(userId);
 
     setIsAuthenticated(true);
     setIsBootstrapped(true);
