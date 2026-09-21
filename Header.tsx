@@ -554,7 +554,7 @@ const Header: React.FC<HeaderProps> = ({
                         }}
                         className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left"
                       >
-                        <div className="w-7 h-7 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
+                        <div className="w-7 h-7 rounded-xl bg-violet-50 flex items-center justify-center shrink-0 invisible">
                           <i className="fa-solid fa-wallet text-[11px] text-violet-500"></i>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -589,7 +589,7 @@ const Header: React.FC<HeaderProps> = ({
                         }}
                         className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left"
                       >
-                        <div className="w-7 h-7 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+                        <div className="w-7 h-7 rounded-xl bg-sky-50 flex items-center justify-center shrink-0 invisible">
                           <i className="fa-solid fa-tv text-[11px] text-sky-500"></i>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -606,7 +606,7 @@ const Header: React.FC<HeaderProps> = ({
                         onClick={openSupportTickets}
                         className="flex w-full items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        <div className="w-7 h-7 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                        <div className="w-7 h-7 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 invisible">
                           <i className="fa-solid fa-life-ring text-[11px] text-blue-500" aria-hidden="true"></i>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -632,7 +632,7 @@ const Header: React.FC<HeaderProps> = ({
                         }}
                         className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left"
                       >
-                        <div className="w-7 h-7 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                        <div className="w-7 h-7 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 invisible">
                           <i className="fa-solid fa-gear text-[11px] text-slate-500"></i>
                         </div>
                         <div className="flex-1 min-w-0">
