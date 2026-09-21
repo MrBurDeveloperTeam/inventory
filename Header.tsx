@@ -566,7 +566,6 @@ const Header: React.FC<HeaderProps> = ({
                                   : 'Balance unavailable'}
                           </p>
                         </div>
-                        <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors"></i>
                       </button>
                         
                       {/* My Channel */}
@@ -590,7 +589,6 @@ const Header: React.FC<HeaderProps> = ({
                           <p className="text-sm font-bold text-slate-800 leading-tight">My Channel</p>
                           <p className="text-[11px] font-semibold text-slate-400 truncate">Manage your channel</p>
                         </div>
-                        <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors"></i>
                       </button>
 
                       {/* Role-aware App.Snabbb dashboard */}
@@ -604,7 +602,6 @@ const Header: React.FC<HeaderProps> = ({
                           <p className="text-sm font-bold text-slate-800 leading-tight">{user?.accountType === 'admin' ? 'Admin Dashboard' : 'User Dashboard'}</p>
                           <p className="text-[11px] font-semibold text-slate-400 truncate">{user?.accountType === 'admin' ? 'Manage all support tickets' : 'Create and track support tickets'}</p>
                         </div>
-                        <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors" aria-hidden="true"></i>
                       </button>
                         
                       {/* Settings */}
@@ -627,7 +624,6 @@ const Header: React.FC<HeaderProps> = ({
                           <p className="text-sm font-bold text-slate-800 leading-tight">Settings</p>
                           <p className="text-[11px] font-semibold text-slate-400 truncate">Account & preferences</p>
                         </div>
-                        <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors"></i>
                       </button>
                     </div>
                         
@@ -637,7 +633,6 @@ const Header: React.FC<HeaderProps> = ({
                         onClick={onLogout}
                         className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-rose-500 hover:bg-rose-50 rounded-2xl transition-all group text-left"
                       >
-                        <i className="fa-solid fa-arrow-right-from-bracket w-5"></i>
                         Log Out
                       </button>
                     </div>
