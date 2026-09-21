@@ -46,7 +46,7 @@ import { createInventoryMolarAdapter } from './aiExperience/inventoryMolarAdapte
 import { createGroundedContextStore } from './aiExperience/dataChat/context/groundedConversationContext';
 import { parseInventoryActionProposal } from './aiExperience/inventoryConfirmedActionParser';
 import InventoryActionConfirm from './components/InventoryActionConfirm';
-import { jwtDecode } from 'jwt-decode';
+import { exchangeSsoToken } from './services/ssoExchange';
 import {
   ARCHIVED_LOCATION_LABEL,
   isPurchaseHistoryForItem,
@@ -532,53 +532,15 @@ useEffect(() => {
 }, [authReady]);
 
   const checkSession = async () => {
-    try{
-      // A launch link (from the SSO bridge, or a mini-app link a user has
-      // saved/shared) carries its token as ?sso_token=... on the URL. That
-      // token must be forwarded explicitly -- withCredentials alone only
-      // works once the shared .snabbb.com cookie already exists, which is
-      // not the case on a fresh landing here. Previously this called the
-      // relative path '/sso/exchange' with no token and no baseURL
-      // (VITE_API_BASE_URL isn't set for this app), which resolved to
-      // this app's own origin + '/sso/exchange' -- a route that doesn't
-      // exist anywhere -- so auto-login from a launch link always failed
-      // silently. Mirrors the working implementation in the todo app's
-      // src/lib/api.ts checkSession().
-      const launchUrl = new URL(window.location.href);
-      const launchToken =
-        launchUrl.searchParams.get('sso_token') || launchUrl.searchParams.get('token');
-      const exchangeUrl = launchToken
-        ? `https://app.snabbb.com/api/sso/exchange?sso_token=${encodeURIComponent(launchToken)}`
-        : 'https://app.snabbb.com/api/sso/exchange';
-
-      const sso = await api.get(exchangeUrl, { withCredentials: true, timeout: 10000 });
-      await supabase.auth.setSession({
-        access_token: sso.data.access_token,
-        refresh_token: sso.data.refresh_token
-      });
-      // Decode the token (no verification)
-      const decoded_token = jwtDecode(sso.data.access_token);
-
-      // Extract the user or partner ID from the 'sub' field
-      const user_id = decoded_token.sub;
-
-      console.log(`User ID: ${user_id}`)
-
-      // Drop the token from the address bar now that it's been consumed,
-      // so it isn't left sitting in history/bookmarks or re-sent on refresh.
-      if (launchToken) {
-        launchUrl.searchParams.delete('sso_token');
-        launchUrl.searchParams.delete('token');
-        window.history.replaceState(
-          {},
-          document.title,
-          `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`
-        );
-      }
-    } catch (err) {
-      await supabase.auth.signOut();
-      console.error('SSO exchange failed:', err);
-    }
+    // Ported to match the DentalCalculator (Profit Calculator) app's
+    // AuthContext.initializeAuth exactly -- that's the one mini-app with
+    // confirmed-working SSO auto-login. All the actual logic (which query
+    // param to read, how the token is sent, no aggressive client timeout,
+    // the is_sso_session bookkeeping) lives in services/ssoExchange.ts,
+    // ported from its lib/odooApi.ts. exchangeSsoToken() never throws, so
+    // this is a plain fire-and-forget call, same as calculator's
+    // `await exchangeSsoToken().catch(console.warn);`.
+    await exchangeSsoToken().catch(console.warn);
   };
 
   const playMeowChat = () => {
