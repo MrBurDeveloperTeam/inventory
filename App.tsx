@@ -79,7 +79,7 @@ type ProfileRow = {
 
 const PROFILE_IMAGE_STORAGE_PREFIX = 'denta_profile_images_';
 const PROFILE_IMAGE_BUCKET = 'profile-media';
-// const PREFERRED_INVENTORY_ID_KEY = 'denta_preferred_inventory_id_';
+const PREFERRED_INVENTORY_ID_KEY = 'denta_preferred_inventory_id_';
 const TUTORIAL_VIDEO_SEEN_KEY_PREFIX = 'denta_tutorial_video_seen_';
 
 const hasSeenTutorialVideo = (userId: string) => {
@@ -736,12 +736,12 @@ useEffect(() => {
   const [currentInventoryOwnerId, setCurrentInventoryOwnerId] = useState<string | null>(null);
 
   // Persist inventory selection to localStorage whenever it changes
-  // useEffect(() => {
-  //   if (supabaseUserId && currentInventoryOwnerId) {
-  //     localStorage.setItem(`${PREFERRED_INVENTORY_ID_KEY}${supabaseUserId}`, currentInventoryOwnerId);
-  //   }
-  // }, [currentInventoryOwnerId, supabaseUserId]);
-  // const [availableInventories, setAvailableInventories] = useState<{ id: string; name: string; role: string }[]>([]);
+  useEffect(() => {
+    if (supabaseUserId && currentInventoryOwnerId) {
+      localStorage.setItem(`${PREFERRED_INVENTORY_ID_KEY}${supabaseUserId}`, currentInventoryOwnerId);
+    }
+  }, [currentInventoryOwnerId, supabaseUserId]);
+  const [availableInventories, setAvailableInventories] = useState<{ id: string; name: string; role: string }[]>([]);
 
   const fetchAvailableInventories =
   async (uid: string) => {
