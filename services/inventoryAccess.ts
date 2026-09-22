@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
-import {getWorkspaceOwnerUserId,} from './workspaceContext';
+import {getWorkspaceOwnerUserId,getWorkspaceType,} from "./workspaceContext";
 
 export const INVENTORY_PERMISSIONS = {
   ACCESS: "inventory.access",
@@ -49,9 +49,9 @@ export async function getInventoryAccess(): Promise<InventoryAccess> {
 
       headers: {
         Accept: "application/json",
+        Authorization: `Bearer ${session.access_token}`,
 
-        Authorization:
-          `Bearer ${session.access_token}`,
+        "X-Snabbb-Workspace-Type": getWorkspaceType(),
 
         ...(workspaceOwnerUserId
           ? {

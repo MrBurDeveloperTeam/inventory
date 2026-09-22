@@ -1,5 +1,5 @@
 import axios from "axios";
-import {getWorkspaceOwnerUserId,} from './workspaceContext';
+import {getWorkspaceOwnerUserId,getWorkspaceType,} from "./workspaceContext";
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL, 
@@ -28,8 +28,8 @@ api.interceptors.request.use(
 
     if (workspaceOwnerUserId) {
       config.headers.set(
-        'X-Snabbb-Workspace-User-Id',
-        workspaceOwnerUserId
+        "X-Snabbb-Workspace-Type",
+        getWorkspaceType()
       );
     } else {
       config.headers.delete(
