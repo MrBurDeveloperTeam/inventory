@@ -79,7 +79,7 @@ type ProfileRow = {
 
 const PROFILE_IMAGE_STORAGE_PREFIX = 'denta_profile_images_';
 const PROFILE_IMAGE_BUCKET = 'profile-media';
-const PREFERRED_INVENTORY_ID_KEY = 'denta_preferred_inventory_id_';
+// const PREFERRED_INVENTORY_ID_KEY = 'denta_preferred_inventory_id_';
 const TUTORIAL_VIDEO_SEEN_KEY_PREFIX = 'denta_tutorial_video_seen_';
 
 const hasSeenTutorialVideo = (userId: string) => {
@@ -736,100 +736,61 @@ useEffect(() => {
   const [currentInventoryOwnerId, setCurrentInventoryOwnerId] = useState<string | null>(null);
 
   // Persist inventory selection to localStorage whenever it changes
-  useEffect(() => {
-    if (supabaseUserId && currentInventoryOwnerId) {
-      localStorage.setItem(`${PREFERRED_INVENTORY_ID_KEY}${supabaseUserId}`, currentInventoryOwnerId);
-    }
-  }, [currentInventoryOwnerId, supabaseUserId]);
-  const [availableInventories, setAvailableInventories] = useState<{ id: string; name: string; role: string }[]>([]);
+  // useEffect(() => {
+  //   if (supabaseUserId && currentInventoryOwnerId) {
+  //     localStorage.setItem(`${PREFERRED_INVENTORY_ID_KEY}${supabaseUserId}`, currentInventoryOwnerId);
+  //   }
+  // }, [currentInventoryOwnerId, supabaseUserId]);
+  // const [availableInventories, setAvailableInventories] = useState<{ id: string; name: string; role: string }[]>([]);
 
-  const fetchAvailableInventories = async (uid: string) => {
-    console.log(
-      "[company-workspace] fetchAvailableInventories running",
-      { uid }
-    );
-    const { data: membership, error: membershipError } =
-      await supabase
-        .from("company_members")
-        .select(
-          "company_owner_user_id, member_user_id, role, status"
-        )
-        .eq("member_user_id", uid)
-        .eq("status", "active")
-        .maybeSingle();
-    console.log(
-          "[company-workspace] membership result",
-          {
-            membership,
-            membershipError,
-          }
-        );
-    if (membershipError) {
+  const fetchAvailableInventories =
+  async (uid: string) => {
+    try {
+      const access =
+        await getInventoryAccess();
+
+      const workspaceUserId =
+        access.workspaceUserId || uid;
+
+      const isCompanyWorkspace =
+        access.actorType === 'member' ||
+        access.actorType === 'owner';
+
+      const list = [
+        {
+          id: workspaceUserId,
+
+          name:
+            isCompanyWorkspace
+              ? 'Company Inventory'
+              : 'My Inventory',
+
+          role:
+            access.role || 'owner',
+        },
+      ];
+
+      setAvailableInventories(list);
+
+      setCurrentInventoryOwnerId(
+        workspaceUserId
+      );
+    } catch (error) {
       console.error(
-        "Error resolving company workspace:",
-        membershipError
+        'Unable to resolve Inventory workspace:',
+        error
       );
+
+      setAvailableInventories([
+        {
+          id: uid,
+          name: 'My Inventory',
+          role: 'owner',
+        },
+      ]);
+
+      setCurrentInventoryOwnerId(uid);
     }
-
-    const companyOwnerId =
-      membership?.company_owner_user_id || null;
-
-    const workspaceUserId = companyOwnerId || uid;
-
-    const list: {
-      id: string;
-      name: string;
-      role: string;
-    }[] = companyOwnerId
-      ? [
-          {
-            id: companyOwnerId,
-            name: finalProfile?.company_name
-              ? `${finalProfile.company_name} Inventory`
-              : "Company Inventory",
-            role: membership?.role || "member",
-          },
-        ]
-      : [
-          {
-            id: uid,
-            name: "My Inventory",
-            role: "owner",
-          },
-        ];
-
-    setAvailableInventories(list);
-
-    setCurrentInventoryOwnerId((previousId) => {
-      const storedId = localStorage.getItem(
-        `${PREFERRED_INVENTORY_ID_KEY}${uid}`
-      );
-
-      const candidateId =
-        previousId || storedId || workspaceUserId;
-
-      const candidateIsValid = list.some(
-        (inventory) => inventory.id === candidateId
-      );
-
-      const nextId = candidateIsValid
-        ? candidateId
-        : workspaceUserId;
-
-      if (nextId !== previousId) {
-        console.log(
-          "Switching inventory to company workspace:",
-          nextId
-        );
-
-        isHydrated.current = false;
-        isDirty.current = false;
-        setIsLoadingMain(true);
-        setRooms([]);
-      }
-
-      return nextId;
-    });
   };
 
 

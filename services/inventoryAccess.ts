@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import {getWorkspaceOwnerUserId,} from './workspaceContext';
 
 export const INVENTORY_PERMISSIONS = {
   ACCESS: "inventory.access",
@@ -37,14 +38,31 @@ export async function getInventoryAccess(): Promise<InventoryAccess> {
     throw new Error("Your login session is unavailable. Please log in again.");
   }
 
-  const response = await fetch(getAccessContextUrl(), {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${session.access_token}`,
-    },
-  });
+  const workspaceOwnerUserId =
+    getWorkspaceOwnerUserId();
+
+  const response = await fetch(
+    getAccessContextUrl(),
+    {
+      method: "GET",
+      credentials: "include",
+
+      headers: {
+        Accept: "application/json",
+
+        Authorization:
+          `Bearer ${session.access_token}`,
+
+        ...(workspaceOwnerUserId
+          ? {
+              "X-Snabbb-Workspace-User-Id":
+                workspaceOwnerUserId,
+            }
+          : {}),
+      },
+    }
+  );
+
   const result = await response.json().catch(() => null);
 
   if (!response.ok || !result?.ok) {

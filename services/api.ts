@@ -1,4 +1,5 @@
 import axios from "axios";
+import {getWorkspaceOwnerUserId,} from './workspaceContext';
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL, 
@@ -17,6 +18,26 @@ api.interceptors.response.use(
       err?.response?.data?.error ||
       err.message;
     return Promise.reject(new Error(msg));
+  }
+);
+
+api.interceptors.request.use(
+  (config) => {
+    const workspaceOwnerUserId =
+      getWorkspaceOwnerUserId();
+
+    if (workspaceOwnerUserId) {
+      config.headers.set(
+        'X-Snabbb-Workspace-User-Id',
+        workspaceOwnerUserId
+      );
+    } else {
+      config.headers.delete(
+        'X-Snabbb-Workspace-User-Id'
+      );
+    }
+
+    return config;
   }
 );
 
