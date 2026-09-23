@@ -12,8 +12,7 @@
     "verify:pet": "node scripts/verify-pet.mjs"
   },
   "dependencies": {
-    "@google/genai": "^1.34.0",
-    "@mrburdeveloperteam/pet-function": "github:mrburdeveloperteam/pet-function#v0.9.24",
+    "@mrburdeveloperteam/pet-function": "github:mrburdeveloperteam/pet-function#v0.9.26",
     "@supabase/supabase-js": "^2.103.3",
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.5",
