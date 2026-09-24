@@ -77,7 +77,7 @@ type ProfileRow = {
   background_url?: string | null;
   segments?: string[] | null;
 };
-const [showLoginModal, setShowLoginModal] = useState(false);
+
 const PROFILE_IMAGE_STORAGE_PREFIX = 'denta_profile_images_';
 const PROFILE_IMAGE_BUCKET = 'profile-media';
 const PREFERRED_INVENTORY_ID_KEY = 'denta_preferred_inventory_id_';
@@ -242,6 +242,7 @@ const App: React.FC = () => {
   const [blueprint, setBlueprint] = useState<string | null>(null);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [inventoryAccess, setInventoryAccess] = useState<InventoryAccess | null>(null);
   const [inventoryAccessLoading, setInventoryAccessLoading] = useState(false);
   const [inventoryAccessError, setInventoryAccessError] = useState('');
