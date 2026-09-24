@@ -1520,11 +1520,15 @@
   }
 
   .inventory-nav-links .mobile-nav-actions {
-  display: grid !important;
-  gap: 17px;
+  display: flex !important;
+  gap: 28px !important;
   margin-top: 8px;
   padding-top: 16px;
   border-top: 1px solid var(--inventory-line);
+}
+
+.inventory-nav-links .mobile-nav-actions > * + * {
+  margin-top: 28px;
 }
 
 .mobile-nav-login {
