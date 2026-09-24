@@ -151,14 +151,13 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                         </button>
                     </div>
                     <button
-                        className="mobile-nav-get-started"
+                        className="mobile-nav-login mobile-nav-signup"
                         onClick={() => {
                             setMenuOpen(false);
                             handleGetStarted();
                         }}
                     >
                         Sign Up
-                        {/* <ArrowRight size={17} /> */}
                     </button>
                 </div>
 
