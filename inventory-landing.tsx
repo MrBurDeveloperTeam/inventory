@@ -150,6 +150,16 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                             Log In
                         </button>
                     </div>
+                    <button
+                        className="mobile-nav-get-started"
+                        onClick={() => {
+                            setMenuOpen(false);
+                            handleGetStarted();
+                        }}
+                    >
+                        Sign Up
+                        {/* <ArrowRight size={17} /> */}
+                    </button>
                 </div>
 
                 <div className="inventory-nav-actions">
@@ -157,7 +167,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                         Log In
                     </button>
                     <button className="inventory-nav-cta" onClick={handleGetStarted}>
-                        Get Started
+                        Sign Up
                         <ArrowRight size={17} />
                     </button>
                 </div>
@@ -190,7 +200,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
 
                     <div className="inventory-hero-actions">
                         <button className="inventory-primary-button" onClick={handleGetStarted}>
-                            Get Started
+                            Sign Up
                             <ArrowRight size={18} />
                         </button>
 
@@ -349,7 +359,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                 </div>
 
                 <button className="inventory-primary-button light-button" onClick={handleGetStarted}>
-                    Get Started
+                    Sign Up
                     <ArrowRight size={18} />
                 </button>
             </section>
