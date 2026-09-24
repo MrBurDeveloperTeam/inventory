@@ -610,7 +610,7 @@ const Header: React.FC<HeaderProps> = ({
                           <i className="fa-solid fa-life-ring text-[11px] text-blue-500" aria-hidden="true"></i>
                         </div> */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-800 leading-tight">{user?.accountType === 'admin' ? 'Support Ticketing' : 'Support Ticketing'}</p>
+                          <p className="text-sm font-bold text-slate-800 leading-tight">{user?.accountType === 'admin' ? 'Support Tickets' : 'Support Tickets'}</p>
                           <p className="text-[11px] font-semibold text-slate-400 truncate">{user?.accountType === 'admin' ? 'Manage all support tickets' : 'Create and track support tickets'}</p>
                         </div>
                         <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors" aria-hidden="true"></i>
