@@ -54,6 +54,7 @@ import {
   markRoomPurchaseHistoryArchived
 } from './src/utils/roomDeletion';
 import {useProfileImage} from './hooks/useProfileImage';
+import InventoryLandingPage from './inventory-landing';
 
 type ManagedInventory = {
   userId: string;
@@ -241,6 +242,7 @@ const App: React.FC = () => {
   const [blueprint, setBlueprint] = useState<string | null>(null);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [inventoryAccess, setInventoryAccess] = useState<InventoryAccess | null>(null);
   const [inventoryAccessLoading, setInventoryAccessLoading] = useState(false);
   const [inventoryAccessError, setInventoryAccessError] = useState('');
@@ -3552,11 +3554,24 @@ const handleLogout = async () => {
   }
 
   if (!isAuthenticated) {
+    if (showLoginModal) {
+      return (
+        <LandingModal
+          onLogin={handleLogin}
+          theme={theme}
+          onThemeToggle={() =>
+            handleSetTheme(theme === 'dark' ? 'light' : 'dark')
+          }
+        />
+      );
+    }
+
     return (
-      <LandingModal
-        onLogin={handleLogin}
-        theme={theme}
-        onThemeToggle={() => handleSetTheme(theme === 'dark' ? 'light' : 'dark')}
+      <InventoryLandingPage
+        onLogin={() => setShowLoginModal(true)}
+        onGetStarted={() => {
+          window.location.assign('https://app.snabbb.com/signup');
+        }}
       />
     );
   }
