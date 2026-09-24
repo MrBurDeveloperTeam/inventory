@@ -54,6 +54,7 @@ import {
   markRoomPurchaseHistoryArchived
 } from './src/utils/roomDeletion';
 import {useProfileImage} from './hooks/useProfileImage';
+import InventoryLandingPage from './inventory-landing';
 
 type ManagedInventory = {
   userId: string;
@@ -3592,10 +3593,13 @@ const handleLogout = async () => {
 
   if (!isAuthenticated) {
     return (
-      <LandingModal
-        onLogin={handleLogin}
-        theme={theme}
-        onThemeToggle={() => handleSetTheme(theme === 'dark' ? 'light' : 'dark')}
+      <InventoryLandingPage
+        onLogin={() => {
+          window.location.assign('https://app.snabbb.com/');
+        }}
+        onGetStarted={() => {
+          window.location.assign('https://app.snabbb.com/signup');
+        }}
       />
     );
   }
