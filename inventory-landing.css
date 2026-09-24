@@ -154,6 +154,10 @@
   background: transparent;
 }
 
+.mobile-nav-actions {
+  display: none;
+}
+
 .inventory-hero {
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
@@ -1494,10 +1498,6 @@
     display: block;
   }
 
-  .inventory-nav-links .mobile-nav-actions {
-  display: none !important;
-  }
-
   .inventory-nav-links {
     position: absolute;
     top: 67px;
@@ -1528,6 +1528,8 @@
 }
 
 .mobile-nav-login {
+  display: block;
+  width: 100%;
   padding: 13px;
   border: 1px solid var(--inventory-line);
   border-radius: 9px;
