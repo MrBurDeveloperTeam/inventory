@@ -310,68 +310,6 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                 </div>
             </section>
 
-            <section id="workflow" className="inventory-section inventory-workflow">
-                <div className="workflow-visual">
-                    <div className="workflow-card">
-                        <div className="workflow-card-header">
-                            <div>
-                                <small>Inventory status</small>
-                                <h3>Today at a glance</h3>
-                            </div>
-                            <span className="workflow-check">
-                                <CheckCircle2 size={18} />
-                            </span>
-                        </div>
-
-                        <div className="workflow-progress">
-                            <div className="workflow-progress-label">
-                                <span>Stock awareness</span>
-                                <strong>86%</strong>
-                            </div>
-                            <div className="workflow-progress-track">
-                                <span />
-                            </div>
-                        </div>
-
-                        <div className="workflow-list">
-                            <div>
-                                <span className="workflow-list-icon teal">
-                                    <Boxes size={16} />
-                                </span>
-                                <span>
-                                    <strong>Room inventory</strong>
-                                    <small>12 rooms updated</small>
-                                </span>
-                                <CheckCircle2 size={17} />
-                            </div>
-
-                            <div>
-                                <span className="workflow-list-icon amber">
-                                    <CalendarClock size={16} />
-                                </span>
-                                <span>
-                                    <strong>Expiry review</strong>
-                                    <small>3 items to check</small>
-                                </span>
-                                <ArrowRight size={17} />
-                            </div>
-
-                            <div>
-                                <span className="workflow-list-icon blue">
-                                    <FileText size={16} />
-                                </span>
-                                <span>
-                                    <strong>Purchase history</strong>
-                                    <small>Updated 8 minutes ago</small>
-                                </span>
-                                <CheckCircle2 size={17} />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </section>
-
             <section id="faq" className="inventory-section inventory-faq">
                 <div className="inventory-section-heading">
                     <div className="inventory-section-label">Questions</div>
