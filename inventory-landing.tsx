@@ -115,7 +115,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
             return;
         }
 
-        window.location.assign('https://app.snabbb.com/');
+        window.location.assign('https://app.snabbb.com');
     };
 
     return (

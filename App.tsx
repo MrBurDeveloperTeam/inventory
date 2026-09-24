@@ -77,7 +77,7 @@ type ProfileRow = {
   background_url?: string | null;
   segments?: string[] | null;
 };
-
+const [showLoginModal, setShowLoginModal] = useState(false);
 const PROFILE_IMAGE_STORAGE_PREFIX = 'denta_profile_images_';
 const PROFILE_IMAGE_BUCKET = 'profile-media';
 const PREFERRED_INVENTORY_ID_KEY = 'denta_preferred_inventory_id_';
@@ -3592,11 +3592,21 @@ const handleLogout = async () => {
   }
 
   if (!isAuthenticated) {
+    if (showLoginModal) {
+      return (
+        <LandingModal
+          onLogin={handleLogin}
+          theme={theme}
+          onThemeToggle={() =>
+            handleSetTheme(theme === 'dark' ? 'light' : 'dark')
+          }
+        />
+      );
+    }
+
     return (
       <InventoryLandingPage
-        onLogin={() => {
-          window.location.assign('https://app.snabbb.com/');
-        }}
+        onLogin={() => setShowLoginModal(true)}
         onGetStarted={() => {
           window.location.assign('https://app.snabbb.com/signup');
         }}
