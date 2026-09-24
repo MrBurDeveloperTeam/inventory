@@ -139,29 +139,6 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                     <a href="#faq" onClick={() => setMenuOpen(false)}>
                         FAQ
                     </a>
-
-                    <div className="mobile-nav-actions">
-                        <button
-                            className="mobile-nav-login"
-                            onClick={() => {
-                                setMenuOpen(false);
-                                handleLogin();
-                            }}
-                        >
-                            Log In
-                        </button>
-
-                        <button
-                            className="inventory-nav-cta mobile-nav-cta"
-                            onClick={() => {
-                                setMenuOpen(false);
-                                handleGetStarted();
-                            }}
-                        >
-                            Get Started
-                            <ArrowRight size={17} />
-                        </button>
-                    </div>
                 </div>
 
                 <div className="inventory-nav-actions">
