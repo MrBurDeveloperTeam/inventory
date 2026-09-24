@@ -130,12 +130,12 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                     <a href="#features" onClick={() => setMenuOpen(false)}>
                         Features
                     </a>
-                    <a href="#workflow" onClick={() => setMenuOpen(false)}>
+                    {/* <a href="#workflow" onClick={() => setMenuOpen(false)}>
                         How It Works
-                    </a>
-                    <a href="#integrations" onClick={() => setMenuOpen(false)}>
+                    </a> */}
+                    {/* <a href="#integrations" onClick={() => setMenuOpen(false)}>
                         Integrations
-                    </a>
+                    </a> */}
                     <a href="#faq" onClick={() => setMenuOpen(false)}>
                         FAQ
                     </a>
@@ -301,9 +301,9 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                                 </div>
                                 <h3>{feature.title}</h3>
                                 <p>{feature.description}</p>
-                                <span className="feature-arrow">
+                                {/* <span className="feature-arrow">
                                     <ArrowRight size={17} />
-                                </span>
+                                </span> */}
                             </motion.article>
                         );
                     })}
@@ -364,7 +364,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
 
                 <div className="footer-links">
                     <a href="#features">Features</a>
-                    <a href="#workflow">How It Works</a>
+                    {/* <a href="#workflow">How It Works</a> */}
                     <a href="#faq">FAQ</a>
                 </div>
             </footer>
