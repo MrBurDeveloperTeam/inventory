@@ -297,18 +297,45 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                         const Icon = feature.icon;
 
                         return (
+                            // <motion.article
+                            //     className="inventory-feature-card"
+                            //     key={feature.title}
+                            //     initial={{ opacity: 0, y: 18 }}
+                            //     whileInView={{ opacity: 1, y: 0 }}
+                            //     viewport={{ once: true, amount: 0.2 }}
+                            //     transition={{ duration: 0.45, delay: index * 0.04 }}
+                            // >
                             <motion.article
                                 className="inventory-feature-card"
                                 key={feature.title}
-                                initial={{ opacity: 0, y: 18 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true, amount: 0.2 }}
-                                transition={{ duration: 0.45, delay: index * 0.04 }}
-                            >
-                                <div className="inventory-feature-icon">
+                                initial={{ opacity: 0, y: 35, scale: 0.96 }}
+                                whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                                whileHover={{
+                                    y: -9,
+                                    scale: 1.025,
+                                    transition: {
+                                        duration: 0.25,
+                                        ease: 'easeOut',
+                                        },
+                                }}
+                                viewport={{ once: true, amount: 0.25 }}
+                                transition={{
+                                    duration: 0.55,
+                                    delay: index * 0.09,
+                                    ease: [0.22, 1, 0.36, 1],
+                                }}
+                                >
+                            
+                                <motion.div
+                                    className="inventory-feature-icon"
+                                    whileHover={{
+                                        rotate: [0, -8, 8, 0],
+                                        scale: 1.12,
+                                    }}
+                                    transition={{ duration: 0.35 }}
+                                >
                                     <Icon size={22} />
-                                </div>
-                                <h3>{feature.title}</h3>
+                                </motion.div>
                                 <p>{feature.description}</p>
                                 {/* <span className="feature-arrow">
                                     <ArrowRight size={17} />

@@ -75,6 +75,7 @@
   border-left: 1px solid var(--inventory-line);
   color: var(--inventory-teal-dark);
   font-size: 15px;
+  font-weight: 800;
 }
 
 .inventory-nav-links {
@@ -158,6 +159,10 @@
   display: none;
 }
 
+.mobile-nav-signup {
+  display: none;
+}
+
 .inventory-hero {
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
@@ -183,7 +188,7 @@
   text-transform: uppercase;
 }
 
-.inventory-eyebrow {
+/* .inventory-eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 9px;
@@ -191,14 +196,25 @@
   border: 1px solid #c9ece7;
   border-radius: 30px;
   background: rgba(223, 247, 243, 0.7);
+} */
+
+.inventory-eyebrow {
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
+}
+
+.inventory-eyebrow:hover {
+  border-color: #9bded6;
+  background: #e5f8f5;
+  box-shadow: 0 10px 24px rgba(11, 159, 145, 0.14);
+  transform: translateY(-2px);
 }
 
 .inventory-live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--inventory-teal);
-  box-shadow: 0 0 0 4px rgba(11, 159, 145, 0.12);
+  box-shadow: 0 0 0 5px rgba(11, 159, 145, 0.12);
 }
 
 .inventory-hero h1 {
@@ -719,18 +735,59 @@
 .inventory-feature-card {
   position: relative;
   min-height: 235px;
+  overflow: hidden;
+  isolation: isolate;
   padding: 25px;
   border: 1px solid var(--inventory-line);
   border-radius: 19px;
   background: white;
-  transition: 0.25s ease;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    background 0.25s ease,
+    transform 0.25s ease;
+}
+
+
+.inventory-feature-card::before {
+  position: absolute;
+  top: 0;
+  left: -120%;
+  z-index: -1;
+  width: 75%;
+  height: 100%;
+  background: linear-gradient(
+    105deg,
+    transparent,
+    rgba(255, 255, 255, 0.65),
+    transparent
+  );
+  content: '';
+  transform: skewX(-18deg);
+  transition: left 0.65s ease;
+}
+
+.inventory-feature-card:hover::before {
+  left: 135%;
 }
 
 .inventory-feature-card:hover {
-  border-color: #9fdcd5;
-  box-shadow: 0 16px 35px rgba(29, 105, 101, 0.09);
-  transform: translateY(-5px);
+  border-color: #91d8d0;
+  background: #fcfffe;
+  box-shadow: 0 20px 42px rgba(29, 105, 101, 0.14);
+  transform: translateY(-9px) scale(1.025);
 }
+
+/* .inventory-feature-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  margin-bottom: 21px;
+  border-radius: 13px;
+  color: var(--inventory-teal-dark);
+  background: var(--inventory-teal-soft);
+} */
 
 .inventory-feature-icon {
   display: grid;
@@ -741,6 +798,18 @@
   border-radius: 13px;
   color: var(--inventory-teal-dark);
   background: var(--inventory-teal-soft);
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
+}
+
+.inventory-feature-card:hover .inventory-feature-icon {
+  color: white;
+  background: var(--inventory-teal);
+  box-shadow: 0 8px 18px rgba(11, 159, 145, 0.25);
+  transform: rotate(-5deg) scale(1.1);
 }
 
 .inventory-feature-card h3 {
@@ -1434,6 +1503,68 @@
   object-fit: cover;
 }
 
+/* Page elevation and visual depth */
+
+.inventory-nav {
+  box-shadow: 0 4px 18px rgba(27, 91, 91, 0.07);
+}
+
+.inventory-hero {
+  position: relative;
+  isolation: isolate;
+}
+
+.inventory-hero::before {
+  position: absolute;
+  top: 80px;
+  right: 5%;
+  z-index: -1;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: rgba(189, 239, 232, 0.25);
+  filter: blur(8px);
+  content: '';
+}
+
+.inventory-hero-preview {
+  filter: drop-shadow(0 25px 35px rgba(36, 103, 102, 0.14));
+}
+
+.clinic-preview {
+  box-shadow:
+    0 12px 24px rgba(31, 99, 101, 0.08),
+    0 30px 65px rgba(31, 99, 101, 0.16);
+}
+
+.inventory-features {
+  position: relative;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(223, 247, 243, 0.35),
+      rgba(247, 251, 250, 0)
+    );
+}
+
+.inventory-feature-card {
+  box-shadow:
+    0 5px 12px rgba(31, 99, 101, 0.05),
+    0 16px 30px rgba(31, 99, 101, 0.04);
+}
+
+.inventory-feature-card:hover {
+  box-shadow:
+    0 10px 22px rgba(31, 99, 101, 0.08),
+    0 24px 45px rgba(31, 99, 101, 0.14);
+}
+
+.inventory-final-cta {
+  box-shadow:
+    0 12px 25px rgba(11, 159, 145, 0.14),
+    0 28px 55px rgba(11, 159, 145, 0.18);
+}
+
 @media (max-width: 1000px) {
   .inventory-nav {
     padding: 0 4vw;
@@ -1531,11 +1662,8 @@
   margin-top: 25px;
 }
 
-/* .inventory-nav-links .mobile-nav-signup {
-  margin-top: 26px !important;
-} */
-
 .inventory-nav-links .mobile-nav-signup {
+    display: block;
     width: 100%;
     margin-top: 6px !important;
     padding: 15px;
@@ -1561,6 +1689,7 @@
 }
 
 .mobile-nav-signup {
+  display: none;
   width: 100%;
   padding: 15px;
   border: 1px solid #b8e2dc;
