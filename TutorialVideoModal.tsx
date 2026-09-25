@@ -37,7 +37,8 @@ const TutorialVideoModal: React.FC<TutorialVideoModalProps> = ({ isOpen, onClose
         <div className="p-4 flex justify-end bg-slate-50/50 border-t border-slate-100">
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-[#004aad] text-white text-sm font-bold hover:bg-[#003a8a] transition-colors"
+            // className="px-5 py-2 rounded-xl bg-[#004aad] text-white text-sm font-bold hover:bg-[#003a8a] transition-colors"
+            className="px-12 py-5 rounded-2xl bg-tiffany-600 text-white text-2xl font-bold shadow-lg shadow-tiffany-600/20 hover:bg-tiffany-700 transition-all"
           >
             Got it, let's go
           </button>
