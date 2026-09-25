@@ -130,12 +130,12 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                     <a href="#features" onClick={() => setMenuOpen(false)}>
                         Features
                     </a>
-                    <a href="#workflow" onClick={() => setMenuOpen(false)}>
+                    {/* <a href="#workflow" onClick={() => setMenuOpen(false)}>
                         How It Works
-                    </a>
-                    <a href="#integrations" onClick={() => setMenuOpen(false)}>
+                    </a> */}
+                    {/* <a href="#integrations" onClick={() => setMenuOpen(false)}>
                         Integrations
-                    </a>
+                    </a> */}
                     <a href="#faq" onClick={() => setMenuOpen(false)}>
                         FAQ
                     </a>
@@ -150,6 +150,15 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                             Log In
                         </button>
                     </div>
+                    <button
+                        className="mobile-nav-login mobile-nav-signup"
+                        onClick={() => {
+                            setMenuOpen(false);
+                            handleGetStarted();
+                        }}
+                    >
+                        Sign Up
+                    </button>
                 </div>
 
                 <div className="inventory-nav-actions">
@@ -157,7 +166,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                         Log In
                     </button>
                     <button className="inventory-nav-cta" onClick={handleGetStarted}>
-                        Get Started
+                        Sign Up
                         <ArrowRight size={17} />
                     </button>
                 </div>
@@ -190,7 +199,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
 
                     <div className="inventory-hero-actions">
                         <button className="inventory-primary-button" onClick={handleGetStarted}>
-                            Get Started
+                            Sign Up
                             <ArrowRight size={18} />
                         </button>
 
@@ -301,9 +310,9 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                                 </div>
                                 <h3>{feature.title}</h3>
                                 <p>{feature.description}</p>
-                                <span className="feature-arrow">
+                                {/* <span className="feature-arrow">
                                     <ArrowRight size={17} />
-                                </span>
+                                </span> */}
                             </motion.article>
                         );
                     })}
@@ -349,7 +358,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                 </div>
 
                 <button className="inventory-primary-button light-button" onClick={handleGetStarted}>
-                    Get Started
+                    Sign Up
                     <ArrowRight size={18} />
                 </button>
             </section>
@@ -364,7 +373,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
 
                 <div className="footer-links">
                     <a href="#features">Features</a>
-                    <a href="#workflow">How It Works</a>
+                    {/* <a href="#workflow">How It Works</a> */}
                     <a href="#faq">FAQ</a>
                 </div>
             </footer>
