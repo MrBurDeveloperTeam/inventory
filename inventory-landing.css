@@ -1657,11 +1657,12 @@
   margin-top: 25px;
 }
 
-/* .inventory-nav-links .mobile-nav-signup {
-  margin-top: 26px !important;
-} */
+.inventory-nav-links .mobile-nav-signup {
+  display: block;
+}
 
 .inventory-nav-links .mobile-nav-signup {
+    display: block;
     width: 100%;
     margin-top: 6px !important;
     padding: 15px;
@@ -1687,6 +1688,7 @@
 }
 
 .mobile-nav-signup {
+  display: none;
   width: 100%;
   padding: 15px;
   border: 1px solid #b8e2dc;
