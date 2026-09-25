@@ -75,6 +75,7 @@
   border-left: 1px solid var(--inventory-line);
   color: var(--inventory-teal-dark);
   font-size: 15px;
+  font-weight: 800;
 }
 
 .inventory-nav-links {
