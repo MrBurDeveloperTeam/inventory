@@ -182,30 +182,10 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
 
             <section id="top" className="inventory-hero">
                 <div className="inventory-hero-copy">
-                    <motion.div
-                        className="inventory-eyebrow"
-                        initial={{ opacity: 0, y: -12, scale: 0.94 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{
-                            duration: 0.6,
-                            delay: 0.15,
-                            ease: [0.22, 1, 0.36, 1],
-                        }}
-                    >
-                        <motion.span
-                            className="inventory-live-dot"
-                            animate={{
-                                scale: [1, 1.25, 1],
-                                opacity: [1, 0.65, 1],
-                            }}
-                            transition={{
-                                duration: 2,
-                                repeat: Infinity,
-                                ease: 'easeInOut',
-                            }}
-                        />
+                    <div className="inventory-eyebrow">
+                        <span className="inventory-live-dot" />
                         Built for modern clinics
-                    </motion.div>
+                    </div>
 
                     <h1>
                         Your clinic inventory,
