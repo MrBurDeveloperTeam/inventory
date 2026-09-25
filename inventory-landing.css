@@ -1531,6 +1531,23 @@
   margin-top: 28px;
 }
 
+/* .inventory-nav-links .mobile-nav-signup {
+  margin-top: 26px !important;
+} */
+
+.inventory-nav-links .mobile-nav-signup {
+    width: 100%;
+    margin-top: 26px !important;
+    padding: 15px;
+    border: 1px solid #b8e2dc;
+    border-radius: 10px;
+    color: var(--inventory-teal-dark);
+    background: #e5f7f4;
+    font-weight: 800;
+    text-align: left;
+}
+
+
 .mobile-nav-login {
   display: block;
   width: 100%;
