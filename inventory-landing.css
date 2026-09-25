@@ -183,7 +183,7 @@
   text-transform: uppercase;
 }
 
-.inventory-eyebrow {
+/* .inventory-eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 9px;
@@ -191,14 +191,25 @@
   border: 1px solid #c9ece7;
   border-radius: 30px;
   background: rgba(223, 247, 243, 0.7);
+} */
+
+.inventory-eyebrow {
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
+}
+
+.inventory-eyebrow:hover {
+  border-color: #9bded6;
+  background: #e5f8f5;
+  box-shadow: 0 10px 24px rgba(11, 159, 145, 0.14);
+  transform: translateY(-2px);
 }
 
 .inventory-live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--inventory-teal);
-  box-shadow: 0 0 0 4px rgba(11, 159, 145, 0.12);
+  box-shadow: 0 0 0 5px rgba(11, 159, 145, 0.12);
 }
 
 .inventory-hero h1 {
