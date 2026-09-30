@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { CATEGORIES, UOMS } from './constants';
+import { fetchPublishedProducts, productToItemDraft, PublishedProduct } from './services/publishedProducts';
 import ClinicAnalytics from './ClinicAnalytics';
 import { getPurchaseHistoryLocation, isArchivedPurchaseHistory } from './src/utils/roomDeletion';
 
@@ -133,6 +134,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const [formData, setFormData] = useState<Partial<Item>>({
     name: '', brand: '', category: 'consumables', uom: 'pcs', code: '', vendor: '', description: ''
   });
+  // Published products from the Odoo backend for the "Select Product" picker.
+  const [catalog, setCatalog] = useState<PublishedProduct[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [receiveQty, setReceiveQty] = useState(0);
   const [receivePrice, setReceivePrice] = useState(0);
   const [purchaseDate, setPurchaseDate] = useState(() => toCalendarDateKey(new Date()));
@@ -370,10 +374,34 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     setSelectedRoomId(item.roomId);
   };
 
+  const loadCatalog = (force = false) => {
+    setCatalogStatus('loading');
+    fetchPublishedProducts(force)
+      .then(products => {
+        setCatalog(products);
+        setCatalogStatus('ready');
+      })
+      .catch(err => {
+        console.error('MasterInventory: could not load published products', err);
+        setCatalogStatus('error');
+      });
+  };
+
+  useEffect(() => {
+    if (activeTab === 'receive' && canManageStock && catalogStatus === 'idle') loadCatalog();
+  }, [activeTab, canManageStock, catalogStatus]);
+
   const handleProductSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setSelectedProductKey(val);
-    if (val === 'new') {
+    if (val.startsWith('odoo|')) {
+      const product = catalog.find(p => `odoo|${p.id}` === val);
+      setReceiveMode('existing');
+      if (product) {
+        setFormData(productToItemDraft(product));
+        if (!receivePrice && product.price) setReceivePrice(product.price);
+      }
+    } else if (val === 'new') {
       setReceiveMode('new');
       setFormData({ name: '', brand: '', category: 'consumables', uom: 'pcs', code: '', vendor: '', description: '' });
     } else if (val !== '') {
@@ -1141,12 +1169,31 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <select value={selectedProductKey} onChange={handleProductSelect} className="px-4 py-3 rounded-xl border border-slate-200 bg-white font-normal text-slate-800 text-sm focus:ring-2 focus:ring-[#3498db] outline-none shadow-sm" required>
                       <option value="">Choose existing product...</option>
                       <option value="new" className="text-[#3498db] font-bold">⊕ Create New Product...</option>
-                      {rooms.flatMap(r => r.items.map(i => (
-                        <option key={`${r.id}|${i.id}`} value={`${r.id}|${i.id}`}>
-                          {i.name} ({i.brand})
-                        </option>
-                      )))}
+                      {catalogStatus === 'loading' && <option value="" disabled>Loading shop products...</option>}
+                      {catalog.length > 0 && (
+                        <optgroup label="Shop products (published)">
+                          {catalog.map(p => (
+                            <option key={`odoo|${p.id}`} value={`odoo|${p.id}`}>
+                              {p.name}{p.sku ? ` (${p.sku})` : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {rooms.some(r => r.items.length > 0) && (
+                        <optgroup label="Already in my inventory">
+                          {rooms.flatMap(r => r.items.map(i => (
+                            <option key={`${r.id}|${i.id}`} value={`${r.id}|${i.id}`}>
+                              {i.name}{i.brand ? ` (${i.brand})` : ''}
+                            </option>
+                          )))}
+                        </optgroup>
+                      )}
                     </select>
+                    {catalogStatus === 'error' && (
+                      <button type="button" onClick={() => loadCatalog(true)} className="text-left text-[11px] font-bold text-red-500 hover:underline">
+                        Couldn't load shop products — tap to retry
+                      </button>
+                    )}
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Add to Location *</label>
@@ -1185,7 +1232,10 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   const [sourceRoomId, ...rest] = selectedProductKey.split('|');
                   const sourceItemId = rest.join('|');
                   const sourceRoom = rooms.find(r => r.id === sourceRoomId);
-                  const sourceItem = sourceRoom?.items.find(i => i.id === sourceItemId);
+                  // Shop (Odoo) products aren't in any room yet: their details live in formData.
+                  const sourceItem = selectedProductKey.startsWith('odoo|')
+                    ? (formData.name ? (formData as Item) : undefined)
+                    : sourceRoom?.items.find(i => i.id === sourceItemId);
                   const targetRoom = rooms.find(r => r.id === selectedRoomId);
                   if (!sourceItem || !targetRoom) return null;
 
