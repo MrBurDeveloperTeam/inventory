@@ -17,7 +17,7 @@ for (const file of files) {
   assert.deepEqual(readFileSync(join(host, 'dist/games', relative(canonical, file))), readFileSync(file));
 }
 assert.equal(walk(join(host, 'dist/games')).length, files.length);
-for (const game of ['flappy-cat', 'pac-cat', 'tetris', 'meowdoku']) {
+for (const game of ['flappy-cat', 'pac-cat', 'tetris', 'meowdoku', 'mole-game']) {
   assert.ok(existsSync(join(host, 'dist/games', game, 'index.html')));
 }
-console.log(`Verified pet-function ${manifest.version}: ${files.length} game files match exactly across four games.`);
+console.log(`Verified pet-function ${manifest.version}: ${files.length} game files match exactly across five games.`);
