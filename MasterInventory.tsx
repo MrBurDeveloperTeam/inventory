@@ -34,6 +34,7 @@ import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA
 import { CATEGORIES, UOMS } from './constants';
 import { fetchPublishedProducts, productToItemDraft, PublishedProduct } from './services/publishedProducts';
 import ClinicAnalytics from './ClinicAnalytics';
+import ProductCombobox from './components/ProductCombobox';
 import { getPurchaseHistoryLocation, isArchivedPurchaseHistory } from './src/utils/roomDeletion';
 
 interface MasterInventoryProps {
@@ -1166,29 +1167,17 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                   <div className="flex flex-col gap-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Select Product *</label>
-                    <select value={selectedProductKey} onChange={handleProductSelect} className="px-4 py-3 rounded-xl border border-slate-200 bg-white font-normal text-slate-800 text-sm focus:ring-2 focus:ring-[#3498db] outline-none shadow-sm" required>
-                      <option value="">Choose existing product...</option>
-                      <option value="new" className="text-[#3498db] font-bold">⊕ Create New Product...</option>
-                      {catalogStatus === 'loading' && <option value="" disabled>Loading shop products...</option>}
-                      {catalog.length > 0 && (
-                        <optgroup label="Shop products (published)">
-                          {catalog.map(p => (
-                            <option key={`odoo|${p.id}`} value={`odoo|${p.id}`}>
-                              {p.name}{p.sku ? ` (${p.sku})` : ''}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {rooms.some(r => r.items.length > 0) && (
-                        <optgroup label="Already in my inventory">
-                          {rooms.flatMap(r => r.items.map(i => (
-                            <option key={`${r.id}|${i.id}`} value={`${r.id}|${i.id}`}>
-                              {i.name}{i.brand ? ` (${i.brand})` : ''}
-                            </option>
-                          )))}
-                        </optgroup>
-                      )}
-                    </select>
+                    <ProductCombobox
+                      value={selectedProductKey}
+                      onChange={v => handleProductSelect({ target: { value: v } } as unknown as React.ChangeEvent<HTMLSelectElement>)}
+                      loading={catalogStatus === 'loading'}
+                      required
+                      pinned={{ value: 'new', label: '⊕ Create New Product...' }}
+                      groups={[
+                        { label: 'Shop products (published)', options: catalog.map(p => ({ value: `odoo|${p.id}`, label: `${p.name}${p.sku ? ` (${p.sku})` : ''}` })) },
+                        { label: 'Already in my inventory', options: rooms.flatMap(r => r.items.map(i => ({ value: `${r.id}|${i.id}`, label: `${i.name}${i.brand ? ` (${i.brand})` : ''}` }))) },
+                      ]}
+                    />
                     {catalogStatus === 'error' && (
                       <button type="button" onClick={() => loadCatalog(true)} className="text-left text-[11px] font-bold text-red-500 hover:underline">
                         Couldn't load shop products — tap to retry
