@@ -140,6 +140,18 @@
   box-shadow: 0 12px 25px rgba(11, 159, 145, 0.2);
 }
 
+.inventory-nav-cta {
+  gap: 7px;
+  padding: 10px 16px;
+  border-radius: 11px;
+  font-size: 14px;
+}
+
+.inventory-nav-cta svg {
+  width: 15px;
+  height: 15px;
+}
+
 .inventory-nav-cta:hover,
 .inventory-primary-button:hover {
   transform: translateY(-2px);
