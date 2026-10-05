@@ -1290,10 +1290,10 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   );
                 })()}
 
-                {(receiveMode === 'new' || receiveMode === ('edit' as any)) && (
+                {(receiveMode === 'new' || receiveMode === ('edit' as any) || !!selectedProductKey) && (
                   <div className="flex flex-col gap-6 animate-in slide-in-from-top-4 duration-300 pt-4 border-t border-slate-50">
                     <h5 className="text-[#3498db] font-black uppercase text-[10px] tracking-[0.2em] pb-1">
-                      {receiveMode === ('edit' as any) ? 'Edit Product Registration' : 'New Product Registration'}
+                      {receiveMode === ('edit' as any) ? 'Edit Product Registration' : receiveMode === 'existing' ? 'Product Registration (auto-filled from selected product)' : 'New Product Registration'}
                     </h5>
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                       <div className="flex flex-col gap-2">
