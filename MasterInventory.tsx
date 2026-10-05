@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { CATEGORIES, UOMS } from './constants';
-import { fetchPublishedProducts, productToItemDraft, PublishedProduct } from './services/publishedProducts';
+import { fetchPublishedProducts, getCachedPublishedProducts, prefetchPublishedProducts, productToItemDraft, PublishedProduct } from './services/publishedProducts';
 import ClinicAnalytics from './ClinicAnalytics';
 import ProductCombobox from './components/ProductCombobox';
 import { getPurchaseHistoryLocation, isArchivedPurchaseHistory } from './src/utils/roomDeletion';
@@ -376,7 +376,16 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   };
 
   const loadCatalog = (force = false) => {
-    setCatalogStatus('loading');
+    // Show whatever is cached (memory/localStorage) immediately and refresh
+    // quietly in the background; only show the loading state when there is
+    // nothing to show yet.
+    const cached = getCachedPublishedProducts();
+    if (cached) {
+      setCatalog(cached);
+      setCatalogStatus('ready');
+    } else {
+      setCatalogStatus('loading');
+    }
     fetchPublishedProducts(force)
       .then(products => {
         setCatalog(products);
@@ -384,13 +393,24 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       })
       .catch(err => {
         console.error('MasterInventory: could not load published products', err);
-        setCatalogStatus('error');
+        if (!cached) setCatalogStatus('error');
       });
   };
 
   useEffect(() => {
     if (activeTab === 'receive' && canManageStock && catalogStatus === 'idle') loadCatalog();
   }, [activeTab, canManageStock, catalogStatus]);
+
+  // Warm the product cache in the background so the Receive Stock picker is
+  // already filled by the time it is opened.
+  useEffect(() => {
+    if (canManageStock) prefetchPublishedProducts();
+  }, [canManageStock]);
+
+  const productPickerGroups = useMemo(() => [
+    { label: 'Shop products (published)', options: catalog.map(p => ({ value: `odoo|${p.id}`, label: `${p.name}${p.sku ? ` (${p.sku})` : ''}` })) },
+    { label: 'Already in my inventory', options: rooms.flatMap(r => r.items.map(i => ({ value: `${r.id}|${i.id}`, label: `${i.name}${i.brand ? ` (${i.brand})` : ''}` }))) },
+  ], [catalog, rooms]);
 
   const handleProductSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -1173,10 +1193,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       loading={catalogStatus === 'loading'}
                       required
                       pinned={{ value: 'new', label: '⊕ Create New Product...' }}
-                      groups={[
-                        { label: 'Shop products (published)', options: catalog.map(p => ({ value: `odoo|${p.id}`, label: `${p.name}${p.sku ? ` (${p.sku})` : ''}` })) },
-                        { label: 'Already in my inventory', options: rooms.flatMap(r => r.items.map(i => ({ value: `${r.id}|${i.id}`, label: `${i.name}${i.brand ? ` (${i.brand})` : ''}` }))) },
-                      ]}
+                      groups={productPickerGroups}
                     />
                     {catalogStatus === 'error' && (
                       <button type="button" onClick={() => loadCatalog(true)} className="text-left text-[11px] font-bold text-red-500 hover:underline">

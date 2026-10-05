@@ -4,6 +4,8 @@ import { ChevronDown, Search } from 'lucide-react';
 export interface ComboOption { value: string; label: string; hint?: string }
 export interface ComboGroup { label: string; options: ComboOption[] }
 
+const MAX_VISIBLE = 100;
+
 interface ProductComboboxProps {
   value: string;
   onChange: (value: string) => void;
@@ -52,6 +54,12 @@ const ProductCombobox: React.FC<ProductComboboxProps> = ({
     return rows;
   }, [groups, pinned, query]);
 
+  // Rendering ~1,000 buttons at once is slow; show the first MAX_VISIBLE
+  // matches and ask the user to keep typing for the rest. Keyboard nav and
+  // Enter operate on the visible rows.
+  const visible = flat.length > MAX_VISIBLE ? flat.slice(0, MAX_VISIBLE) : flat;
+  const hiddenCount = flat.length - visible.length;
+
   useEffect(() => { setActive(0); }, [query, open]);
 
   useEffect(() => {
@@ -70,9 +78,9 @@ const ProductCombobox: React.FC<ProductComboboxProps> = ({
   const pick = (v: string) => { onChange(v); setOpen(false); setQuery(''); };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive(a => Math.min(a + 1, flat.length - 1)); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive(a => Math.min(a + 1, visible.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(a - 1, 0)); }
-    else if (e.key === 'Enter' && open) { e.preventDefault(); if (flat[active]) pick(flat[active].opt.value); }
+    else if (e.key === 'Enter' && open) { e.preventDefault(); if (visible[active]) pick(visible[active].opt.value); }
     else if (e.key === 'Escape') { setOpen(false); setQuery(''); }
   };
 
@@ -100,8 +108,8 @@ const ProductCombobox: React.FC<ProductComboboxProps> = ({
 
       {open && (
         <div ref={listRef} className="absolute left-0 right-0 top-full mt-1 z-50 max-h-[320px] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl py-1">
-          {flat.length === 0 && <div className="px-4 py-3 text-xs text-slate-400">No matching products</div>}
-          {flat.map((row, idx) => (
+          {visible.length === 0 && <div className="px-4 py-3 text-xs text-slate-400">No matching products</div>}
+          {visible.map((row, idx) => (
             <React.Fragment key={`${row.opt.value}-${idx}`}>
               {row.group && <div className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">{row.group}</div>}
               <button
@@ -115,6 +123,9 @@ const ProductCombobox: React.FC<ProductComboboxProps> = ({
               </button>
             </React.Fragment>
           ))}
+          {hiddenCount > 0 && (
+            <div className="px-4 py-2 text-[11px] text-slate-400">{hiddenCount} more — keep typing to narrow the list</div>
+          )}
         </div>
       )}
     </div>
