@@ -15,6 +15,7 @@ const ODOO_THEME_URL = 'https://mrbur.odoo.com/api/user/theme';
 // for this controller lives in odoo_addon/inventory_activity_log/ (this
 // repo) — it must be installed on the mrbur.odoo.com database before this
 // URL will work. See ACTIVITY_TRACKER_ODOO_SYNC.md for install steps.
+const ODOO_PRODUCT_CATALOG_URL = 'https://mrbur.odoo.com/api/inventory/product-catalog';
 const ODOO_ACTIVITY_URL = 'https://mrbur.odoo.com/api/inventory/activity';
 const ACTIVITY_ACTIONS = new Set(['add', 'remove', 'delete', 'transfer_out', 'transfer_in', 'edit', 'receive', 'session_end', 'page_view']);
 const COOKIE_NAME    = 'snabbb-theme';
@@ -542,6 +543,39 @@ class ThemeInjector {
   }
 }
 
+/**
+ * GET /api/product-catalog -> Odoo's snabbb_shop_inventory_sync
+ * /api/inventory/product-catalog: the whole published catalog (id / name /
+ * sku / unit / category / company, no pricing) in one request, for the
+ * "Receive Stock" picker. Public and identical for every caller, so it is
+ * cached at Cloudflare's edge for 5 minutes; Odoo's Set-Cookie is dropped
+ * (it would block edge caching and is meaningless here).
+ */
+async function handleProductCatalogRequest(request) {
+  if (request.method !== 'GET') {
+    return jsonResponse({ ok: false, error: 'Method not allowed' }, 405);
+  }
+  try {
+    const odooRes = await fetch(ODOO_PRODUCT_CATALOG_URL, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      cf: {
+        cacheEverything: true,
+        cacheTtlByStatus: { '200-299': 300, '300-599': 0 },
+      },
+    });
+    return new Response(await odooRes.text(), {
+      status: odooRes.status >= 200 && odooRes.status <= 599 ? odooRes.status : 502,
+      headers: {
+        'Content-Type': odooRes.headers.get('Content-Type') || 'application/json',
+        'Cache-Control': odooRes.ok ? 'public, max-age=300' : 'no-store',
+      },
+    });
+  } catch (error) {
+    return jsonResponse({ ok: false, error: error?.message || 'catalog_unavailable' }, 502);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -552,6 +586,10 @@ export default {
 
     if (url.pathname === '/api/profile-avatar') {
       return handleProfileAvatarRequest(request);
+    }
+
+    if (url.pathname === '/api/product-catalog') {
+      return handleProductCatalogRequest(request);
     }
 
     if (url.pathname === '/api/activity') {

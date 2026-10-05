@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { CATEGORIES, UOMS } from './constants';
-import { fetchPublishedProducts, getCachedPublishedProducts, prefetchPublishedProducts, productToItemDraft, PublishedProduct } from './services/publishedProducts';
+import { fetchPublishedProducts, fetchPublishedProductPrice, getCachedPublishedProducts, prefetchPublishedProducts, productToItemDraft, PublishedProduct } from './services/publishedProducts';
 import ClinicAnalytics from './ClinicAnalytics';
 import ProductCombobox from './components/ProductCombobox';
 import { getPurchaseHistoryLocation, isArchivedPurchaseHistory } from './src/utils/roomDeletion';
@@ -386,7 +386,14 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     } else {
       setCatalogStatus('loading');
     }
-    fetchPublishedProducts(force)
+    fetchPublishedProducts(force, partial => {
+      // Only use partial results while nothing is cached — otherwise keep
+      // showing the (complete) cached list until the fresh one is ready.
+      if (!cached) {
+        setCatalog(partial);
+        setCatalogStatus('ready');
+      }
+    })
       .then(products => {
         setCatalog(products);
         setCatalogStatus('ready');
@@ -420,7 +427,12 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       setReceiveMode('existing');
       if (product) {
         setFormData(productToItemDraft(product));
-        if (!receivePrice && product.price) setReceivePrice(product.price);
+        if (!receivePrice) {
+          // The fast catalog carries no prices; look up just this one.
+          fetchPublishedProductPrice(product).then(price => {
+            if (price) setReceivePrice(prev => (prev ? prev : price));
+          });
+        }
       }
     } else if (val === 'new') {
       setReceiveMode('new');
