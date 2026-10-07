@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown, Plus, Search } from 'lucide-react';
 
 interface AutocompleteInputProps {
   value: string;
@@ -37,6 +37,11 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     return [...starts, ...contains];
   }, [options, value]);
 
+  // Typed text that isn't an existing option can be saved as a new name.
+  const typed = value.trim();
+  const canCreate = typed.length > 0 && !options.some(o => o.toLowerCase() === typed.toLowerCase());
+  const rowCount = filtered.length + (canCreate ? 1 : 0);
+
   useEffect(() => { setActive(0); }, [value, open]);
 
   useEffect(() => {
@@ -55,9 +60,9 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   const pick = (v: string) => { onChange(v); setOpen(false); };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive(a => Math.min(a + 1, filtered.length - 1)); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive(a => Math.min(a + 1, rowCount - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(a - 1, 0)); }
-    else if (e.key === 'Enter' && open && filtered[active]) { e.preventDefault(); pick(filtered[active]); }
+    else if (e.key === 'Enter' && open && rowCount > 0) { e.preventDefault(); pick(active < filtered.length ? filtered[active] : typed); }
     else if (e.key === 'Escape') setOpen(false);
   };
 
@@ -95,7 +100,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
         <ChevronDown className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </div>
 
-      {open && filtered.length > 0 && (
+      {open && rowCount > 0 && (
         <div ref={listRef} className="absolute left-0 right-0 top-full mt-1 z-50 max-h-[280px] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl py-1 custom-scrollbar">
           {filtered.map((opt, idx) => {
             const selected = opt === value;
@@ -114,6 +119,19 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
               </button>
             );
           })}
+          {canCreate && (
+            <button
+              type="button"
+              data-idx={filtered.length}
+              onMouseEnter={() => setActive(filtered.length)}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => pick(typed)}
+              className={`w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-[#3498db] font-bold transition-colors ${filtered.length > 0 ? 'border-t border-slate-100 mt-1' : ''} ${active === filtered.length ? 'bg-blue-50' : ''}`}
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="truncate">Add “{typed}”</span>
+            </button>
+          )}
         </div>
       )}
     </div>

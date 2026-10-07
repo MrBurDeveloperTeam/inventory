@@ -193,6 +193,21 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   }, [rooms, searchTerm, inventoryCategory, inventoryVendor, inventoryLocation]);
 
   // Filtered History
+  // Suggestions for the Product Name field: the standard list first, then any
+  // custom names the clinic has already saved (items + purchase history).
+  const productNameOptions = useMemo(() => {
+    const seen = new Set(PRODUCT_NAMES.map(n => n.toLowerCase()));
+    const custom: string[] = [];
+    const add = (raw?: string) => {
+      const n = (raw || '').trim();
+      if (n && !seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); custom.push(n); }
+    };
+    rooms.forEach(r => r.items.forEach(i => add(i.name)));
+    history.forEach(h => add(h.productName));
+    custom.sort((a, b) => a.localeCompare(b));
+    return [...PRODUCT_NAMES, ...custom];
+  }, [rooms, history]);
+
   const filteredHistory = useMemo(() => {
     const startBoundary = historyStartDate ? new Date(`${historyStartDate}T00:00:00`) : null;
     // If only a start date is provided, treat it as a single-day filter
@@ -1303,7 +1318,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                           required
                           value={formData.name}
                           onChange={name => setFormData({ ...formData, name })}
-                          options={PRODUCT_NAMES}
+                          options={productNameOptions}
                           placeholder="Search or select product name..."
                         />
                       </div>
