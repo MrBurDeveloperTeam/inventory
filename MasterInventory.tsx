@@ -35,6 +35,7 @@ import { CATEGORIES, UOMS, PRODUCT_NAMES } from './constants';
 import { fetchPublishedProducts, fetchPublishedProductPrice, getCachedPublishedProducts, prefetchPublishedProducts, productToItemDraft, PublishedProduct } from './services/publishedProducts';
 import ClinicAnalytics from './ClinicAnalytics';
 import ProductCombobox from './components/ProductCombobox';
+import AutocompleteInput from './components/AutocompleteInput';
 import { getPurchaseHistoryLocation, isArchivedPurchaseHistory } from './src/utils/roomDeletion';
 
 interface MasterInventoryProps {
@@ -1298,18 +1299,13 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                       <div className="flex flex-col gap-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Product Name *</label>
-                        <input
+                        <AutocompleteInput
                           required
-                          list="product-name-options"
-                          autoComplete="off"
-                          placeholder="Type to search, e.g. Glove"
-                          className="px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-[#3498db] outline-none"
                           value={formData.name}
-                          onChange={e => setFormData({ ...formData, name: e.target.value })}
+                          onChange={name => setFormData({ ...formData, name })}
+                          options={PRODUCT_NAMES}
+                          placeholder="Search or select product name..."
                         />
-                        <datalist id="product-name-options">
-                          {PRODUCT_NAMES.map(n => <option key={n} value={n} />)}
-                        </datalist>
                       </div>
                       <div className="flex flex-col gap-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Brand</label>
