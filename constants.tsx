@@ -23,6 +23,24 @@ export const CATEGORIES = [
 
 export const UOMS = ['pcs', 'box'];
 
+export const PRODUCT_NAMES = [
+  'Archwire',
+  'Autoclave Pouch',
+  'Bracket',
+  'Cup',
+  'Dental Bur',
+  'Endo File',
+  'Glove',
+  'Gutta-percha',
+  'Handpiece',
+  'Mask',
+  'Prophylaxis Paste',
+  'Resin Cement',
+  'Saliva Ejector',
+  'Scaler Tip',
+  'Suction Tip',
+];
+
 export const CATEGORY_ORDER = ['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other'];
 
 /**

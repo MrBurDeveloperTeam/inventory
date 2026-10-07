@@ -31,7 +31,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
-import { CATEGORIES, UOMS } from './constants';
+import { CATEGORIES, UOMS, PRODUCT_NAMES } from './constants';
 import { fetchPublishedProducts, fetchPublishedProductPrice, getCachedPublishedProducts, prefetchPublishedProducts, productToItemDraft, PublishedProduct } from './services/publishedProducts';
 import ClinicAnalytics from './ClinicAnalytics';
 import ProductCombobox from './components/ProductCombobox';
@@ -1298,7 +1298,18 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                       <div className="flex flex-col gap-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Product Name *</label>
-                        <input required placeholder="e.g. Dental Gloves" className="px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-[#3498db] outline-none" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                        <input
+                          required
+                          list="product-name-options"
+                          autoComplete="off"
+                          placeholder="Type to search, e.g. Glove"
+                          className="px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-[#3498db] outline-none"
+                          value={formData.name}
+                          onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        />
+                        <datalist id="product-name-options">
+                          {PRODUCT_NAMES.map(n => <option key={n} value={n} />)}
+                        </datalist>
                       </div>
                       <div className="flex flex-col gap-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Brand</label>
