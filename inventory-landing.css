@@ -1,9 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
 
 :root {
-  --inventory-teal: #0b9f91;
-  --inventory-teal-dark: #087d73;
-  --inventory-teal-soft: #dff7f3;
+  --inventory-teal: #43847d;
+  --inventory-teal-dark: #356a64;
+  --inventory-teal-soft: #e1efed;
   --inventory-navy: #102b35;
   --inventory-muted: #647985;
   --inventory-line: #dcebea;
@@ -137,7 +137,7 @@
   border: 0;
   color: white;
   background: var(--inventory-teal);
-  box-shadow: 0 12px 25px rgba(11, 159, 145, 0.2);
+  box-shadow: 0 12px 25px rgba(67, 132, 125, 0.2);
 }
 
 .inventory-nav-cta {
@@ -156,7 +156,7 @@
 .inventory-primary-button:hover {
   transform: translateY(-2px);
   background: var(--inventory-teal-dark);
-  box-shadow: 0 16px 30px rgba(11, 159, 145, 0.28);
+  box-shadow: 0 16px 30px rgba(67, 132, 125, 0.28);
 }
 
 .inventory-menu-button {
@@ -219,7 +219,7 @@
 .inventory-eyebrow:hover {
   border-color: #9bded6;
   background: #e5f8f5;
-  box-shadow: 0 10px 24px rgba(11, 159, 145, 0.14);
+  box-shadow: 0 10px 24px rgba(67, 132, 125, 0.14);
   transform: translateY(-2px);
 }
 
@@ -228,7 +228,7 @@
   height: 16px;
   flex: 0 0 16px;
   border-radius: 50%;
-  background: #539c91;
+  background: #43847d;
   box-shadow: 0 0 0 8px rgba(83, 156, 145, 0.1);
 }
 
@@ -352,7 +352,7 @@
 }
 
 .clinic-preview-title > svg {
-  color: #53d7c5;
+  color: #8fc1bb;
 }
 
 .preview-sync-badge {
@@ -373,7 +373,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #53d7c5;
+  background: #43847d;
 }
 
 .preview-add-button {
@@ -384,7 +384,7 @@
   border: 1px solid rgba(121, 232, 218, 0.35);
   border-radius: 8px;
   color: white;
-  background: rgba(11, 159, 145, 0.6);
+  background: rgba(67, 132, 125, 0.6);
   font-size: 11px;
   font-weight: 800;
 }
@@ -446,8 +446,8 @@
   border: 1px solid #cce4e1;
   border-radius: 17px;
   background:
-    linear-gradient(90deg, rgba(11, 159, 145, 0.06) 1px, transparent 1px),
-    linear-gradient(rgba(11, 159, 145, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(67, 132, 125, 0.06) 1px, transparent 1px),
+    linear-gradient(rgba(67, 132, 125, 0.06) 1px, transparent 1px),
     linear-gradient(145deg, #f4fffd, #dff4f0);
   background-size: 31px 31px;
 }
@@ -455,7 +455,7 @@
 .clinic-map::after {
   position: absolute;
   inset: 14px;
-  border: 1px dashed rgba(11, 159, 145, 0.25);
+  border: 1px dashed rgba(67, 132, 125, 0.25);
   border-radius: 12px;
   content: '';
   pointer-events: none;
@@ -508,7 +508,7 @@
   align-items: center;
   gap: 7px;
   padding: 10px 13px;
-  border: 1px solid rgba(11, 159, 145, 0.22);
+  border: 1px solid rgba(67, 132, 125, 0.22);
   border-radius: 10px;
   color: var(--inventory-teal-dark);
   background: rgba(255, 255, 255, 0.82);
@@ -520,7 +520,7 @@
   position: absolute;
   z-index: 1;
   height: 1px;
-  border-top: 1px dashed rgba(11, 159, 145, 0.45);
+  border-top: 1px dashed rgba(67, 132, 125, 0.45);
   transform-origin: left;
 }
 
@@ -568,7 +568,7 @@
 .preview-status-card:hover,
 .preview-status-card.active {
   border-color: #7bd5cb;
-  box-shadow: 0 6px 16px rgba(11, 159, 145, 0.1);
+  box-shadow: 0 6px 16px rgba(67, 132, 125, 0.1);
   transform: translateY(-2px);
 }
 
@@ -823,7 +823,7 @@
 .inventory-feature-card:hover .inventory-feature-icon {
   color: white;
   background: var(--inventory-teal);
-  box-shadow: 0 8px 18px rgba(11, 159, 145, 0.25);
+  box-shadow: 0 8px 18px rgba(67, 132, 125, 0.25);
   transform: rotate(-5deg) scale(1.1);
 }
 
@@ -1443,8 +1443,8 @@
   margin: 0 auto 80px;
   padding: 55px 60px;
   border-radius: 25px;
-  background: #58827d;
-  box-shadow: 0 20px 45px rgba(11, 159, 145, 0.18);
+  background: #43847d;
+  box-shadow: 0 20px 45px rgba(67, 132, 125, 0.18);
 }
 
 .inventory-final-cta .inventory-section-label {
@@ -1576,8 +1576,8 @@
 
 .inventory-final-cta {
   box-shadow:
-    0 12px 25px rgba(11, 159, 145, 0.14),
-    0 28px 55px rgba(11, 159, 145, 0.18);
+    0 12px 25px rgba(67, 132, 125, 0.14),
+    0 28px 55px rgba(67, 132, 125, 0.18);
 }
 
 @media (max-width: 1000px) {
