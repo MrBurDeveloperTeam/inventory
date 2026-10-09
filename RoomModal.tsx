@@ -363,6 +363,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
       });
 
       if (parsedItems.length === 0) {
+        setExportToast({ type: 'error', message: 'No valid items were found in the selected Excel file.' });
         setErrorModal({
           title: 'No Items Imported',
           message: 'The Excel file did not contain valid rows. Please include at least Product and Quantity columns.'
@@ -370,9 +371,11 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
       } else {
         setExcelPreviewData(parsedItems);
         setIsExcelPreviewActive(true);
+        setExportToast({ type: 'success', message: 'Excel file uploaded successfully. Review the items before importing.' });
       }
     } catch (err) {
       console.error('Failed to import room Excel:', err);
+      setExportToast({ type: 'error', message: 'Excel file upload failed. Please check the file and try again.' });
       setErrorModal({
         title: 'Excel Import Failed',
         message: err instanceof Error ? err.message : 'Unable to read this Excel file. Please check the file and try again.'
@@ -469,10 +472,23 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
       setOcrResult(parsed);
       setOcrStep('review');
+      setExportToast({ type: 'success', message: 'File uploaded successfully. Review the extracted items.' });
     } catch (err) {
       console.error(err);
       setOcrStatusText('Analysis Failed');
-      alert('Failed to analyze image. Please try again.');
+      setExportToast({ type: 'error', message: 'File upload failed. Please try again.' });
+      setOcrStep('upload');
+    }
+  };
+
+  const handleSelectedUploadFile = async (file: File) => {
+    try {
+      const imgs = await filesToImages([file]);
+      if (!imgs[0]) throw new Error('The selected file could not be read.');
+      await processCapturedImage(imgs[0]);
+    } catch (error) {
+      console.error('File upload failed:', error);
+      setExportToast({ type: 'error', message: 'File upload failed. Please try again.' });
       setOcrStep('upload');
     }
   };
@@ -1017,8 +1033,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                     e.preventDefault();
                     setIsDragging(false);
                     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                      const imgs = await filesToImages([e.dataTransfer.files[0]]);
-                      processCapturedImage(imgs[0]);
+                      await handleSelectedUploadFile(e.dataTransfer.files[0]);
                     }
                   }}
                   className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl transition-all duration-300 gap-4 ${isDragging
@@ -1048,8 +1063,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                     <label className="cursor-pointer">
                       <input type="file" accept="image/*,application/pdf" className="hidden" onChange={async (e) => {
                         if (e.target.files && e.target.files[0]) {
-                          const imgs = await filesToImages([e.target.files[0]]);
-                          processCapturedImage(imgs[0]);
+                          await handleSelectedUploadFile(e.target.files[0]);
                         }
                       }} />
                       <span className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold text-xs hover:bg-emerald-700 transition-all shadow-md inline-flex items-center gap-2">
