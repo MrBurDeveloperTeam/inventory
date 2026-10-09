@@ -41,7 +41,7 @@ interface RoomModalProps {
   logs: ActivityLog[];
   onClose: () => void;
   onUpdateName: (id: string, name: string) => void;
-  onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
+  onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void | Promise<boolean>;
   onReceiveBatch?: (roomId: string, items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>) => void;
   onUpdateQty: (roomId: string, itemId: string, delta: number) => void;
   onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void | Promise<boolean>;
@@ -901,30 +901,45 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                 
                 <div className="flex flex-col sm:flex-row-reverse items-center justify-center gap-3 pt-2">
                   <button
-                    onClick={() => {
-                      excelPreviewData.forEach(item => {
-                        if (item.name) {
-                          onReceive(
-                            room.id,
-                            {
-                              name: item.name,
-                              brand: item.brand || '',
-                              category: item.category || 'consumables',
-                              uom: item.uom || 'box',
-                              code: item.code || '',
-                              vendor: item.vendor || '',
-                              description: item.description || '',
-                              expiryDate: item.expiryDate || undefined
-                            },
-                            item.quantity || 1,
-                            item.price || 0,
-                            new Date().toISOString().split('T')[0],
-                            item.expiryDate || undefined
-                          );
+                    onClick={async () => {
+                      try {
+                        const results = await Promise.all(
+                          excelPreviewData
+                            .filter(item => item.name)
+                            .map(item => onReceive(
+                              room.id,
+                              {
+                                name: item.name,
+                                brand: item.brand || '',
+                                category: item.category || 'consumables',
+                                uom: item.uom || 'box',
+                                code: item.code || '',
+                                vendor: item.vendor || '',
+                                description: item.description || '',
+                                expiryDate: item.expiryDate || undefined
+                              },
+                              item.quantity || 1,
+                              item.price || 0,
+                              new Date().toISOString().split('T')[0],
+                              item.expiryDate || undefined
+                            ))
+                        );
+
+                        if (results.some(result => result === false)) {
+                          setExportToast({ type: 'error', message: 'Some Excel items could not be imported. Please try again.' });
+                          return;
                         }
-                      });
-                      setIsExcelPreviewActive(false);
-                      setExcelPreviewData([]);
+
+                        setExportToast({
+                          type: 'success',
+                          message: `${excelPreviewData.length} Excel ${excelPreviewData.length === 1 ? 'item' : 'items'} imported successfully.`
+                        });
+                        setIsExcelPreviewActive(false);
+                        setExcelPreviewData([]);
+                      } catch (error) {
+                        console.error('Excel import failed:', error);
+                        setExportToast({ type: 'error', message: 'Excel import failed. Please try again.' });
+                      }
                     }}
                     className={`w-full sm:w-44 py-3 rounded-xl font-black uppercase text-[12px] tracking-widest shadow-lg transition-all flex items-center justify-center gap-2 ${
                       excelPreviewData.length === 0
