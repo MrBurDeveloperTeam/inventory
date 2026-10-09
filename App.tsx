@@ -2346,7 +2346,7 @@ const handleLogout = async () => {
 
     // 1. Calculate the new state first (so we have affectedItemToSync immediately)
     const room = rooms.find(r => r.id === roomId);
-    if (!room) return;
+    if (!room) return false;
 
     roomNameForLog = room.name;
     const existingItem = room.items.find(i =>
@@ -2460,13 +2460,14 @@ const handleLogout = async () => {
 
         if (itm.batches) {
           for (const b of itm.batches) {
-            await supabase.from('inventory_item_batches').upsert({
+            const { error: batchErr } = await supabase.from('inventory_item_batches').upsert({
               id: b.id,
               item_id: itm.id,
               qty: b.qty,
               unit_price: b.unitPrice,
               expiry_date: b.expiryDate
             });
+            if (batchErr) throw batchErr;
           }
         }
 
@@ -2494,11 +2495,14 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to persist received stock:', err);
         setSyncStatus('error');
+        return false;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
       }
     }
+
+    return true;
   };
 
   const VALID_CATEGORIES = new Set(['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other']);
@@ -3742,7 +3746,7 @@ const handleLogout = async () => {
                 rooms={rooms}
                 history={history}
                 logs={logs}
-                onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
+                onReceive={async (rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await receiveStock(rid, data, q, p, date, exp); }}
                 onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
                 onUpdateBatchQty={async (rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateItemBatchQty(rid, iid, bidx, d); }}
                 onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
@@ -3779,7 +3783,7 @@ const handleLogout = async () => {
           logs={logs.filter(l => l.roomId === activeRoomId)}
           onClose={() => setActiveRoomId(null)}
           onUpdateName={(id, name) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateRoomName(id, name); }}
-          onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
+          onReceive={async (rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await receiveStock(rid, data, q, p, date, exp); }}
           onReceiveBatch={(rid, items) => receiveStockBatch(rid, items)}
           onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
           onUpdateBatchQty={async (rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateItemBatchQty(rid, iid, bidx, d); }}
