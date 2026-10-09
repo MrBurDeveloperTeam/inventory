@@ -2941,7 +2941,7 @@ const handleLogout = async () => {
     const item = room?.items.find(i => i.id === itemId);
     if (!room || !item) {
       isDirty.current = false;
-      return;
+      return false;
     }
 
     const normalized = ensureBatches(item);
@@ -3101,19 +3101,21 @@ const handleLogout = async () => {
         // 2. Update the batch (primary)
         if (updatedItem.batches && updatedItem.batches[0]) {
           const b = updatedItem.batches[0];
-          await supabase.from('inventory_item_batches').upsert({
+          const { error: batchErr } = await supabase.from('inventory_item_batches').upsert({
             id: b.id,
             item_id: itemId,
             qty: b.qty,
             unit_price: b.unitPrice,
             expiry_date: b.expiryDate
           });
+          if (batchErr) throw batchErr;
         }
 
         setSyncStatus('synced');
       } catch (err) {
         console.error('Failed to update item metadata:', err);
         setSyncStatus('error');
+        return false;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
@@ -3121,6 +3123,8 @@ const handleLogout = async () => {
     } else {
       isDirty.current = false;
     }
+
+    return true;
   };
 
   const updateBatchMetadata = async (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => {
@@ -3130,7 +3134,7 @@ const handleLogout = async () => {
     const item = room?.items.find(i => i.id === itemId);
     if (!room || !item) {
       isDirty.current = false;
-      return;
+      return false;
     }
 
     const batches = item.batches ? item.batches.map(b => b.id === batchId ? { ...b, ...batchData } : b) : [];
@@ -3188,6 +3192,7 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to update batch metadata:', err);
         setSyncStatus('error');
+        return false;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
@@ -3195,6 +3200,8 @@ const handleLogout = async () => {
     } else {
       isDirty.current = false;
     }
+
+    return true;
   };
 
   const deleteItem = async (roomId: string, itemId: string) => {
@@ -3794,8 +3801,8 @@ const handleLogout = async () => {
                 onUpdateBatchQty={async (rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateItemBatchQty(rid, iid, bidx, d); }}
                 onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
                 onDeleteItem={async (rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await deleteItem(rid, iid); }}
-                onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
-                onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
+                onUpdateItem={async (rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateItemMetadata(rid, iid, data); }}
+                onUpdateBatch={async (rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateBatchMetadata(rid, iid, bid, data); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
                 onTabChange={setDashboardTab}
@@ -3832,8 +3839,8 @@ const handleLogout = async () => {
           onUpdateBatchQty={async (rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateItemBatchQty(rid, iid, bidx, d); }}
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
           onDeleteItem={async (rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await deleteItem(rid, iid); }}
-          onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
-          onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
+          onUpdateItem={async (rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateItemMetadata(rid, iid, data); }}
+          onUpdateBatch={async (rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateBatchMetadata(rid, iid, bid, data); }}
           readOnly={!canManageItems}
         />
       )}
