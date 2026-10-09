@@ -50,6 +50,8 @@ interface MasterInventoryProps {
   onUpdateBatchQty?: (roomId: string, itemId: string, batchIndex: number, delta: number) => void | Promise<boolean>;
   onDeleteItem?: (roomId: string, itemId: string) => void | Promise<boolean>;
   onUpdateItem?: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
+  /** Fix a product's category from Purchase History (updates its purchase records and stock items). */
+  onUpdateHistoryCategory?: (historyId: string, category: string) => Promise<boolean> | boolean;
   onUpdateBatch?: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
   onRestoreRoom?: (roomName: string, itemSnapshot?: string) => void;
   onAssignTbaItem?: (itemId: string, toRoomId: string) => void;
@@ -83,6 +85,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   onUpdateBatchQty,
   onDeleteItem,
   onUpdateItem,
+  onUpdateHistoryCategory,
   onUpdateBatch,
   onRestoreRoom,
   onAssignTbaItem,
@@ -136,6 +139,17 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
   // History Filter State
   const [historyCategory, setHistoryCategory] = useState('all');
+  const [savingCategoryId, setSavingCategoryId] = useState<string | null>(null);
+  const canEditHistoryCategory = !readOnly && canManageStock && !!onUpdateHistoryCategory;
+  const changeHistoryCategory = async (historyId: string, category: string) => {
+    if (!onUpdateHistoryCategory) return;
+    setSavingCategoryId(historyId);
+    try {
+      await onUpdateHistoryCategory(historyId, category);
+    } finally {
+      setSavingCategoryId(null);
+    }
+  };
   const [historyVendor, setHistoryVendor] = useState('all');
   const [historySearch, setHistorySearch] = useState('');
   const [historyStartDate, setHistoryStartDate] = useState('');
@@ -1549,7 +1563,21 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                               <td className="px-3 py-4 text-slate-500 font-semibold whitespace-nowrap text-xs">${h.unitPrice.toFixed(2)}</td>
                               <td className="px-3 py-4 text-slate-800 font-bold tracking-tight whitespace-nowrap text-xs">${h.totalPrice.toFixed(2)}</td>
                               <td className="px-3 py-4 text-slate-600 font-medium text-xs truncate" title={h.vendor || ''}>{h.vendor || '-'}</td>
-                              <td className="px-3 py-4 hidden lg:table-cell"><span className="text-[10px] font-medium text-slate-500 capitalize tracking-wide">{h.category}</span></td>
+                              <td className="px-3 py-4 hidden lg:table-cell">
+                                {canEditHistoryCategory ? (
+                                  <select
+                                    value={h.category}
+                                    disabled={savingCategoryId === h.id}
+                                    onChange={e => changeHistoryCategory(h.id, e.target.value)}
+                                    title="Change category (applies to every record of this product)"
+                                    className="w-full max-w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-slate-600 outline-none focus:ring-2 focus:ring-[#9b59b6]/40 disabled:opacity-50"
+                                  >
+                                    {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                                  </select>
+                                ) : (
+                                  <span className="text-[10px] font-medium text-slate-500 capitalize tracking-wide">{h.category}</span>
+                                )}
+                              </td>
                               <td className={`px-3 py-4 text-xs whitespace-nowrap ${isExpired ? 'text-rose-600 font-bold' : isExpiringSoon ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>
                                 {expiryDate ? (
                                   <>
@@ -1624,7 +1652,19 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                             </div>
                             <div>
                               <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Category</span>
-                              <span className="font-medium text-slate-600 capitalize">{h.category || '-'}</span>
+                              {canEditHistoryCategory ? (
+                                <select
+                                    value={h.category}
+                                    disabled={savingCategoryId === h.id}
+                                    onChange={e => changeHistoryCategory(h.id, e.target.value)}
+                                    title="Change category (applies to every record of this product)"
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-[11px] font-semibold text-slate-600 outline-none focus:ring-2 focus:ring-[#9b59b6]/40 disabled:opacity-50"
+                                  >
+                                    {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                                  </select>
+                              ) : (
+                                <span className="font-medium text-slate-600 capitalize">{h.category || '-'}</span>
+                              )}
                             </div>
                             <div>
                               <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold block mb-0.5">Expires</span>

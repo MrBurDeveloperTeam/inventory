@@ -3127,6 +3127,64 @@ const handleLogout = async () => {
     return true;
   };
 
+  // Fix a product's category from Purchase History. The category belongs to the
+  // product, so every purchase record of it (same name + code) and the stock
+  // items for it are updated together - otherwise All Inventory, analytics and
+  // the history table would disagree.
+  const updateProductCategory = async (historyId: string, category: string): Promise<boolean> => {
+    const target = history.find(h => h.id === historyId);
+    if (!target) return false;
+    const next = normalizeCategory(category);
+    const keyOf = (name?: string, code?: string) =>
+      `${(name || '').trim().toLowerCase()}|${(code || '').trim().toLowerCase()}`;
+    const key = keyOf(target.productName, target.code);
+
+    const historyIds = history.filter(h => keyOf(h.productName, h.code) === key).map(h => h.id);
+    const matchedItems: { roomId: string; roomName: string; id: string; name: string }[] = [];
+    rooms.forEach(r => r.items.forEach(i => {
+      if (keyOf(i.name, i.code) === key) matchedItems.push({ roomId: r.id, roomName: r.name, id: i.id, name: i.name });
+    }));
+    const itemIds = matchedItems.map(i => i.id);
+
+    lastLocalMutation.current = Date.now();
+    isDirty.current = true;
+    setHistory(prev => prev.map(h => (historyIds.includes(h.id) ? { ...h, category: next } : h)));
+    setRooms(prev => prev.map(r => ({
+      ...r,
+      items: r.items.map(i => (itemIds.includes(i.id) ? { ...i, category: next as any } : i)),
+    })));
+    if (matchedItems[0]) {
+      addActivity(matchedItems[0].roomId, matchedItems[0].roomName, 'edit',
+        `Changed category of "${target.productName}" to ${next}`);
+    }
+
+    if (!currentInventoryOwnerId) {
+      isDirty.current = false;
+      return true;
+    }
+    setSyncStatus('syncing');
+    syncInFlight.current = true;
+    try {
+      const { error: hErr } = await supabase.from('inventory_purchase_history')
+        .update({ category: next }).in('id', historyIds);
+      if (hErr) throw hErr;
+      if (itemIds.length) {
+        const { error: iErr } = await supabase.from('inventory_items')
+          .update({ category: next }).in('id', itemIds);
+        if (iErr) throw iErr;
+      }
+      setSyncStatus('synced');
+      return true;
+    } catch (err) {
+      console.error('Failed to update product category:', err);
+      setSyncStatus('error');
+      return false;
+    } finally {
+      isDirty.current = false;
+      syncInFlight.current = false;
+    }
+  };
+
   const updateBatchMetadata = async (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => {
     lastLocalMutation.current = Date.now();
     isDirty.current = true;
@@ -3802,6 +3860,7 @@ const handleLogout = async () => {
                 onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
                 onDeleteItem={async (rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await deleteItem(rid, iid); }}
                 onUpdateItem={async (rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateItemMetadata(rid, iid, data); }}
+                onUpdateHistoryCategory={updateProductCategory}
                 onUpdateBatch={async (rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateBatchMetadata(rid, iid, bid, data); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
                 onAssignTbaItem={(itemId, toRoomId) => assignTbaItemToRoom(itemId, toRoomId)}
