@@ -29,6 +29,8 @@ import {
   Layers,
   MapPin,
   Check,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 import { Room, Item, ActivityLog, PurchaseHistory, Category, UOM, ItemBatch, TBA_ROOM_ID, TBA_ROOM_NAME } from './types';
 import { CATEGORIES, UOMS, PRODUCT_NAMES } from './constants';
@@ -93,6 +95,20 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [exportToast, setExportToast] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!exportToast) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setExportToast(null);
+    }, 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [exportToast]);
 
   // Report every tab change (including the initial mount) up to the parent
   // so it can track per-tab page-view duration and tag activity logs with
@@ -547,15 +563,47 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         headStyles: { fillStyle: '#4d9678' }
       });
       doc.save(`complete_inventory_${new Date().toISOString().split('T')[0]}.pdf`);
-      alert('All inventory data has been exported successfully.');
+      setExportToast({
+        type: 'success',
+        message: 'Inventory export ready. Your PDF download has started.'
+      });
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Unable to export inventory data. Please try again.');
+      setExportToast({
+        type: 'error',
+        message: 'Export failed. Please try again.'
+      });
     }
   };
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+      {exportToast && (
+        <div
+          role={exportToast.type === 'error' ? 'alert' : 'status'}
+          className={`fixed right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl animate-in slide-in-from-right-4 fade-in duration-300 ${
+            exportToast.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-red-200 bg-red-50 text-red-900'
+          }`}
+        >
+          <CheckCircle2
+            className={`mt-0.5 h-5 w-5 shrink-0 ${
+              exportToast.type === 'success' ? 'text-emerald-600' : 'text-red-600'
+            }`}
+          />
+          <p className="flex-1 text-sm font-semibold">{exportToast.message}</p>
+          <button
+            type="button"
+            onClick={() => setExportToast(null)}
+            className="rounded-lg p-1 opacity-60 transition hover:bg-black/5 hover:opacity-100"
+            aria-label="Dismiss export message"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Navigation Tabs Bar */}
       <div className="flex items-center justify-between bg-white rounded-none md:rounded-2xl shadow-sm border-x-0 md:border border-slate-100 p-1 pb-0 md:p-2 shrink-0">
