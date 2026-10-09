@@ -2006,15 +2006,30 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
                     return (
                       <button
-                        onClick={() => {
-                          onReceive(
-                            log.roomId,
-                            restoreItemData,
-                            restoreQty,
-                            restorePrice,
-                            new Date().toISOString().split('T')[0],
-                            restoreExpiry
-                          );
+                        onClick={async () => {
+                          try {
+                            const succeeded = (await onReceive(
+                              log.roomId,
+                              restoreItemData,
+                              restoreQty,
+                              restorePrice,
+                              new Date().toISOString().split('T')[0],
+                              restoreExpiry
+                            )) !== false;
+
+                            setExportToast({
+                              type: succeeded ? 'success' : 'error',
+                              message: succeeded
+                                ? `Selected item "${itemName}" has been restored successfully.`
+                                : `Unable to restore "${itemName}". Please try again.`
+                            });
+                          } catch (error) {
+                            console.error('Restore item failed:', error);
+                            setExportToast({
+                              type: 'error',
+                              message: `Unable to restore "${itemName}". Please try again.`
+                            });
+                          }
                         }}
                         className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-nowrap"
                         title={`Restore ${restoreQty}x "${itemName}" to ${log.roomName}`}
