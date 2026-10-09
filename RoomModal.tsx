@@ -582,16 +582,18 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     setIsReceiving(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (receiveMode !== 'edit' && (!purchaseDate || purchaseDate > toCalendarDateKey(new Date()))) {
       alert('Purchase date is required and cannot be later than today.');
       return;
     }
-    if (receiveMode === 'edit') {
-      const itemIndex = parseInt(selectedItemIdx);
-      const originalItem = room.items[itemIndex];
-      if (originalItem) {
+    try {
+      if (receiveMode === 'edit') {
+        const itemIndex = parseInt(selectedItemIdx);
+        const originalItem = room.items[itemIndex];
+        if (!originalItem) throw new Error('The selected item could not be found.');
+
         if (editingBatchId) {
           onUpdateBatch(room.id, originalItem.id, editingBatchId, {
             qty: receiveQty,
@@ -606,12 +608,36 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
             expiryDate: hasExpiry ? expiry : null
           });
         }
+      } else {
+        const succeeded = (await onReceive(
+          room.id,
+          formData,
+          receiveQty,
+          receivePrice,
+          purchaseDate,
+          hasExpiry ? expiry : undefined
+        )) !== false;
+
+        if (!succeeded) {
+          setExportToast({ type: 'error', message: 'Unable to save the stock entry. Please try again.' });
+          return;
+        }
       }
-    } else {
-      onReceive(room.id, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
+
+      setExportToast({
+        type: 'success',
+        message: receiveMode === 'new'
+          ? `New product "${formData.name || 'Product'}" added successfully.`
+          : receiveMode === 'edit'
+            ? 'Inventory item updated successfully.'
+            : 'Stock received successfully.'
+      });
+      setIsReceiving(false);
+      resetForm();
+    } catch (error) {
+      console.error('Receive stock failed:', error);
+      setExportToast({ type: 'error', message: 'Unable to save the stock entry. Please try again.' });
     }
-    setIsReceiving(false);
-    resetForm();
   };
 
   const resetForm = () => {
