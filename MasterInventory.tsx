@@ -1495,20 +1495,20 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
               </div>
               {/* DESKTOP TABLE VIEW */}
               <div className="hidden md:block bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 custom-scrollbar">
-                <table className="w-full text-xs text-left border-collapse">
+                <table className="w-full table-fixed text-xs text-left border-collapse">
                   <thead className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200">
                     <tr>
-                      <th className="px-3 py-5 w-[90px]">Date</th>
-                      <th className="px-3 py-5 w-[100px]">Brand</th>
-                      <th className="px-3 py-5 min-w-[240px]">Product</th>
-                      <th className="px-3 py-5 w-[60px]">Code</th>
-                      <th className="px-3 py-5 w-[90px] text-right">Qty / UOM</th>
-                      <th className="px-3 py-5 w-[80px]">Price</th>
-                      <th className="px-3 py-5 w-[90px]">Total</th>
-                      <th className="px-3 py-5 w-[100px]">Vendor</th>
-                      <th className="px-3 py-5 w-[100px]">Category</th>
-                      <th className="px-3 py-5 w-[90px]">Expires</th>
-                      <th className="px-3 py-5 w-[110px]">Location</th>
+                      <th className="px-3 py-5 w-[84px]">Date</th>
+                      <th className="px-3 py-5 w-[90px] hidden xl:table-cell">Brand</th>
+                      <th className="px-3 py-5">Product</th>
+                      <th className="px-3 py-5 w-[80px] hidden xl:table-cell">Code</th>
+                      <th className="px-3 py-5 w-[80px] text-right">Qty / UOM</th>
+                      <th className="px-3 py-5 w-[84px]">Price</th>
+                      <th className="px-3 py-5 w-[92px]">Total</th>
+                      <th className="px-3 py-5 w-[110px] xl:w-[130px]">Vendor</th>
+                      <th className="px-3 py-5 w-[96px] hidden lg:table-cell">Category</th>
+                      <th className="px-3 py-5 w-[96px]">Expires</th>
+                      <th className="px-3 py-5 w-[96px] xl:w-[110px]">Location</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -1529,24 +1529,27 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                           return (
                             <tr key={h.id} className="hover:bg-slate-50/60 transition-colors">
                               <td className="px-3 py-4 text-slate-500 whitespace-nowrap text-xs">{formatDate(h.timestamp)}</td>
-                              <td className="px-3 py-4 text-slate-500 text-xs">#{h.brand || '-'}</td>
-                              <td className="px-3 py-4 text-slate-800 whitespace-nowrap overflow-hidden text-ellipsis">
-                                <div className="font-bold truncate max-w-[400px]" title={h.productName}>{h.productName}</div>
+                              <td className="px-3 py-4 text-slate-500 text-xs truncate hidden xl:table-cell">#{h.brand || '-'}</td>
+                              <td className="px-3 py-4 text-slate-800 overflow-hidden">
+                                <div className="font-bold truncate" title={h.productName}>{h.productName}</div>
+                                <div className="xl:hidden text-[10px] text-slate-400 mt-0.5 truncate">
+                                  #{h.brand || '-'}{h.code ? ` · ${h.code}` : ''}
+                                </div>
                                 {h.description && (
-                                  <div className="text-[10px] text-slate-500 italic mt-0.5 truncate max-w-[400px]" title={h.description}>
+                                  <div className="text-[10px] text-slate-500 italic mt-0.5 truncate" title={h.description}>
                                     {h.description}
                                   </div>
                                 )}
                               </td>
-                              <td className="px-3 py-4 text-slate-500 text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">{h.code || '-'}</td>
+                              <td className="px-3 py-4 text-slate-500 text-[10px] truncate hidden xl:table-cell" title={h.code || ''}>{h.code || '-'}</td>
                               <td className="px-3 py-4 text-right tabular-nums">
                                 <span className="font-bold text-slate-800 text-xs">{h.qty}</span>
                                 <span className="ml-1 text-[9px] font-medium text-slate-400 uppercase">{h.uom || 'pcs'}</span>
                               </td>
                               <td className="px-3 py-4 text-slate-500 font-semibold whitespace-nowrap text-xs">${h.unitPrice.toFixed(2)}</td>
                               <td className="px-3 py-4 text-slate-800 font-bold tracking-tight whitespace-nowrap text-xs">${h.totalPrice.toFixed(2)}</td>
-                              <td className="px-3 py-4 text-slate-600 font-medium text-xs whitespace-nowrap overflow-hidden text-ellipsis">{h.vendor || '-'}</td>
-                              <td className="px-3 py-4"><span className="text-[10px] font-medium text-slate-500 capitalize tracking-wide">{h.category}</span></td>
+                              <td className="px-3 py-4 text-slate-600 font-medium text-xs truncate" title={h.vendor || ''}>{h.vendor || '-'}</td>
+                              <td className="px-3 py-4 hidden lg:table-cell"><span className="text-[10px] font-medium text-slate-500 capitalize tracking-wide">{h.category}</span></td>
                               <td className={`px-3 py-4 text-xs whitespace-nowrap ${isExpired ? 'text-rose-600 font-bold' : isExpiringSoon ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>
                                 {expiryDate ? (
                                   <>
@@ -1556,8 +1559,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                   </>
                                 ) : '-'}
                               </td>
-                              <td className="px-3 py-4">
-                                <span className={`font-bold text-[10px] whitespace-nowrap border px-2 py-0.5 rounded-lg ${isArchivedLocation ? 'text-slate-500 border-slate-200 bg-slate-100/70' : 'text-emerald-600 border-emerald-100 bg-emerald-50/30'}`}>
+                              <td className="px-3 py-4 overflow-hidden">
+                                <span title={displayLocation} className={`block truncate font-bold text-[10px] border px-2 py-0.5 rounded-lg ${isArchivedLocation ? 'text-slate-500 border-slate-200 bg-slate-100/70' : 'text-emerald-600 border-emerald-100 bg-emerald-50/30'}`}>
                                   {displayLocation}
                                 </span>
                               </td>
