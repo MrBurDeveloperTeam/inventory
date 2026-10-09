@@ -55,6 +55,7 @@ import {
 } from './src/utils/roomDeletion';
 import {useProfileImage} from './hooks/useProfileImage';
 import InventoryLandingPage from './inventory-landing';
+import { CheckCircle2, X } from 'lucide-react';
 
 type ManagedInventory = {
   userId: string;
@@ -345,9 +346,17 @@ const App: React.FC = () => {
    */
   const sendPageViewRef = useRef<(useBeacon?: boolean) => void>(() => {});
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  const [roomToast, setRoomToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
   const { profileImageUrl } = useProfileImage(isAuthenticated);
+
+  useEffect(() => {
+    if (!roomToast) return;
+
+    const timeoutId = window.setTimeout(() => setRoomToast(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [roomToast]);
 
   useEffect(() => {
     if (!isAuthenticated || !supabaseUserId) {
@@ -1874,6 +1883,8 @@ const handleLogout = async () => {
         console.error('Failed to persist new room:', error);
         setSyncStatus('error');
         roomPersisted = false;
+        setRooms(prev => prev.filter(room => room.id !== newRoomId));
+        setRoomToast({ type: 'error', message: `Unable to add "${newRoom.name}". Please try again.` });
       } else {
         setSyncStatus('synced');
         // Sync new room to appointment's apt_rooms (same UUID links the two)
@@ -1889,6 +1900,7 @@ const handleLogout = async () => {
     // skipped too via the same currentInventoryOwnerId check).
     if (roomPersisted) {
       await addActivity(newRoomId, newRoom.name, 'add', `Created "${newRoom.name}"`);
+      setRoomToast({ type: 'success', message: `Treatment room "${newRoom.name}" added successfully.` });
     }
 
     return newRoomId;
@@ -1905,8 +1917,8 @@ const handleLogout = async () => {
     console.log('deleteRoom initiated:', id);
     const room = rooms.find(r => r.id === id);
     const targetRoom = targetRoomId ? rooms.find(r => r.id === targetRoomId) : undefined;
-    if (!room) return;
-    if (itemAction === 'transfer' && (!targetRoom || targetRoom.id === id)) return;
+    if (!room) return false;
+    if (itemAction === 'transfer' && (!targetRoom || targetRoom.id === id)) return false;
     lastLocalMutation.current = Date.now();
 
     // Snapshot items before deletion so a genuine (non-transfer) delete can
@@ -2023,11 +2035,21 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to delete room:', err);
         setSyncStatus('error');
+        setRoomToast({ type: 'error', message: `Unable to delete "${room.name}". Please try again.` });
+        return false;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
       }
     }
+
+    setRoomToast({
+      type: 'success',
+      message: itemAction === 'transfer'
+        ? `Treatment room "${room.name}" deleted and items transferred successfully.`
+        : `Treatment room "${room.name}" deleted successfully.`
+    });
+    return true;
   };
 
   /**
@@ -3636,6 +3658,27 @@ const handleLogout = async () => {
 
   return (
     <div className={`min-h-screen flex flex-col select-none ${theme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+      {roomToast && (
+        <div
+          role={roomToast.type === 'error' ? 'alert' : 'status'}
+          className={`fixed right-4 top-4 z-[11000] flex w-[calc(100%-2rem)] max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl animate-in slide-in-from-right-4 fade-in duration-300 ${
+            roomToast.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-red-200 bg-red-50 text-red-900'
+          }`}
+        >
+          <CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${roomToast.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`} />
+          <p className="flex-1 text-sm font-semibold">{roomToast.message}</p>
+          <button
+            type="button"
+            onClick={() => setRoomToast(null)}
+            className="rounded-lg p-1 opacity-60 transition hover:bg-black/5 hover:opacity-100"
+            aria-label="Dismiss treatment room message"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <Header
         onProfileClick={() => setCurrentView('profile')}
         onDashboardClick={() => navigatetoSnabbb()}
