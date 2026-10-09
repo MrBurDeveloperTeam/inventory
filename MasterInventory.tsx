@@ -530,22 +530,28 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   };
 
   const downloadAllPdf = () => {
-    const { jsPDF } = (window as any).jspdf;
-    const doc = new jsPDF('l', 'mm', 'a4');
-    doc.text("DentaStock Pro - Complete Inventory List", 14, 15);
-    const tableData = allItems.map(i => [
-      i.brand || '-', i.name, i.code || '-', i.quantity, i.uom,
-      `$${i.price.toFixed(2)}`, `$${(i.quantity * i.price).toFixed(2)}`,
-      i.vendor || '-', i.category, i.expiryDate || '-', i.roomName
-    ]);
-    (doc as any).autoTable({
-      startY: 20,
-      head: [['Brand', 'Product', 'Code', 'Qty', 'UOM', 'Price', 'Total', 'Vendor', 'Category', 'Expires', 'Location']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: { fillStyle: '#4d9678' }
-    });
-    doc.save(`complete_inventory_${new Date().toISOString().split('T')[0]}.pdf`);
+    try {
+      const { jsPDF } = (window as any).jspdf;
+      const doc = new jsPDF('l', 'mm', 'a4');
+      doc.text("DentaStock Pro - Complete Inventory List", 14, 15);
+      const tableData = allItems.map(i => [
+        i.brand || '-', i.name, i.code || '-', i.quantity, i.uom,
+        `$${i.price.toFixed(2)}`, `$${(i.quantity * i.price).toFixed(2)}`,
+        i.vendor || '-', i.category, i.expiryDate || '-', i.roomName
+      ]);
+      (doc as any).autoTable({
+        startY: 20,
+        head: [['Brand', 'Product', 'Code', 'Qty', 'UOM', 'Price', 'Total', 'Vendor', 'Category', 'Expires', 'Location']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillStyle: '#4d9678' }
+      });
+      doc.save(`complete_inventory_${new Date().toISOString().split('T')[0]}.pdf`);
+      alert('All inventory data has been exported successfully.');
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Unable to export inventory data. Please try again.');
+    }
   };
 
   return (
