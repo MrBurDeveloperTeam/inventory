@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { toCalendarDateKey } from './aiExperience/utils/dateUtils';
 import {
   X,
@@ -27,7 +27,8 @@ import {
   Truck,
   FileText,
   Layers,
-  Map as MapIcon
+  Map as MapIcon,
+  CheckCircle2
 } from 'lucide-react';
 import { Room, Item, ActivityLog, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
@@ -63,6 +64,14 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
   const [showProductList, setShowProductList] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [deleteProductConfirm, setDeleteProductConfirm] = useState<{name: string, brand: string} | null>(null);
+  const [exportToast, setExportToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!exportToast) return;
+
+    const timeoutId = window.setTimeout(() => setExportToast(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [exportToast]);
 
   const handleDeleteGlobalProduct = (name: string, brand: string) => {
     setDeleteProductConfirm({ name, brand });
@@ -233,8 +242,10 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName(room.name));
       XLSX.writeFile(workbook, `${safeFileName(room.name)}_stock_${new Date().toISOString().split('T')[0]}.xlsx`);
+      setExportToast({ type: 'success', message: 'Excel export ready. Your download has started.' });
     } catch (err) {
       console.error('Failed to export Excel:', err);
+      setExportToast({ type: 'error', message: 'Excel export failed. Please try again.' });
     }
   };
 
@@ -302,8 +313,10 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
       }
 
       doc.save(`${safeFileName(room.name)}_stock_${new Date().toISOString().split('T')[0]}.pdf`);
+      setExportToast({ type: 'success', message: 'PDF download ready. Your download has started.' });
     } catch (err) {
       console.error('Failed to download PDF:', err);
+      setExportToast({ type: 'error', message: 'PDF download failed. Please try again.' });
     }
   };
 
@@ -696,6 +709,27 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center md:p-2">
+      {exportToast && (
+        <div
+          role={exportToast.type === 'error' ? 'alert' : 'status'}
+          className={`fixed right-4 top-4 z-[10250] flex w-[calc(100%-2rem)] max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl animate-in slide-in-from-right-4 fade-in duration-300 ${
+            exportToast.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-red-200 bg-red-50 text-red-900'
+          }`}
+        >
+          <CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${exportToast.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`} />
+          <p className="flex-1 text-sm font-semibold">{exportToast.message}</p>
+          <button
+            type="button"
+            onClick={() => setExportToast(null)}
+            className="rounded-lg p-1 opacity-60 transition hover:bg-black/5 hover:opacity-100"
+            aria-label="Dismiss export message"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className="bg-white w-full md:max-w-[95vw] h-full md:h-[90vh] rounded-none md:rounded-[1.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="bg-[#4d9678] px-6 py-4 flex items-center justify-between text-white shrink-0 border-b border-white/10">
           <div className="flex-1">
