@@ -44,9 +44,9 @@ interface RoomModalProps {
   onReceive: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
   onReceiveBatch?: (roomId: string, items: Array<{ itemData: Partial<Item>; qty: number; price: number; purchaseDate: string; expiry?: string }>) => void;
   onUpdateQty: (roomId: string, itemId: string, delta: number) => void;
-  onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
+  onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void | Promise<boolean>;
   onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
-  onDeleteItem: (roomId: string, itemId: string) => void;
+  onDeleteItem: (roomId: string, itemId: string) => void | Promise<boolean>;
   onUpdateItem: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
   onUpdateBatch: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
   readOnly?: boolean;
@@ -678,15 +678,37 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
     setDeleteContext({ item, batchIndex });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteContext) return;
-    if (typeof deleteContext.batchIndex === 'number') {
-      const targetBatch = deleteContext.item.batches?.[deleteContext.batchIndex];
-      const delta = targetBatch ? -targetBatch.qty : 0;
-      onUpdateBatchQty(room.id, deleteContext.item.id, deleteContext.batchIndex, delta);
-    } else {
-      onDeleteItem(room.id, deleteContext.item.id);
+
+    const { item, batchIndex } = deleteContext;
+    const deletingBatch = typeof batchIndex === 'number';
+
+    try {
+      let succeeded = true;
+
+      if (deletingBatch) {
+        const targetBatch = item.batches?.[batchIndex];
+        const delta = targetBatch ? -targetBatch.qty : 0;
+        succeeded = (await onUpdateBatchQty(room.id, item.id, batchIndex, delta)) !== false;
+      } else {
+        succeeded = (await onDeleteItem(room.id, item.id)) !== false;
+      }
+
+      setExportToast({
+        type: succeeded ? 'success' : 'error',
+        message: succeeded
+          ? `Selected item "${item.name}" has been deleted successfully.`
+          : `Unable to delete "${item.name}". Please try again.`
+      });
+    } catch (error) {
+      console.error('Delete failed:', error);
+      setExportToast({
+        type: 'error',
+        message: `Unable to delete "${item.name}". Please try again.`
+      });
     }
+
     setDeleteContext(null);
   };
 
