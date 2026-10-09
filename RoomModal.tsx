@@ -47,8 +47,8 @@ interface RoomModalProps {
   onUpdateBatchQty: (roomId: string, itemId: string, batchIndex: number, delta: number) => void | Promise<boolean>;
   onTransfer: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
   onDeleteItem: (roomId: string, itemId: string) => void | Promise<boolean>;
-  onUpdateItem: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
-  onUpdateBatch: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
+  onUpdateItem: (roomId: string, itemId: string, itemData: Partial<Item>) => void | Promise<boolean>;
+  onUpdateBatch: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void | Promise<boolean>;
   readOnly?: boolean;
 }
 
@@ -595,18 +595,26 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
         if (!originalItem) throw new Error('The selected item could not be found.');
 
         if (editingBatchId) {
-          onUpdateBatch(room.id, originalItem.id, editingBatchId, {
+          const succeeded = (await onUpdateBatch(room.id, originalItem.id, editingBatchId, {
             qty: receiveQty,
             unitPrice: receivePrice,
             expiryDate: hasExpiry ? expiry : null
-          });
+          })) !== false;
+          if (!succeeded) {
+            setExportToast({ type: 'error', message: 'Unable to update the selected item. Please try again.' });
+            return;
+          }
         } else {
-          onUpdateItem(room.id, originalItem.id, {
+          const succeeded = (await onUpdateItem(room.id, originalItem.id, {
             ...formData,
             quantity: receiveQty,
             price: receivePrice,
             expiryDate: hasExpiry ? expiry : null
-          });
+          })) !== false;
+          if (!succeeded) {
+            setExportToast({ type: 'error', message: 'Unable to update the selected item. Please try again.' });
+            return;
+          }
         }
       } else {
         const succeeded = (await onReceive(
