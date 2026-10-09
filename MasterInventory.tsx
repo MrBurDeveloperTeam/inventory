@@ -44,7 +44,7 @@ interface MasterInventoryProps {
   rooms: Room[];
   history: PurchaseHistory[];
   logs: ActivityLog[];
-  onReceive?: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
+  onReceive?: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void | Promise<boolean>;
   onUpdateQty?: (roomId: string, itemId: string, delta: number) => void;
   onTransfer?: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
   onUpdateBatchQty?: (roomId: string, itemId: string, batchIndex: number, delta: number) => void | Promise<boolean>;
@@ -482,7 +482,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     }
   };
 
-  const handleReceiveSubmit = (e: React.FormEvent) => {
+  const handleReceiveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (receiveMode !== 'edit' && (!purchaseDate || purchaseDate > toCalendarDateKey(new Date()))) {
       alert('Purchase date is required and cannot be later than today.');
@@ -493,11 +493,16 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       alert('Please select a room and enter a valid quantity.');
       return;
     }
-    if (!onReceive || !onUpdateItem || !onUpdateBatch) return;
+    if (!onReceive || !onUpdateItem || !onUpdateBatch) {
+      setExportToast({ type: 'error', message: 'Unable to save the stock entry.' });
+      return;
+    }
 
-    if (receiveMode === 'edit') {
-      const iId = selectedProductKey.split('|')[1];
-      if (iId) {
+    try {
+      if (receiveMode === 'edit') {
+        const iId = selectedProductKey.split('|')[1];
+        if (!iId) throw new Error('The selected item could not be found.');
+
         if (editingBatchId) {
           onUpdateBatch(selectedRoomId, iId, editingBatchId, {
             qty: receiveQty,
@@ -512,13 +517,34 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
             expiryDate: hasExpiry ? expiry : null
           });
         }
-      }
-    } else {
-      onReceive(selectedRoomId, formData, receiveQty, receivePrice, purchaseDate, hasExpiry ? expiry : undefined);
-    }
+      } else {
+        const succeeded = (await onReceive(
+          selectedRoomId,
+          formData,
+          receiveQty,
+          receivePrice,
+          purchaseDate,
+          hasExpiry ? expiry : undefined
+        )) !== false;
 
-    setActiveTab('all');
-    resetReceiveForm();
+        if (!succeeded) {
+          setExportToast({ type: 'error', message: 'Unable to save the stock entry. Please try again.' });
+          return;
+        }
+      }
+
+      setExportToast({
+        type: 'success',
+        message: receiveMode === 'edit'
+          ? 'Inventory item updated successfully.'
+          : 'Stock received successfully.'
+      });
+      setActiveTab('all');
+      resetReceiveForm();
+    } catch (error) {
+      console.error('Receive stock failed:', error);
+      setExportToast({ type: 'error', message: 'Unable to save the stock entry. Please try again.' });
+    }
   };
 
   const resetReceiveForm = () => {
