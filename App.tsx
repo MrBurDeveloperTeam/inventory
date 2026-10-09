@@ -2830,7 +2830,7 @@ const handleLogout = async () => {
     const item = room?.items.find(i => i.id === itemId);
     if (!room || !item) {
       isDirty.current = false;
-      return;
+      return false;
     }
 
     const updatedItem = adjustBatchesWithDelta(item, delta);
@@ -2922,19 +2922,19 @@ const handleLogout = async () => {
     const batches = normalized.batches ? normalized.batches.map(b => ({ ...b })) : [];
     if (batchIndex < 0 || batchIndex >= batches.length) {
       isDirty.current = false;
-      return;
+      return false;
     }
     const b = batches[batchIndex];
     const targetBatchId = b.id;
 
     if (delta === 0) {
       isDirty.current = false;
-      return;
+      return true;
     }
     const newQty = Math.max(0, b.qty + delta);
     if (newQty === b.qty) {
       isDirty.current = false;
-      return;
+      return true;
     }
     batches[batchIndex] = { ...b, qty: newQty };
     const filtered = batches.filter(x => x.qty > 0);
@@ -2995,6 +2995,7 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to update batch qty:', err);
         setSyncStatus('error');
+        return false;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
@@ -3002,6 +3003,8 @@ const handleLogout = async () => {
     } else {
       isDirty.current = false;
     }
+
+    return true;
   };
 
   const updateItemMetadata = async (roomId: string, itemId: string, itemData: Partial<Item>) => {
@@ -3237,11 +3240,14 @@ const handleLogout = async () => {
       } catch (err) {
         console.error('Failed to delete item:', err);
         setSyncStatus('error');
+        return false;
       } finally {
         isDirty.current = false;
         syncInFlight.current = false;
       }
     }
+
+    return true;
   };
 
   const splitBatchesForTransfer = (batches: ItemBatch[] | undefined, qtyToMove: number) => {
@@ -3738,9 +3744,9 @@ const handleLogout = async () => {
                 logs={logs}
                 onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
                 onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
-                onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
+                onUpdateBatchQty={async (rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateItemBatchQty(rid, iid, bidx, d); }}
                 onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
-                onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
+                onDeleteItem={async (rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await deleteItem(rid, iid); }}
                 onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
                 onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
                 onRestoreRoom={(roomName, itemSnapshot) => restoreRoom(roomName, itemSnapshot)}
@@ -3776,9 +3782,9 @@ const handleLogout = async () => {
           onReceive={(rid, data, q, p, date, exp) => { lastLocalMutation.current = Date.now(); isDirty.current = true; receiveStock(rid, data, q, p, date, exp); }}
           onReceiveBatch={(rid, items) => receiveStockBatch(rid, items)}
           onUpdateQty={(rid, iid, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemQty(rid, iid, d); }}
-          onUpdateBatchQty={(rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemBatchQty(rid, iid, bidx, d); }}
+          onUpdateBatchQty={async (rid, iid, bidx, d) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await updateItemBatchQty(rid, iid, bidx, d); }}
           onTransfer={(frid, trid, iid, q) => { lastLocalMutation.current = Date.now(); isDirty.current = true; moveItem(frid, trid, iid, q); }}
-          onDeleteItem={(rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; deleteItem(rid, iid); }}
+          onDeleteItem={async (rid, iid) => { lastLocalMutation.current = Date.now(); isDirty.current = true; return await deleteItem(rid, iid); }}
           onUpdateItem={(rid, iid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateItemMetadata(rid, iid, data); }}
           onUpdateBatch={(rid, iid, bid, data) => { lastLocalMutation.current = Date.now(); isDirty.current = true; updateBatchMetadata(rid, iid, bid, data); }}
           readOnly={!canManageItems}

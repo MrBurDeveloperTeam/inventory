@@ -47,8 +47,8 @@ interface MasterInventoryProps {
   onReceive?: (roomId: string, itemData: Partial<Item>, qty: number, price: number, purchaseDate: string, expiry?: string) => void;
   onUpdateQty?: (roomId: string, itemId: string, delta: number) => void;
   onTransfer?: (fromRoomId: string, toRoomId: string, itemId: string, quantity: number, batchIndex?: number) => void;
-  onUpdateBatchQty?: (roomId: string, itemId: string, batchIndex: number, delta: number) => void;
-  onDeleteItem?: (roomId: string, itemId: string) => void;
+  onUpdateBatchQty?: (roomId: string, itemId: string, batchIndex: number, delta: number) => void | Promise<boolean>;
+  onDeleteItem?: (roomId: string, itemId: string) => void | Promise<boolean>;
   onUpdateItem?: (roomId: string, itemId: string, itemData: Partial<Item>) => void;
   onUpdateBatch?: (roomId: string, itemId: string, batchId: string, batchData: Partial<ItemBatch>) => void;
   onRestoreRoom?: (roomName: string, itemSnapshot?: string) => void;
@@ -2054,13 +2054,49 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    if (typeof deleteTarget.batchIndex === 'number') {
-                      const delta = -(deleteTarget.qty || 0);
-                      onUpdateBatchQty?.(deleteTarget.roomId, deleteTarget.itemId, deleteTarget.batchIndex, delta);
-                    } else {
-                      onDeleteItem?.(deleteTarget.roomId, deleteTarget.itemId);
+                  onClick={async () => {
+                    const deletingBatch = typeof deleteTarget.batchIndex === 'number';
+
+                    try {
+                      let succeeded = true;
+
+                      if (deletingBatch) {
+                        const delta = -(deleteTarget.qty || 0);
+                        succeeded = (await onUpdateBatchQty?.(
+                          deleteTarget.roomId,
+                          deleteTarget.itemId,
+                          deleteTarget.batchIndex!,
+                          delta
+                        )) !== false;
+                      } else {
+                        succeeded = (await onDeleteItem?.(deleteTarget.roomId, deleteTarget.itemId)) !== false;
+                      }
+
+                      if (!succeeded) {
+                        setExportToast({
+                          type: 'error',
+                          message: deletingBatch
+                            ? 'Unable to delete the inventory batch.'
+                            : 'Unable to delete the inventory item.'
+                        });
+                      } else {
+                        setExportToast({
+                          type: 'success',
+                          message: deletingBatch
+                            ? 'Inventory batch deleted successfully.'
+                            : 'Inventory item deleted successfully.'
+                        });
+                      }
+                    } catch (error) {
+                      console.error('Delete failed:', error);
+                      setExportToast({
+                        type: 'error',
+                        message: deletingBatch
+                          ? 'Unable to delete the inventory batch.'
+                          : 'Unable to delete the inventory item.'
+                      });
                     }
+
                     setDeleteTarget(null);
                   }}
                   className="px-4 py-2 rounded-full bg-rose-600 text-white font-bold text-sm hover:bg-rose-700 transition-colors"
