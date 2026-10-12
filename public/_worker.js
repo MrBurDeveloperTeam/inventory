@@ -576,6 +576,87 @@ async function handleProductCatalogRequest(request) {
   }
 }
 
+/**
+ * GET /api/shop-domain -> which mrbur.shop storefront this account belongs to.
+ *
+ * The inventory app has no `odoo_session` in its own localStorage (that is
+ * only written on app.snabbb.com's origin), so it cannot work out the
+ * shopper's country client-side. The shared .snabbb.com Odoo session cookie
+ * is sent here though, so ask Odoo who the session belongs to and map the
+ * company code to its country shop: MMY -> https://my.mrbur.shop,
+ * INT -> https://mrbur.shop (same mapping as services/mrburCart.ts).
+ * Never cached: it is per-user.
+ */
+function shopDomainFromCompanyCode(companyCode) {
+  const code = String(companyCode || '').trim().toUpperCase();
+  if (!code) return null;
+  if (code === 'INT') return 'https://mrbur.shop';
+  if (code[0] !== 'M') return null;
+  const country = code.slice(1).toLowerCase();
+  return /^[a-z]{2}$/.test(country) ? `https://${country}.mrbur.shop` : null;
+}
+
+async function handleShopDomainRequest(request, extraHeaders = {}) {
+  const json = (body, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...extraHeaders },
+    });
+
+  if (request.method !== 'GET') return json({ ok: false, error: 'Method not allowed' }, 405);
+
+  // Self-contained on purpose: reads the shared Odoo session cookie and calls
+  // get_session_info directly, so it does not depend on any other helper
+  // (parseCookies / getOdooCookie / resolveOdooSession) existing in this worker.
+  const cookies = {};
+  for (const part of (request.headers.get('Cookie') || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0) cookies[part.slice(0, i).trim()] = part.slice(i + 1).trim();
+  }
+  const sessionId = cookies.session_id || cookies.mrbur_sso;
+  if (!sessionId) return json({ ok: false, error: 'Missing Odoo session' }, 401);
+
+  let session = null;
+  try {
+    const res = await fetch('https://mrbur.odoo.com/web/session/get_session_info', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Cookie: `session_id=${sessionId}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'call', params: {}, id: Date.now() }),
+    });
+    const data = await res.json().catch(() => null);
+    session = data?.result || null;
+  } catch (error) {
+    return json({ ok: false, error: error?.message || 'Odoo session service is unavailable' }, 502);
+  }
+  if (!session) return json({ ok: false, error: 'Unable to retrieve Odoo session' }, 401);
+
+  const codes = session.company_codes || {};
+  const current = session.user_companies?.current_company;
+  const currentId = Array.isArray(current) ? current[0] : (current ?? session.company_id ?? null);
+  let companyCode = currentId != null ? codes[currentId] : null;
+  if (!companyCode) {
+    const all = Object.values(codes);
+    if (all.length === 1) companyCode = all[0];
+  }
+  const domain = shopDomainFromCompanyCode(companyCode);
+  return json({
+    ok: true,
+    domain,
+    companyCode: companyCode ? String(companyCode).toUpperCase() : null,
+    // Diagnostics for when domain is null: what the session actually had.
+    debug: domain ? undefined : {
+      currentCompanyId: currentId,
+      currentCompanyName: Array.isArray(current) ? current[1] : null,
+      companyCodes: codes,
+      sessionKeys: Object.keys(session),
+    },
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -590,6 +671,10 @@ export default {
 
     if (url.pathname === '/api/product-catalog') {
       return handleProductCatalogRequest(request);
+    }
+
+    if (url.pathname === '/api/shop-domain') {
+      return handleShopDomainRequest(request);
     }
 
     if (url.pathname === '/api/activity') {

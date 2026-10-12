@@ -12,6 +12,9 @@ interface LowStockReorderModalProps {
    *  fallback when an item has no shop_url of its own. Null for an account
    *  with no synced items yet, in which case the generic mrbur.shop is used. */
   shopDomain?: string | null;
+  /** True when shopDomain comes from the shopper's session (not a guess), so it
+   *  also overrides the site stored in an item's shop_url. */
+  shopDomainIsAuthoritative?: boolean;
   onClose: () => void;
   /** Persist "don't remind me again today". Called instead of onClose when
    *  the checkbox is ticked. */
@@ -45,6 +48,7 @@ interface LowStockReorderModalProps {
 const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
   hits,
   shopDomain,
+  shopDomainIsAuthoritative = false,
   onClose,
   onDismissToday,
 }) => {
@@ -69,7 +73,7 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
 
   const shopHostFor = (hit: LowStockHit): string => {
     try {
-      return new URL(resolveMrburUrl(hit.item, shopDomain)).host;
+      return new URL(resolveMrburUrl(hit.item, shopDomain, shopDomainIsAuthoritative)).host;
     } catch {
       return 'mrbur.shop';
     }
@@ -87,7 +91,7 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
     const catalog = getCachedPublishedProducts();
     hits.forEach((hit) => {
       const qty = qtys[hit.item.id] ?? 1;
-      const { url, isDirectProductLink } = addItemToMrburCart(hit.item, shopDomain, catalog);
+      const { url, isDirectProductLink } = addItemToMrburCart(hit.item, shopDomain, catalog, shopDomainIsAuthoritative);
       // Append add_qty only when we have a real product-page URL — appending
       // it to the homepage or a search URL would have no effect.
       const target = isDirectProductLink

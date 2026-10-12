@@ -6,7 +6,7 @@ import {
   isLowStockDismissedToday,
   dismissLowStockForToday,
 } from '../services/lowStockReorder';
-import { deriveAccountShopDomain, getSessionShopDomain } from '../services/mrburCart';
+import { deriveAccountShopDomain, fetchSessionShopDomain, getSessionShopDomain } from '../services/mrburCart';
 
 /**
  * Runs the low-stock reorder check once per login: when the user
@@ -71,15 +71,34 @@ export const useLowStockReorderCheck = (
     setVisible(false);
   };
 
-  // The shopper's mrbur.shop domain: the authoritative source is the
-  // session's own company_code (see getSessionShopDomain — synchronous,
-  // reads the same odoo_session localStorage already used elsewhere in this
-  // app, no network call). Falls back to deriving one from this account's
-  // own already-synced inventory items only if the session has no usable
-  // company_code yet.
+  // The shopper's mrbur.shop domain, best source first:
+  //  1. /api/shop-domain — the worker asks Odoo which company/country the
+  //     shared session belongs to (this app has no odoo_session of its own);
+  //  2. a local odoo_session company_code, if one happens to be present;
+  //  3. the most common domain among the account's already-synced shop_urls
+  //     (only a guess, so not treated as authoritative).
+  const [remoteDomain, setRemoteDomain] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setRemoteDomain(null);
+      return;
+    }
+    let cancelled = false;
+    fetchSessionShopDomain().then((d) => {
+      if (!cancelled && d) setRemoteDomain(d);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
+
+  const sessionDomain = useMemo(
+    () => (isAuthenticated ? remoteDomain ?? getSessionShopDomain() : null),
+    [isAuthenticated, remoteDomain]
+  );
   const shopDomain = useMemo(
-    () => (isAuthenticated ? getSessionShopDomain() : null) ?? deriveAccountShopDomain(rooms),
-    [isAuthenticated, rooms]
+    () => sessionDomain ?? deriveAccountShopDomain(rooms),
+    [sessionDomain, rooms]
   );
 
   return {
@@ -88,5 +107,6 @@ export const useLowStockReorderCheck = (
     dismiss,
     dismissForToday,
     shopDomain,
+    shopDomainIsAuthoritative: Boolean(sessionDomain),
   };
 };

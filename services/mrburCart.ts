@@ -126,13 +126,52 @@ export const deriveAccountShopDomain = (rooms: Room[]): string | null => {
  * `fallbackDomain` (from deriveAccountShopDomain) is used ahead of the
  * generic MRBUR_BASE_URL whenever the item itself has no shop_url.
  */
-export const resolveMrburUrl = (item: Item, fallbackDomain?: string | null): string => {
+export const resolveMrburUrl = (
+  item: Item,
+  fallbackDomain?: string | null,
+  domainIsAuthoritative = false
+): string => {
   const base = fallbackDomain || MRBUR_BASE_URL;
   const stored = item.shopUrl?.trim();
   if (!stored) return base;
   // shop_url is stored as an absolute URL by the Odoo sync, but tolerate a
   // bare path too in case that ever changes.
-  return stored.startsWith('http') ? stored : `${base}${stored}`;
+  if (!stored.startsWith('http')) return `${base}${stored}`;
+  // When the shopper's own country shop is known for certain (their session),
+  // keep the product path but send them to THEIR storefront rather than
+  // whichever site the item happened to be bought on (e.g. the generic
+  // international site), so they land on the right website and session.
+  if (domainIsAuthoritative && fallbackDomain) {
+    try {
+      const u = new URL(stored);
+      return `${fallbackDomain}${u.pathname}${u.search}${u.hash}`;
+    } catch {
+      /* malformed — use it as stored */
+    }
+  }
+  return stored;
+};
+
+let sessionDomainPromise: Promise<string | null> | null = null;
+
+/**
+ * Asks the worker (GET /api/shop-domain) which country shop this account's
+ * Odoo session belongs to. Needed because this app has no `odoo_session` in
+ * its own localStorage, so getSessionShopDomain() is empty here. Result is
+ * shared between callers; a failed/empty lookup is retried next time.
+ */
+export const fetchSessionShopDomain = (): Promise<string | null> => {
+  if (!sessionDomainPromise) {
+    sessionDomainPromise = fetch('/api/shop-domain', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => (typeof d?.domain === 'string' && d.domain ? (d.domain as string) : null))
+      .catch(() => null)
+      .then((domain) => {
+        if (!domain) sessionDomainPromise = null;
+        return domain;
+      });
+  }
+  return sessionDomainPromise;
 };
 
 const norm = (s?: string | null): string => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -189,12 +228,13 @@ export interface MrburCartResult {
 export const addItemToMrburCart = (
   item: Item,
   fallbackDomain?: string | null,
-  catalog?: PublishedProduct[] | null
+  catalog?: PublishedProduct[] | null,
+  domainIsAuthoritative = false
 ): MrburCartResult => {
   const base = fallbackDomain || MRBUR_BASE_URL;
 
   if (item.shopUrl?.trim()) {
-    return { item, url: resolveMrburUrl(item, fallbackDomain), linkType: 'product', isDirectProductLink: true };
+    return { item, url: resolveMrburUrl(item, fallbackDomain, domainIsAuthoritative), linkType: 'product', isDirectProductLink: true };
   }
 
   const match = findCatalogProduct(item, catalog);
