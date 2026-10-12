@@ -1,5 +1,6 @@
 import { Item, Room } from '../types';
 import { getActiveCompanyFromOdooSession } from './getCompanies';
+import type { PublishedProduct } from './publishedProducts';
 
 /**
  * Integration point for mrbur.shop (https://www.mrbur.shop), the dental
@@ -134,22 +135,82 @@ export const resolveMrburUrl = (item: Item, fallbackDomain?: string | null): str
   return stored.startsWith('http') ? stored : `${base}${stored}`;
 };
 
+const norm = (s?: string | null): string => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * Finds the shop product for an inventory item that has no shop_url of its
+ * own, by matching the published catalog: SKU == item code first, then an
+ * exact (case/space-insensitive) name match. A name that matches more than
+ * one catalog product is treated as ambiguous and returns null rather than
+ * sending the shopper to a guess.
+ */
+export const findCatalogProduct = (
+  item: Item,
+  catalog?: PublishedProduct[] | null
+): PublishedProduct | null => {
+  if (!catalog?.length) return null;
+  const code = norm(item.code);
+  if (code) {
+    const bySku = catalog.find((p) => norm(p.sku) === code);
+    if (bySku) return bySku;
+  }
+  const name = norm(item.name);
+  if (!name) return null;
+  const byName = catalog.filter((p) => norm(p.name) === name);
+  return byName.length === 1 ? byName[0] : null;
+};
+
+export type MrburLinkType = 'product' | 'search' | 'home';
+
 export interface MrburCartResult {
   item: Item;
   url: string;
-  /** True when `url` is the item's real mrbur.shop product page rather than
-   *  a homepage fallback (generic or country-derived). */
+  /** What `url` points at: the item's own product page ('product'), the
+   *  shop's search results for the item name ('search'), or just the shop
+   *  homepage ('home'). */
+  linkType: MrburLinkType;
+  /** True when `url` is a real mrbur.shop product page (not search/home). */
   isDirectProductLink: boolean;
 }
 
 /**
- * Resolves where "adding this item to cart" should send the shopper.
+ * Resolves where "restocking this item" should send the shopper, best first:
+ *  1. item.shopUrl — exact product page stamped by the Odoo sync.
+ *  2. the published-catalog match (SKU, then exact name) -> `<domain>/shop/<id>`
+ *     (Odoo redirects /shop/<id> to the canonical /shop/<slug>-<id> page).
+ *  3. the shop's own search for the item name on the shopper's country domain.
+ *  4. the shop homepage (only when the item has no name).
+ *
  * Deliberately does NOT call window.open itself — opening a tab has to
  * happen inside the caller's own click handler (see LowStockReorderModal),
  * both so it isn't blocked by the browser's popup blocker and so it's never
  * accidentally triggered twice.
  */
-export const addItemToMrburCart = (item: Item, fallbackDomain?: string | null): MrburCartResult => {
-  const url = resolveMrburUrl(item, fallbackDomain);
-  return { item, url, isDirectProductLink: Boolean(item.shopUrl?.trim()) };
+export const addItemToMrburCart = (
+  item: Item,
+  fallbackDomain?: string | null,
+  catalog?: PublishedProduct[] | null
+): MrburCartResult => {
+  const base = fallbackDomain || MRBUR_BASE_URL;
+
+  if (item.shopUrl?.trim()) {
+    return { item, url: resolveMrburUrl(item, fallbackDomain), linkType: 'product', isDirectProductLink: true };
+  }
+
+  const match = findCatalogProduct(item, catalog);
+  if (match) {
+    return { item, url: `${base}/shop/${match.id}`, linkType: 'product', isDirectProductLink: true };
+  }
+
+  const name = item.name?.trim();
+  if (name) {
+    return {
+      item,
+      url: `${base}/shop?search=${encodeURIComponent(name)}`,
+      linkType: 'search',
+      isDirectProductLink: false,
+    };
+  }
+
+  return { item, url: base, linkType: 'home', isDirectProductLink: false };
 };

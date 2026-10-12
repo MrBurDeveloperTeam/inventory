@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, ShoppingCart, X, Minus, Plus } from 'lucide-react';
 import { LowStockHit } from '../services/lowStockReorder';
 import { addItemToMrburCart, resolveMrburUrl } from '../services/mrburCart';
+import { getCachedPublishedProducts, prefetchPublishedProducts } from '../services/publishedProducts';
 
 interface LowStockReorderModalProps {
   /** Every non-liquid item currently at/below the reorder threshold. */
@@ -49,6 +50,13 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
 }) => {
   const [dontShowToday, setDontShowToday] = useState(false);
 
+  // Warm the published-product catalog so Restock can match items that have
+  // no shop_url to their product page. Read synchronously at click time (see
+  // handleRestock) so window.open stays inside the user gesture.
+  useEffect(() => {
+    prefetchPublishedProducts();
+  }, []);
+
   // Per-item reorder qty. Default to 1 for each item.
   const [qtys, setQtys] = useState<Record<string, number>>(
     () => Object.fromEntries(hits.map((h) => [h.item.id, 1]))
@@ -76,9 +84,10 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
    * fallback (same behaviour as the old "View" button).
    */
   const handleRestock = () => {
+    const catalog = getCachedPublishedProducts();
     hits.forEach((hit) => {
       const qty = qtys[hit.item.id] ?? 1;
-      const { url, isDirectProductLink } = addItemToMrburCart(hit.item, shopDomain);
+      const { url, isDirectProductLink } = addItemToMrburCart(hit.item, shopDomain, catalog);
       // Append add_qty only when we have a real product-page URL — appending
       // it to the homepage or a search URL would have no effect.
       const target = isDirectProductLink
