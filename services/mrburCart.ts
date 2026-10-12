@@ -254,3 +254,35 @@ export const addItemToMrburCart = (
 
   return { item, url: base, linkType: 'home', isDirectProductLink: false };
 };
+
+/** Where the worker's existing SSO bounce lives (same one the shop's own
+ *  "ambient" login uses): GET /api/sso/ambient-redirect?return_url=<shop url>. */
+export const SSO_AMBIENT_REDIRECT_URL = 'https://app.snabbb.com/api/sso/ambient-redirect';
+
+/**
+ * Wraps a mrbur.shop URL so the shopper arrives already signed in.
+ *
+ * Opening the shop directly lands a guest there (the shop has its own
+ * session, separate from Snabbb's), which is why prices read "Sign in to
+ * see price". Instead the new tab goes through the worker's
+ * /api/sso/ambient-redirect, which takes the shared .snabbb.com Odoo session,
+ * asks Odoo for a one-time SSO token and redirects to
+ * `<shop>/sso/callback?token=...&next=<path+query>` — logging the shopper in
+ * and then landing them on the product page. If there's no valid session, or
+ * Odoo issues no token, the worker just redirects to the plain URL, so the
+ * worst case is the same guest page as before.
+ *
+ * Only mrbur.shop URLs are wrapped (the worker also refuses other hosts).
+ * Note the worker forwards path + query, not the #fragment.
+ */
+export const withShopLogin = (targetUrl: string): string => {
+  try {
+    const host = new URL(targetUrl).hostname;
+    if (host === 'mrbur.shop' || host.endsWith('.mrbur.shop')) {
+      return `${SSO_AMBIENT_REDIRECT_URL}?return_url=${encodeURIComponent(targetUrl)}`;
+    }
+  } catch {
+    /* not a valid URL — open it as is */
+  }
+  return targetUrl;
+};

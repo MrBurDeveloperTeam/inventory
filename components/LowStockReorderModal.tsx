@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, ShoppingCart, X, Minus, Plus } from 'lucide-react';
 import { LowStockHit } from '../services/lowStockReorder';
-import { addItemToMrburCart, resolveMrburUrl } from '../services/mrburCart';
+import { addItemToMrburCart, resolveMrburUrl, withShopLogin } from '../services/mrburCart';
 import { getCachedPublishedProducts, prefetchPublishedProducts } from '../services/publishedProducts';
 
 interface LowStockReorderModalProps {
@@ -97,7 +97,8 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
       const target = isDirectProductLink
         ? `${url}${url.includes('?') ? '&' : '?'}add_qty=${qty}`
         : url;
-      window.open(target, '_blank', 'noopener,noreferrer');
+      // Go through the SSO bounce so the shop opens already signed in.
+      window.open(withShopLogin(target), '_blank', 'noopener,noreferrer');
     });
     dismiss();
   };
