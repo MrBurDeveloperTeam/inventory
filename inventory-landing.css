@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
 
 :root {
+  --inventory-header-teal: #0b9f91;
+  --inventory-header-teal-hover: #087d73;
   --inventory-teal: #43847d;
   --inventory-teal-dark: #356a64;
   --inventory-teal-soft: #e1efed;
@@ -141,6 +143,11 @@
 }
 
 .inventory-nav-cta {
+  background: var(--inventory-header-teal);
+  box-shadow: 0 12px 25px rgba(11, 159, 145, 0.2);
+}
+
+.inventory-nav-cta {
   gap: 7px;
   padding: 10px 16px;
   border-radius: 11px;
@@ -157,6 +164,11 @@
   transform: translateY(-2px);
   background: var(--inventory-teal-dark);
   box-shadow: 0 16px 30px rgba(67, 132, 125, 0.28);
+}
+
+.inventory-nav-cta:hover {
+  background: var(--inventory-header-teal-hover);
+  box-shadow: 0 16px 30px rgba(8, 125, 115, 0.28);
 }
 
 .inventory-menu-button {
@@ -1684,8 +1696,8 @@
     padding: 15px;
     border: 1px solid #b8e2dc;
     border-radius: 10px;
-    color: var(--inventory-teal-dark);
-    background: #e5f7f4;
+    color: #ffffff;
+    background: var(--inventory-header-teal);
     font-weight: 800;
     text-align: left;
 }
@@ -1709,8 +1721,8 @@
   padding: 15px;
   border: 1px solid #b8e2dc;
   border-radius: 10px;
-  color: var(--inventory-teal-dark);
-  background: #e5f7f4;
+  color: #ffffff;
+  background: var(--inventory-header-teal);
   font-weight: 800;
   text-align: left;
 }
@@ -1719,6 +1731,11 @@
 .mobile-nav-signup:hover {
   color: var(--inventory-teal);
   background: var(--inventory-teal-soft);
+}
+
+.mobile-nav-signup:hover {
+  color: #ffffff;
+  background: var(--inventory-header-teal-hover);
 }
 
 .mobile-nav-cta {
