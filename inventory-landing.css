@@ -77,7 +77,7 @@
   border-left: 1px solid var(--inventory-line);
   color: var(--inventory-header-teal-hover);
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .inventory-nav-links {
@@ -250,7 +250,7 @@
   color: var(--inventory-navy);
   font-family: 'Open Sans', sans-serif;
   font-size: clamp(42px, 5.4vw, 77px);
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.075em;
   line-height: 0.99;
 }
