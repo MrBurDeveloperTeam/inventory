@@ -77,7 +77,7 @@
   border-left: 1px solid var(--inventory-line);
   color: var(--inventory-header-teal-hover);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .inventory-nav-links {
@@ -258,6 +258,7 @@
 .inventory-hero h1 em {
   color: var(--inventory-header-teal);
   font-style: normal;
+  font-weight: 700;
 }
 
 .inventory-hero-copy > p {
