@@ -1,6 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
+  --inventory-header-teal: #0b9f91;
+  --inventory-header-teal-hover: #087d73;
   --inventory-teal: #43847d;
   --inventory-teal-dark: #356a64;
   --inventory-teal-soft: #e1efed;
@@ -18,7 +20,7 @@
   overflow: hidden;
   color: var(--inventory-navy);
   background: var(--inventory-background);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Open Sans', sans-serif;
 }
 
 .inventory-landing *,
@@ -60,7 +62,7 @@
   align-items: center;
   gap: 10px;
   color: var(--inventory-navy);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 18px;
   font-weight: 800;
 }
@@ -73,9 +75,9 @@
 .inventory-brand span {
   padding-left: 10px;
   border-left: 1px solid var(--inventory-line);
-  color: var(--inventory-teal-dark);
+  color: var(--inventory-header-teal-hover);
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .inventory-nav-links {
@@ -141,6 +143,11 @@
 }
 
 .inventory-nav-cta {
+  background: var(--inventory-header-teal);
+  box-shadow: 0 12px 25px rgba(11, 159, 145, 0.2);
+}
+
+.inventory-nav-cta {
   gap: 7px;
   padding: 10px 16px;
   border-radius: 11px;
@@ -157,6 +164,11 @@
   transform: translateY(-2px);
   background: var(--inventory-teal-dark);
   box-shadow: 0 16px 30px rgba(67, 132, 125, 0.28);
+}
+
+.inventory-nav-cta:hover {
+  background: var(--inventory-header-teal-hover);
+  box-shadow: 0 16px 30px rgba(8, 125, 115, 0.28);
 }
 
 .inventory-menu-button {
@@ -236,16 +248,17 @@
   max-width: 620px;
   margin: 27px 0 24px;
   color: var(--inventory-navy);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: clamp(42px, 5.4vw, 77px);
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.075em;
   line-height: 0.99;
 }
 
 .inventory-hero h1 em {
-  color: var(--inventory-teal);
+  color: var(--inventory-header-teal);
   font-style: normal;
+  font-weight: 700;
 }
 
 .inventory-hero-copy > p {
@@ -416,7 +429,7 @@
 .preview-dashboard-row h3 {
   margin: 5px 0 0;
   color: var(--inventory-navy);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 21px;
   letter-spacing: -0.04em;
 }
@@ -433,7 +446,7 @@
 .preview-summary span {
   display: block;
   color: var(--inventory-teal-dark);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 22px;
   font-weight: 800;
 }
@@ -693,7 +706,7 @@
 
 .inventory-stat-strip strong {
   color: var(--inventory-teal-dark);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 25px;
   font-weight: 800;
 }
@@ -723,7 +736,7 @@
 .inventory-final-cta h2 {
   margin: 13px 0 17px;
   color: var(--inventory-navy);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: clamp(31px, 4vw, 51px);
   font-weight: 800;
   letter-spacing: -0.065em;
@@ -829,7 +842,7 @@
 
 .inventory-feature-card h3 {
   margin: 0 0 10px;
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 17px;
 }
 
@@ -908,7 +921,7 @@
 
 .workflow-card-header h3 {
   margin: 5px 0 0;
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 18px;
 }
 
@@ -1030,7 +1043,7 @@
 
 .workflow-steps > div > span {
   color: var(--inventory-teal);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 13px;
   font-weight: 800;
 }
@@ -1046,7 +1059,7 @@
   display: block;
   margin-bottom: 3px;
   color: var(--inventory-navy);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 14px;
 }
 
@@ -1255,7 +1268,7 @@
 
 .expiry-panel-header h3 {
   margin: 5px 0 0;
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 18px;
 }
 
@@ -1375,7 +1388,7 @@
 
 .benefit-grid h3 {
   margin: 21px 0 9px;
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   font-size: 16px;
 }
 
@@ -1684,8 +1697,8 @@
     padding: 15px;
     border: 1px solid #b8e2dc;
     border-radius: 10px;
-    color: var(--inventory-teal-dark);
-    background: #e5f7f4;
+    color: #ffffff;
+    background: var(--inventory-header-teal);
     font-weight: 800;
     text-align: left;
 }
@@ -1709,8 +1722,8 @@
   padding: 15px;
   border: 1px solid #b8e2dc;
   border-radius: 10px;
-  color: var(--inventory-teal-dark);
-  background: #e5f7f4;
+  color: #ffffff;
+  background: var(--inventory-header-teal);
   font-weight: 800;
   text-align: left;
 }
@@ -1719,6 +1732,11 @@
 .mobile-nav-signup:hover {
   color: var(--inventory-teal);
   background: var(--inventory-teal-soft);
+}
+
+.mobile-nav-signup:hover {
+  color: #ffffff;
+  background: var(--inventory-header-teal-hover);
 }
 
 .mobile-nav-cta {
