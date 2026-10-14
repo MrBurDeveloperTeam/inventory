@@ -154,6 +154,13 @@
   font-size: 14px;
 }
 
+.inventory-login,
+.inventory-nav-cta,
+.mobile-nav-login,
+.mobile-nav-signup {
+  font-size: 14px;
+}
+
 .inventory-nav-cta svg {
   width: 15px;
   height: 15px;
