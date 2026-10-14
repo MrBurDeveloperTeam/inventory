@@ -88,7 +88,7 @@
   margin-right: 38px;
   color: #71838a;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .inventory-nav-links a {
@@ -1726,6 +1726,11 @@
   background: var(--inventory-header-teal);
   font-weight: 800;
   text-align: left;
+}
+
+.inventory-nav-cta,
+.mobile-nav-signup {
+  font-weight: 500;
 }
 
 .mobile-nav-login:hover,
