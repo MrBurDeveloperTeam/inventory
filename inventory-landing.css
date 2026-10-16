@@ -249,7 +249,7 @@
 }
 
 .inventory-hero h1 em {
-  color: var(--inventory-teal);
+  color: #56a39a;
   font-style: normal;
   font-weight: inherit;
 }
@@ -284,12 +284,12 @@
 
 .inventory-hero .inventory-primary-button {
   color: #ffffff;
-  background: var(--inventory-teal);
-  box-shadow: 0 12px 25px rgba(11, 159, 145, 0.2);
+  background: #55a39a;
+  box-shadow: 0 12px 25px rgba(85, 163, 154, 0.2);
 }
 
 .inventory-hero .inventory-primary-button:hover {
-  background: var(--inventory-teal-dark);
+  background: #478d85;
 }
 
 .inventory-secondary-button:hover {
