@@ -20,6 +20,8 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {
+          // Game loaders are rewritten after this precache manifest is generated.
+          globIgnores: ['**/games/**'],
           maximumFileSizeToCacheInBytes:
             4 * 1024 * 1024,
 

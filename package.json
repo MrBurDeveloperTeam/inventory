@@ -1,18 +1,19 @@
 {
   "name": "dentastock-pro",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.12.2",
   "type": "module",
   "scripts": {
     "predev": "node scripts/prepare-pet.mjs",
     "dev": "vite",
     "prebuild": "node scripts/prepare-pet.mjs",
     "build": "vite build",
+    "postbuild": "node scripts/compress-cloudflare-games.mjs",
     "preview": "vite preview",
     "verify:pet": "node scripts/verify-pet.mjs"
   },
   "dependencies": {
-    "@mrburdeveloperteam/pet-function": "github:mrburdeveloperteam/pet-function#v0.9.44",
+    "@mrburdeveloperteam/pet-function": "github:mrburdeveloperteam/pet-function#v0.12.2",
     "@supabase/supabase-js": "^2.103.3",
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.5",
@@ -36,5 +37,8 @@
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vite-plugin-pwa": "^1.2.0"
+  },
+  "allowScripts": {
+    "github:mrburdeveloperteam/pet-function#8a1993a66d60087829519c053ee7de0ed3475320": true
   }
 }

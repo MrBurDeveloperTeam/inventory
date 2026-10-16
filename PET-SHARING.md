@@ -1,13 +1,13 @@
 # Shared cat integration
 
-Inventory's manifest now targets `github:mrburdeveloperteam/pet-function#v0.9.11`.
-The remote tag exists and resolves to cc17938a37e5b2597dd05a70a96e52887d186550.
-The lockfile and installed node_modules now use that GitHub commit, not a sibling-folder
-link. Inventory's production build, type check and all 82 game-file comparisons passed
-using the installed GitHub dependency. Real authenticated acceptance checks remain necessary.
+Inventory and its pet-function dependency use version **0.12.2**.
+The manifest and lockfile target GitHub tag `v0.12.2`, resolving to
+`8a1993a66d60087829519c053ee7de0ed3475320`. The npm build approval matches
+that release commit. No sibling-folder link is configured.
+Real authenticated acceptance checks remain necessary.
 The package is maintained in the separate `intern/pet-function` repository, not mrbur or molar-experience.
 
-Shared: cat rendering, pet UI and care/game runtime, AI chat UI, pet options, images, and all four games.
+Shared: cat rendering, pet UI and care/game runtime, AI chat UI, pet options, images, and the shared mini-games.
 `games/MeowdokuLauncher.tsx` only connects Inventory's account and repository to the shared launcher.
 
 New shared Inventory implementation: `pet-function/src/apps/inventory/` contains
@@ -28,9 +28,16 @@ of real stock operations. These are injected into the shared code; the package d
 store service-role keys or create a separate account/session. Pet userId remains host-authoritative.
 No database schema or online records were changed for this migration.
 
-`scripts/prepare-pet.mjs` prepares non-game images before dev/build.
+`scripts/prepare-pet.mjs` restores and verifies the installed release's resource
+packs and prepares non-game images before dev/build.
 The shared Vite plugin serves games directly from the installed package during development,
 and emits identical package games into `dist/games` for deployment.
+The postbuild script splits oversized WASM and PCK files, verifies their bytes,
+and patches Godot loaders to reconstruct them, including Kart Racing's shared
+engine. All deployment assets must remain within 25 MiB.
+PWA precaching excludes games because their loaders are rewritten after the
+precache manifest is generated; game routes also retain their navigation fallback
+exclusion. This prevents stale chunk metadata from being reused after updates.
 There are no executable game copies under `public/games`.
 The historical URL directory `molar-experience` is only an image path; it does not identify an old package dependency.
 
@@ -40,10 +47,19 @@ Verify locally:
 npm run build
 node node_modules/typescript/bin/tsc -p tsconfig.pet-check.json --noEmit
 node scripts/verify-pet.mjs
+node --test tests/cloudflare-game-assets.node-test.mjs
 ```
 
 Authenticated manual checks remain necessary: inventory-aware dialogue, care/shop wallet persistence,
-four games and rewards, Meowdoku progress/check-in, sign-out and account switching.
+all games and rewards, Meowdoku progress/check-in, sign-out and account switching.
+
+Resource verification compares every emitted game file with the installed
+release, reconstructs split WASM/PCK byte-for-byte, and checks deployment asset
+sizes. Run it after the production build. The resource regression tests use
+temporary local files and mocked fetch; no real database or AI calls are needed.
+No database migration is required for this version update.
+Commit the manifest, regenerated lockfile, resource scripts, documentation and
+regression tests together. Generated dist and public/pet-function stay untracked.
 
 Updating shared source does not automatically update a deployed application: publish a new package/tag,
 update this repository's dependency and lockfile, then rebuild/redeploy Inventory.
