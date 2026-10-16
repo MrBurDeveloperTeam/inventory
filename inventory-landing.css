@@ -214,7 +214,6 @@
 .inventory-section-label {
   color: var(--inventory-teal-dark);
   font-size: 11px;
-  font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
@@ -223,32 +222,20 @@
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  padding: 13px 14px;
-  border: 2px solid #d2ebe7;
-  border-radius: 999px;
-  color: #407b73;
-  background: #ebf8f5;
-  transition:
-    background 0.25s ease,
-    border-color 0.25s ease,
-    box-shadow 0.25s ease,
-    transform 0.25s ease;
-}
-
-.inventory-eyebrow:hover {
-  border-color: #9bded6;
-  background: #e5f8f5;
-  box-shadow: 0 10px 24px rgba(67, 132, 125, 0.14);
-  transform: translateY(-2px);
+  padding: 9px 13px;
+  border: 1px solid #c9ece7;
+  border-radius: 30px;
+  color: #087d73;
+  background: rgba(223, 247, 243, 0.7);
+  font-weight: 600;
 }
 
 .inventory-live-dot {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #43847d;
-  box-shadow: 0 0 0 8px rgba(83, 156, 145, 0.1);
+  background: #0b9f91;
+  box-shadow: 0 0 0 5px rgba(11, 159, 145, 0.12);
 }
 
 .inventory-hero h1 {
