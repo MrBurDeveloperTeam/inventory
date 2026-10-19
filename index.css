@@ -20,6 +20,27 @@ body {
   overscroll-behavior: none;
 }
 
+/* Keep Safari's native date control inside the History filter column. */
+.history-date-input {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.75rem;
+}
+
+.history-date-input::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+
+.history-date-input::-webkit-datetime-edit {
+  min-width: 0;
+  padding: 0;
+}
+
 /* Custom animations */
 @keyframes breathe {
 
