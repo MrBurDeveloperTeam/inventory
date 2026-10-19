@@ -1489,7 +1489,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       aria-label="Start date"
                       value={historyStartDate}
                       onChange={e => setHistoryStartDate(e.target.value)}
-                      className="block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
+                      className="history-date-input block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
                     />
                   </div>
                   <span aria-hidden="true" className="hidden sm:block text-slate-400 font-black px-1">-</span>
@@ -1500,7 +1500,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       aria-label="End date"
                       value={historyEndDate}
                       onChange={e => setHistoryEndDate(e.target.value)}
-                      className="block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
+                      className="history-date-input block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
                     />
                   </div>
                 </div>
