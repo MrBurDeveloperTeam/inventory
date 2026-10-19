@@ -1113,7 +1113,7 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
                 </button>
 
                 {isCatViewDropdownOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[70] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="absolute top-full left-0 md:left-auto md:right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[70] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="p-2 space-y-1">
                       {[
                         { id: 'combine', label: 'Combine View', icon: <Layout className="w-4 h-4" />, color: 'text-blue-600' },

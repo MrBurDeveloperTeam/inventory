@@ -719,7 +719,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 {!readOnly && onUpdateQty && (
                   <button
                     onClick={() => setIsQtyEditMode(v => !v)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
                       isQtyEditMode
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -1481,24 +1481,26 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <option value="all">All Vendors</option>
                   {uniqueVendors.map(v => <option key={v} value={v}>{v}</option>)}
                 </select>
-                <div className="md:col-span-2 flex items-center gap-2">
-                  <div className="relative flex-1">
+                <div className="md:col-span-2 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="relative w-full min-w-0 sm:flex-1">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="date"
+                      aria-label="Start date"
                       value={historyStartDate}
                       onChange={e => setHistoryStartDate(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
+                      className="block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
                     />
                   </div>
-                  <span className="text-slate-400 font-black px-1">-</span>
-                  <div className="relative flex-1">
+                  <span aria-hidden="true" className="hidden sm:block text-slate-400 font-black px-1">-</span>
+                  <div className="relative w-full min-w-0 sm:flex-1">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="date"
+                      aria-label="End date"
                       value={historyEndDate}
                       onChange={e => setHistoryEndDate(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
+                      className="block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-600 outline-none"
                     />
                   </div>
                 </div>
