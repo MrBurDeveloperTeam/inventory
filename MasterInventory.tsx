@@ -719,7 +719,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 {!readOnly && onUpdateQty && (
                   <button
                     onClick={() => setIsQtyEditMode(v => !v)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
                       isQtyEditMode
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
