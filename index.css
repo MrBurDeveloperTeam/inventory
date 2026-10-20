@@ -55,6 +55,17 @@ body {
   text-align: center;
 }
 
+/* Show consistent empty hints without overlapping native date segments.
+   Focus restores the native segments for keyboard editing. */
+.history-date-input[data-empty="true"]:not(:focus)::-webkit-datetime-edit,
+.history-date-input[data-empty="true"]:not(:focus)::-webkit-date-and-time-value {
+  color: transparent;
+}
+
+.history-date-input:focus + .history-date-hint {
+  display: none;
+}
+
 /* Custom animations */
 @keyframes breathe {
 
