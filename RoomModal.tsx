@@ -849,21 +849,21 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                 <>
                   <button
                     onClick={() => setIsReceiving(true)}
-                    className="bg-[#3498db] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#2980b9] shadow-lg shadow-blue-100 transition-all"
+                    className="bg-[#3498db] text-white flex-1 min-w-0 h-14 px-2 sm:px-4 rounded-xl flex items-center justify-center gap-1.5 font-black uppercase text-[10px] tracking-wide hover:bg-[#2980b9] shadow-lg shadow-blue-100 transition-all"
                   >
-                    <Package className="w-4 h-4" /> Receive Stock
+                    <Package className="w-4 h-4 shrink-0" /> <span>Receive<br className="sm:hidden" /> Stock</span>
                   </button>
                   <button
                     onClick={() => { setIsOCRActive(true); setOcrStep('upload'); setOcrImage(null); setOcrResult(null); }}
-                    className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all"
+                    className="bg-emerald-600 text-white flex-1 min-w-0 h-14 px-2 sm:px-4 rounded-xl flex items-center justify-center gap-1.5 font-black uppercase text-[10px] tracking-wide hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all"
                   >
-                    <Scan className="w-4 h-4" /> Add via OCR
+                    <Scan className="w-4 h-4 shrink-0" /> <span>Add via<br className="sm:hidden" /> OCR</span>
                   </button>
                   <button
                     onClick={() => excelInputRef.current?.click()}
-                    className="bg-[#4d9678] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-widest hover:bg-[#407f65] shadow-lg shadow-green-100 transition-all"
+                    className="bg-[#4d9678] text-white flex-1 min-w-0 h-14 px-2 sm:px-4 rounded-xl flex items-center justify-center gap-1.5 font-black uppercase text-[10px] tracking-wide hover:bg-[#407f65] shadow-lg shadow-green-100 transition-all"
                   >
-                    <FileUp className="w-4 h-4" /> Import Excel
+                    <FileUp className="w-4 h-4 shrink-0" /> <span>Import<br className="sm:hidden" /> Excel</span>
                   </button>
                   <input
                     ref={excelInputRef}
