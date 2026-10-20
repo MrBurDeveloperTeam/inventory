@@ -200,7 +200,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                     <div className="inventory-hero-actions">
                         <button className="inventory-primary-button" onClick={handleGetStarted}>
                             Sign Up
-                            <ArrowRight size={18} />
+                            <ArrowRight size={22} strokeWidth={2.5} />
                         </button>
 
                         <a className="inventory-secondary-button" href="#features">
