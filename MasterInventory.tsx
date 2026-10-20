@@ -1487,10 +1487,16 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <input
                       type="date"
                       aria-label="Start date"
+                      data-empty={!historyStartDate}
                       value={historyStartDate}
                       onChange={e => setHistoryStartDate(e.target.value)}
                       className="history-date-input block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl px-10 text-xs font-bold text-slate-600 outline-none"
                     />
+                    {!historyStartDate && (
+                      <span aria-hidden="true" className="history-date-hint pointer-events-none absolute inset-y-0 left-10 right-10 flex items-center justify-center text-xs font-bold text-slate-400">
+                        Start date
+                      </span>
+                    )}
                   </div>
                   <span aria-hidden="true" className="hidden sm:block text-slate-400 font-black px-1">-</span>
                   <div className="relative w-full min-w-0 sm:flex-1">
@@ -1498,10 +1504,16 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <input
                       type="date"
                       aria-label="End date"
+                      data-empty={!historyEndDate}
                       value={historyEndDate}
                       onChange={e => setHistoryEndDate(e.target.value)}
                       className="history-date-input block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl px-10 text-xs font-bold text-slate-600 outline-none"
                     />
+                    {!historyEndDate && (
+                      <span aria-hidden="true" className="history-date-hint pointer-events-none absolute inset-y-0 left-10 right-10 flex items-center justify-center text-xs font-bold text-slate-400">
+                        End date
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="md:col-span-2 relative">
