@@ -29,16 +29,18 @@ body {
   min-width: 0;
   max-width: 100%;
   min-height: 2.75rem;
+  text-align: center;
 }
 
 .history-date-input::-webkit-date-and-time-value {
   min-width: 0;
-  text-align: left;
+  text-align: center;
 }
 
 .history-date-input::-webkit-datetime-edit {
   min-width: 0;
   padding: 0;
+  text-align: center;
 }
 
 /* Custom animations */
