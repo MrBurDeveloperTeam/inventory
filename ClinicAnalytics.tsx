@@ -1492,28 +1492,30 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
 
             <div className="flex flex-col gap-6 bg-slate-50/50 p-4 md:p-6 rounded-3xl border border-slate-100">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col min-w-0 gap-1.5">
                   <label className="text-[10px] font-bold text-slate-500 tracking-wider">Period A (Primary)</label>
-                  <div className="relative">
+                  <div className="relative min-w-0">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="month"
+                      aria-label="Period A (Primary)"
                       value={periodA}
                       onChange={(e) => setPeriodA(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#2563eb]/20 transition-all"
+                      className="analytics-month-input block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl px-10 text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#2563eb]/20 transition-all"
                     />
                   </div>
                 </div>
                 {analysisMode === 'compare' ? (
-                  <div className="flex flex-col gap-1.5 animate-in slide-in-from-right-2 duration-300">
+                  <div className="flex flex-col min-w-0 gap-1.5 animate-in slide-in-from-right-2 duration-300">
                     <label className="text-[10px] font-bold text-slate-500 tracking-wider">Period B (Compare To)</label>
-                    <div className="relative">
+                    <div className="relative min-w-0">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
                         type="month"
+                        aria-label="Period B (Compare To)"
                         value={periodB}
                         onChange={(e) => setPeriodB(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#2563eb]/20 transition-all"
+                        className="analytics-month-input block w-full min-w-0 max-w-full bg-white border border-slate-200 rounded-xl px-10 text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#2563eb]/20 transition-all"
                       />
                     </div>
                   </div>

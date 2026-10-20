@@ -20,8 +20,9 @@ body {
   overscroll-behavior: none;
 }
 
-/* Keep Safari's native date control inside the History filter column. */
-.history-date-input {
+/* Keep Safari's date/month controls contained and vertically centered. */
+.history-date-input,
+.analytics-month-input {
   -webkit-appearance: none;
   appearance: none;
   box-sizing: border-box;
@@ -34,7 +35,8 @@ body {
   text-align: center;
 }
 
-.history-date-input::-webkit-date-and-time-value {
+.history-date-input::-webkit-date-and-time-value,
+.analytics-month-input::-webkit-date-and-time-value {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -43,7 +45,8 @@ body {
   text-align: center;
 }
 
-.history-date-input::-webkit-datetime-edit {
+.history-date-input::-webkit-datetime-edit,
+.analytics-month-input::-webkit-datetime-edit {
   display: inline-flex;
   align-items: center;
   height: 100%;
