@@ -14,6 +14,7 @@ import InventoryVirtualPet from './petExperience/InventoryVirtualPet';
 import MeowdokuLauncher from './games/MeowdokuLauncher';
 import type { ExtraGame } from '@mrburdeveloperteam/pet-function/pet';
 import CatMascot from './components/CatMascot';
+import LaunchScreen from './components/LaunchScreen';
 import MolarAIFloat from './components/MolarAIFloat';
 import LowStockReorderModal from './components/LowStockReorderModal';
 import { useLowStockReorderCheck } from './hooks/useLowStockReorderCheck';
@@ -3642,12 +3643,7 @@ const handleLogout = async () => {
 
   if (authInitializing) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-700 font-medium">Checking session...</p>
-        </div>
-      </div>
+      <LaunchScreen status="Signing you in…" />
     );
   }
 
@@ -3693,12 +3689,7 @@ const handleLogout = async () => {
 
   if (inventoryAccessLoading || (!inventoryAccess && !inventoryAccessError)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-700 font-medium">Loading Inventory access...</p>
-        </div>
-      </div>
+      <LaunchScreen status="Checking your access…" />
     );
   }
 
@@ -3767,12 +3758,7 @@ const handleLogout = async () => {
           {currentView === 'dashboard' ? (
             <>
               {isLoadingMain && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-indigo-900 font-medium">Hydrating Inventory...</p>
-                  </div>
-                </div>
+                <LaunchScreen status="Loading your inventory…" />
               )}
               {isReloading && (
                 <div className="absolute top-4 right-4 z-40 bg-white/80 p-2 rounded-full shadow-sm animate-pulse flex items-center gap-2">
