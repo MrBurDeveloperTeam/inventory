@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preload" as="image" href="https://app.snabbb.com/icons/new-icons/inventory.png?v=1">
     <!--
       Theme bootstrap — runs synchronously before React paints.
       Priority:
@@ -72,28 +73,20 @@ html[data-theme="dark"]{--ls-bg:#0F1115;--ls-fg:#F1F5F9;--ls-ring:rgba(255,255,2
     <title>DentaStock Pro - Advanced Inventory</title>
     <link rel="icon" type="image/png" href="/images/InventoryIcon.png">
     <link rel="apple-touch-icon" href="/images/InventoryIcon.png">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      // Enable class-based dark mode for Tailwind CDN
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              tiffany: {
-                500: '#14b8a6',
-                600: '#0abfbc',
-                700: '#089a98',
-              },
-            },
-          },
-        },
-      };
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- deferred so it no longer blocks the first paint (the splash). It still
+         runs before /index.tsx (module scripts execute after defer scripts, in
+         document order), so the app mounts with Tailwind ready. -->
+    <script defer src="https://cdn.tailwindcss.com" onload="tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: { tiffany: { 500: '#14b8a6', 600: '#0abfbc', 700: '#089a98' } } } }
+    };"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"></noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap"></noscript>
     <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script>
@@ -141,12 +134,22 @@ html[data-theme="dark"]{--ls-bg:#0F1115;--ls-fg:#F1F5F9;--ls-ring:rgba(255,255,2
         }
     </style>
 
+    <script>
+      // Continue the spinner rotation from where the previous page (the gallery's
+      // opening splash) left off, using the shared wall clock, so the hand-off
+      // between the two splashes doesn't visibly restart the animation.
+      (function () {
+        var d = document.createElement('style');
+        d.textContent = '.ls-spinner{animation-delay:-' + (Date.now() % 800) + 'ms}';
+        document.head.appendChild(d);
+      })();
+    </script>
     <link rel="stylesheet" href="/index.css">
 
 </head>
 
 <body class="bg-slate-50 text-slate-900">
-    <div id="root"><div class="ls" role="status" aria-live="polite"><img class="ls-icon" src="https://app.snabbb.com/icons/new-icons/inventory.png?v=1" alt="" width="160" height="160"><div class="ls-spinner" aria-hidden="true"></div><h1 class="ls-title">Opening Inventory…</h1><p class="ls-status">Signing you in…</p></div></div>
+    <div id="root"><div class="ls" role="status" aria-live="polite"><img class="ls-icon" src="https://app.snabbb.com/icons/new-icons/inventory.png?v=1" alt="" width="160" height="160" decoding="sync" fetchpriority="high"><div class="ls-spinner" aria-hidden="true"></div><h1 class="ls-title">Opening Inventory…</h1><p class="ls-status">Signing you in…</p></div></div>
     <script type="module" src="/index.tsx"></script>
 </body>
 
