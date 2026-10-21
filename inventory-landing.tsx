@@ -167,7 +167,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
                     </button>
                     <button className="inventory-nav-cta" onClick={handleGetStarted}>
                         Sign Up
-                        <ArrowRight size={17} />
+                        <ArrowRight size={16} />
                     </button>
                 </div>
 
