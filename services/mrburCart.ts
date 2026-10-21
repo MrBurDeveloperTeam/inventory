@@ -199,6 +199,18 @@ export const findCatalogProduct = (
   return byName.length === 1 ? byName[0] : null;
 };
 
+/**
+ * True when the item is a product sold in the mrbur.shop: it either carries
+ * the exact product link stamped by the Odoo sync (shopUrl) or matches a
+ * published catalog product by SKU / exact name. Only these items can be
+ * added to the shop cart; everything else (manual / imported items that
+ * aren't in the catalog) is shown as a plain low-stock warning.
+ */
+export const isShopProduct = (
+  item: Item,
+  catalog?: PublishedProduct[] | null
+): boolean => Boolean(item.shopUrl?.trim()) || findCatalogProduct(item, catalog) !== null;
+
 export type MrburLinkType = 'product' | 'search' | 'home';
 
 export interface MrburCartResult {

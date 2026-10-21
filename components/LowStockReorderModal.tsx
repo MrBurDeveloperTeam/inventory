@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ShoppingCart, X, Minus, Plus } from 'lucide-react';
 import { LowStockHit } from '../services/lowStockReorder';
-import { addItemToMrburCart, resolveMrburUrl, withShopLogin } from '../services/mrburCart';
-import { getCachedPublishedProducts, prefetchPublishedProducts } from '../services/publishedProducts';
+import { addItemToMrburCart, isShopProduct, resolveMrburUrl, withShopLogin } from '../services/mrburCart';
+import { fetchPublishedProducts, getCachedPublishedProducts, PublishedProduct } from '../services/publishedProducts';
 
 interface LowStockReorderModalProps {
   /** Every non-liquid item currently at/below the reorder threshold. */
@@ -36,9 +36,11 @@ interface LowStockReorderModalProps {
  * becomes available later, swap handleRestock() — the qty state and the rest
  * of the UI stay unchanged.
  *
- * Items with no shop_url (manually added, imported, or bought before the
- * sync existed) open the shop homepage or country domain as a fallback, same
- * as before, since there's no product page to pre-fill.
+ * Only items that are sold in the shop (they have a shop_url from the Odoo
+ * sync, or match a published catalog product) get a qty stepper and are
+ * opened by Restock. Every other low-stock item (manually added, imported,
+ * not in the catalog) is still listed, as a plain low-stock warning marked
+ * "Not sold in shop" — no stepper, no tab, not counted in the Restock total.
  *
  * "Don't remind me again today" checkbox: when ticked, Close / Restock routes
  * through onDismissToday instead of onClose, which persists the dismissal
@@ -54,12 +56,33 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
 }) => {
   const [dontShowToday, setDontShowToday] = useState(false);
 
-  // Warm the published-product catalog so Restock can match items that have
-  // no shop_url to their product page. Read synchronously at click time (see
-  // handleRestock) so window.open stays inside the user gesture.
+  // The published-product catalog is what lets us recognise shop products that
+  // have no shop_url of their own. Start from whatever is cached and re-render
+  // when the fetch lands, so an item is never shown as "Not sold in shop" just
+  // because the catalog hadn't loaded yet. handleRestock reads this state
+  // synchronously, so window.open stays inside the user gesture.
+  const [catalog, setCatalog] = useState<PublishedProduct[] | null>(() => getCachedPublishedProducts());
   useEffect(() => {
-    prefetchPublishedProducts();
+    let cancelled = false;
+    fetchPublishedProducts()
+      .then((products) => {
+        if (!cancelled) setCatalog(products);
+      })
+      .catch(() => {
+        /* best effort — keep whatever was cached */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Shop products first (they're the actionable ones), then the rest.
+  const { shopHits, otherHits } = useMemo(() => {
+    const shop: LowStockHit[] = [];
+    const other: LowStockHit[] = [];
+    hits.forEach((h) => (isShopProduct(h.item, catalog) ? shop : other).push(h));
+    return { shopHits: shop, otherHits: other };
+  }, [hits, catalog]);
 
   // Per-item reorder qty. Default to 1 for each item.
   const [qtys, setQtys] = useState<Record<string, number>>(
@@ -88,8 +111,7 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
    * fallback (same behaviour as the old "View" button).
    */
   const handleRestock = () => {
-    const catalog = getCachedPublishedProducts();
-    hits.forEach((hit) => {
+    shopHits.forEach((hit) => {
       const qty = qtys[hit.item.id] ?? 1;
       const { url, isDirectProductLink } = addItemToMrburCart(hit.item, shopDomain, catalog, shopDomainIsAuthoritative);
       // Append add_qty only when we have a real product-page URL — appending
@@ -105,7 +127,7 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
 
   if (!hits.length) return null;
 
-  const totalItems = hits.reduce((sum, h) => sum + (qtys[h.item.id] ?? 1), 0);
+  const totalItems = shopHits.reduce((sum, h) => sum + (qtys[h.item.id] ?? 1), 0);
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -121,7 +143,11 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
               <h2 className="font-bold text-base text-slate-800 leading-tight">
                 Low stock — {hits.length} item{hits.length === 1 ? '' : 's'}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">Set a reorder qty for each item below</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {shopHits.length
+                  ? 'Set a reorder qty for each shop item below'
+                  : 'None of these items are sold in the shop'}
+              </p>
             </div>
           </div>
           <button
@@ -135,8 +161,9 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
 
         {/* ── Item list ── */}
         <div className="overflow-y-auto divide-y divide-slate-100">
-          {hits.map((hit) => {
+          {[...shopHits, ...otherHits].map((hit) => {
             const qty = qtys[hit.item.id] ?? 1;
+            const sellsInShop = isShopProduct(hit.item, catalog);
             return (
               <div key={hit.item.id} className="p-4 flex items-center gap-3">
                 {/* Name + meta */}
@@ -144,12 +171,20 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
                   <p className="text-sm font-bold text-slate-800 truncate">{hit.item.name}</p>
                   <p className="text-xs text-slate-500 mt-0.5 truncate">
                     {hit.roomName} · Only{' '}
-                    <span className="font-semibold text-amber-600">{hit.item.quantity}</span> left ·{' '}
-                    {shopHostFor(hit)}
+                    <span className="font-semibold text-amber-600">{hit.item.quantity}</span> left
+                    {sellsInShop ? <> · {shopHostFor(hit)}</> : null}
                   </p>
                 </div>
 
-                {/* Qty stepper */}
+                {/* Non-shop items: warning only, nothing to add to cart */}
+                {!sellsInShop && (
+                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400 bg-slate-100 rounded-md px-2 py-1">
+                    Not sold in shop
+                  </span>
+                )}
+
+                {/* Qty stepper (shop items only) */}
+                {sellsInShop && (
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={() => updateQty(hit.item.id, qty - 1)}
@@ -174,6 +209,7 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
                     <Plus size={12} className="text-slate-600" />
                   </button>
                 </div>
+                )}
               </div>
             );
           })}
@@ -194,13 +230,15 @@ const LowStockReorderModal: React.FC<LowStockReorderModalProps> = ({
 
         {/* ── Actions ── */}
         <div className="p-4 bg-slate-50/50 border-t border-slate-100 shrink-0 flex flex-col gap-2">
-          <button
-            onClick={handleRestock}
-            className="w-full py-2.5 rounded-xl bg-[#004aad] text-white text-sm font-bold hover:bg-[#003a8a] active:bg-[#002d6e] transition-colors flex items-center justify-center gap-2"
-          >
-            <ShoppingCart size={16} />
-            Restock {hits.length} item{hits.length === 1 ? '' : 's'} · {totalItems} unit{totalItems === 1 ? '' : 's'}
-          </button>
+          {shopHits.length > 0 && (
+            <button
+              onClick={handleRestock}
+              className="w-full py-2.5 rounded-xl bg-[#004aad] text-white text-sm font-bold hover:bg-[#003a8a] active:bg-[#002d6e] transition-colors flex items-center justify-center gap-2"
+            >
+              <ShoppingCart size={16} />
+              Restock {shopHits.length} shop item{shopHits.length === 1 ? '' : 's'} · {totalItems} unit{totalItems === 1 ? '' : 's'}
+            </button>
+          )}
           <button
             onClick={dismiss}
             className="w-full py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
