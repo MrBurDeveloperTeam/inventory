@@ -4,91 +4,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DentaStock Pro - Advanced Inventory</title>
-    <link rel="icon" type="image/png" href="/images/InventoryIcon.png">
-    <link rel="apple-touch-icon" href="/images/InventoryIcon.png">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      // Enable class-based dark mode for Tailwind CDN
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              tiffany: {
-                500: '#14b8a6',
-                600: '#0abfbc',
-                700: '#089a98',
-              },
-            },
-          },
-        },
-      };
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script>
-        // Catch the install prompt globally in case it fires before React components mount
-        window.deferredInstallPrompt = null;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            window.deferredInstallPrompt = e;
-            // Dispatch a custom event so the Header can pick it up if it's already mounted
-            window.dispatchEvent(new CustomEvent('pwa-prompt-available'));
-        });
-    </script>
-    <style>
-        .hexagon {
-            aspect-ratio: 1 / 1;
-            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%) !important;
-            -webkit-clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%) !important;
-            overflow: hidden;
-        }
-
-        /* Drop shadow that follows the hexagonal clip path instead of the box model */
-        .hexagon-glow {
-            filter: drop-shadow(0 4px 12px rgba(16, 185, 129, 0.4));
-        }
-
-        .hexagon-glow-rose {
-            filter: drop-shadow(0 4px 12px rgba(244, 63, 94, 0.4));
-        }
-
-        .hexagon-glow-active {
-            filter: drop-shadow(0 8px 20px rgba(5, 150, 105, 0.6));
-        }
-
-        /* Utility classes for specific scrollbar needs */
-        .custom-scrollbar-hide::-webkit-scrollbar {
-            display: none;
-        }
-
-        /* Custom landing page styles */
-        .auth-primary {
-            background-color: #004aad;
-        }
-
-        .auth-primary-text {
-            color: #004aad;
-        }
-    </style>
-
-    <style id="ls-css">html{--ls-bg:#F3F6F8;--ls-fg:#172B4D;--ls-ring:rgba(23,43,77,.12);--ls-accent:#2A9D8F;--ls-muted:#64748B}
-html[data-theme="dark"]{--ls-bg:#0F1115;--ls-fg:#F1F5F9;--ls-ring:rgba(255,255,255,.18);--ls-accent:#5EEAD4;--ls-muted:#94A3B8}
-.ls{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:32px;padding-top:max(32px,env(safe-area-inset-top));padding-bottom:max(32px,env(safe-area-inset-bottom));text-align:center;background:var(--ls-bg);color:var(--ls-fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:400;font-size:16px;line-height:1.2;letter-spacing:normal;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;-webkit-text-size-adjust:100%}
-.ls,.ls *{box-sizing:border-box;margin:0;padding:0}
-.ls{padding:32px;padding-top:max(32px,env(safe-area-inset-top));padding-bottom:max(32px,env(safe-area-inset-bottom))}
-.ls-icon{width:min(36vw,160px);height:min(36vw,160px);max-width:none;object-fit:contain;border-radius:22%}
-.ls-spinner{width:min(16vw,72px);height:min(16vw,72px);border-radius:50%;border:6px solid var(--ls-ring);border-top-color:var(--ls-accent);animation:ls-spin .8s linear infinite}
-.ls-title{margin:0;padding:0;font-family:inherit;font-size:clamp(1.75rem,8vw,2.5rem);font-weight:700;line-height:1.2;letter-spacing:normal;text-transform:none}
-.ls-status{margin:0;padding:0;min-height:1.5em;font-family:inherit;font-size:clamp(1rem,4vw,1.125rem);font-weight:400;line-height:1.5;letter-spacing:normal;color:var(--ls-muted)}
-@keyframes ls-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.ls-spinner{animation-duration:2.4s}}</style>
-    <link rel="stylesheet" href="/index.css">
-
     <!--
       Theme bootstrap — runs synchronously before React paints.
       Priority:
@@ -142,6 +57,92 @@ html[data-theme="dark"]{--ls-bg:#0F1115;--ls-fg:#F1F5F9;--ls-ring:rgba(255,255,2
         document.documentElement.style.colorScheme = resolved;
       })();
     </script>
+    <style id="ls-css">html{--ls-bg:#F3F6F8;--ls-fg:#172B4D;--ls-ring:rgba(23,43,77,.12);--ls-accent:#2A9D8F;--ls-muted:#64748B}
+html[data-theme="dark"]{--ls-bg:#0F1115;--ls-fg:#F1F5F9;--ls-ring:rgba(255,255,255,.18);--ls-accent:#5EEAD4;--ls-muted:#94A3B8}
+.ls{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:32px;padding-top:max(32px,env(safe-area-inset-top));padding-bottom:max(32px,env(safe-area-inset-bottom));text-align:center;background:var(--ls-bg);color:var(--ls-fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:400;font-size:16px;line-height:1.2;letter-spacing:normal;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;-webkit-text-size-adjust:100%}
+.ls,.ls *{box-sizing:border-box;margin:0;padding:0}
+.ls{padding:32px;padding-top:max(32px,env(safe-area-inset-top));padding-bottom:max(32px,env(safe-area-inset-bottom))}
+.ls-icon{width:min(36vw,160px);height:min(36vw,160px);max-width:none;object-fit:contain;border-radius:22%}
+.ls-spinner{width:min(16vw,72px);height:min(16vw,72px);border-radius:50%;border:6px solid var(--ls-ring);border-top-color:var(--ls-accent);animation:ls-spin .8s linear infinite}
+.ls-title{margin:0;padding:0;font-family:inherit;font-size:clamp(1.75rem,8vw,2.5rem);font-weight:700;line-height:1.2;letter-spacing:normal;text-transform:none}
+.ls-status{margin:0;padding:0;min-height:1.5em;font-family:inherit;font-size:clamp(1rem,4vw,1.125rem);font-weight:400;line-height:1.5;letter-spacing:normal;color:var(--ls-muted)}
+@keyframes ls-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ls-spinner{animation-duration:2.4s}}</style>
+    <style>html{background:var(--ls-bg,#F3F6F8)}body{background:var(--ls-bg,#F3F6F8)}</style>
+    <title>DentaStock Pro - Advanced Inventory</title>
+    <link rel="icon" type="image/png" href="/images/InventoryIcon.png">
+    <link rel="apple-touch-icon" href="/images/InventoryIcon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Enable class-based dark mode for Tailwind CDN
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              tiffany: {
+                500: '#14b8a6',
+                600: '#0abfbc',
+                700: '#089a98',
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script>
+        // Catch the install prompt globally in case it fires before React components mount
+        window.deferredInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            window.deferredInstallPrompt = e;
+            // Dispatch a custom event so the Header can pick it up if it's already mounted
+            window.dispatchEvent(new CustomEvent('pwa-prompt-available'));
+        });
+    </script>
+    <style>
+        .hexagon {
+            aspect-ratio: 1 / 1;
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%) !important;
+            -webkit-clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%) !important;
+            overflow: hidden;
+        }
+
+        /* Drop shadow that follows the hexagonal clip path instead of the box model */
+        .hexagon-glow {
+            filter: drop-shadow(0 4px 12px rgba(16, 185, 129, 0.4));
+        }
+
+        .hexagon-glow-rose {
+            filter: drop-shadow(0 4px 12px rgba(244, 63, 94, 0.4));
+        }
+
+        .hexagon-glow-active {
+            filter: drop-shadow(0 8px 20px rgba(5, 150, 105, 0.6));
+        }
+
+        /* Utility classes for specific scrollbar needs */
+        .custom-scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Custom landing page styles */
+        .auth-primary {
+            background-color: #004aad;
+        }
+
+        .auth-primary-text {
+            color: #004aad;
+        }
+    </style>
+
+    <link rel="stylesheet" href="/index.css">
+
 </head>
 
 <body class="bg-slate-50 text-slate-900">
