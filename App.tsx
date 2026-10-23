@@ -55,6 +55,7 @@ import {
   markRoomPurchaseHistoryArchived
 } from './src/utils/roomDeletion';
 import {useProfileImage} from './hooks/useProfileImage';
+import { useOdooSessionName } from './hooks/useOdooSessionName';
 import InventoryLandingPage from './inventory-landing';
 import { CheckCircle2, X } from 'lucide-react';
 
@@ -1161,12 +1162,15 @@ useEffect(() => {
     sessionStartRef.current = Date.now();
   };
 
+  // Name from Odoo get_session_info (same source as the App Gallery); falls back to the Supabase name below.
+  const odooSessionName = useOdooSessionName(isAuthenticated, finalProfile?.email || theUser?.email);
+
   useEffect(() => {
         const storedImages = loadUserImages(supabaseUserId);
         setUser({
           id: supabaseUserId,
           email: finalProfile?.email || '',
-          name: theUser?.user_metadata?.name || theUser?.user_metadata?.full_name || finalProfile?.name || 'User',
+          name: odooSessionName || theUser?.user_metadata?.name || theUser?.user_metadata?.full_name || finalProfile?.name || 'User',
           accountType: finalProfile?.account_type as any || 'individual',
           phone: finalProfile?.phone || '',
           position: finalProfile?.position || '',
@@ -1174,7 +1178,7 @@ useEffect(() => {
           avatarUrl: finalProfile?.avatar_url || storedImages.avatarUrl,
           backgroundUrl: finalProfile?.background_url || storedImages.backgroundUrl
         });
-  },[finalProfile, theUser])
+  },[finalProfile, theUser, odooSessionName])
 
   const loadInventory = useCallback(async () => {
     if (!currentInventoryOwnerId) return;
