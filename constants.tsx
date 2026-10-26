@@ -62,31 +62,31 @@ export const PRESET_BLUEPRINTS = [
   {
     id: 'template-1',
     name: 'Blue Lab',
-    url: '/images/template1.png',
+    url: '/images/template1.webp',
     description: 'Advanced blue laboratory aesthetic'
   },
   {
     id: 'template-2',
     name: 'City Clinic',
-    url: '/images/template2.png',
+    url: '/images/template2.webp',
     description: 'Wide isometric city-clinic layout'
   },
   {
     id: 'template-3',
     name: 'Classic Layout',
-    url: '/images/template3.png',
+    url: '/images/template3.webp',
     description: 'Alternate clinic layout'
   },
   {
     id: 'template-4',
     name: 'Treatment Hub',
-    url: '/images/template4.png',
+    url: '/images/template4.webp',
     description: 'High-density treatment layout'
   },
   {
     id: 'template-5',
     name: 'Open Floor',
-    url: '/images/template5.png',
+    url: '/images/template5.webp',
     description: 'Open concept clinic floor'
   },
 ];
