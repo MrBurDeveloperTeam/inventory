@@ -10,7 +10,10 @@
       // Uses the last blueprint this browser rendered, else the default template.
       (function () {
         var src = '/images/template1.webp';
-        try { src = localStorage.getItem('inventory:last-blueprint') || src; } catch (e) {}
+        try {
+          var cached = localStorage.getItem('inventory:last-blueprint');
+          if (cached && /^\/images\/template\d+\.png$/.test(cached)) src = cached.replace(/\.png$/, '.webp');
+        } catch (e) {}
         var l = document.createElement('link');
         l.rel = 'preload'; l.as = 'image'; l.href = src;
         l.setAttribute('fetchpriority', 'high');

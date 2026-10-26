@@ -55,7 +55,9 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   useEffect(() => {
     if (!blueprint) return;
-    try { localStorage.setItem(LAST_BLUEPRINT_KEY, toOptimizedSrc(blueprint)); } catch { /* storage unavailable */ }
+    // Cache preset templates only (never a user's custom upload URL).
+    if (!/^\/images\/template\d+\.png$/.test(blueprint)) return;
+    try { localStorage.setItem(LAST_BLUEPRINT_KEY, blueprint); } catch { /* storage unavailable */ }
   }, [blueprint]);
   const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
   const activeTemplate = PRESET_BLUEPRINTS.find(t => t.url === blueprint);

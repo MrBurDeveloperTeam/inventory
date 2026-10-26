@@ -242,7 +242,17 @@ const App: React.FC = () => {
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
   const [history, setHistory] = useState<PurchaseHistory[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [blueprint, setBlueprint] = useState<string | null>(null);
+  // Start from the last preset template (or the default) instead of null, so the
+  // clinic image (the LCP element) renders as soon as the dashboard mounts rather
+  // than after the whole inventory load finishes. loadInventory still sets the
+  // real value afterwards.
+  const [blueprint, setBlueprint] = useState<string | null>(() => {
+    try {
+      const cached = localStorage.getItem('inventory:last-blueprint');
+      if (cached && /^\/images\/template\d+\.png$/.test(cached)) return cached;
+    } catch { /* storage unavailable */ }
+    return PRESET_BLUEPRINTS[0].url;
+  });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
