@@ -6,7 +6,7 @@ import { PET_OPTIONS, getPetOption, normalizePetId, PetId } from './VirtualPet/p
 import { AnimatePresence, motion } from 'framer-motion';
 import { AuthFormData } from './types/AuthFormData';
 import { useGetUserId } from './mutation/useGetUserId';
-import { syncThemeFromOdoo } from './src/utils/themeSync';
+import { resolveTheme, syncThemeFromOdoo } from './src/utils/themeSync';
 
 interface HeaderProps {
   onProfileClick?: () => void;
@@ -318,7 +318,7 @@ const Header: React.FC<HeaderProps> = ({
           onKeyDown={(e) => e.key === 'Enter' && onDashboardClick?.()}
         >
           <img
-            src="/images/Snabbb-Teal.png"
+            src={resolveTheme(theme) === 'dark' ? '/images/Snabbb-White.png' : '/images/Snabbb-Teal.png'}
             alt="SNABBB logo."
             className="h-10 w-auto transition-transform group-hover:scale-105"
           />
