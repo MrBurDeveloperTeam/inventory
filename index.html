@@ -88,13 +88,7 @@ html[data-theme="dark"]{--ls-bg:#0F1115;--ls-fg:#F1F5F9;--ls-ring:rgba(255,255,2
     <title>DentaStock Pro - Advanced Inventory</title>
     <link rel="icon" type="image/png" href="/images/InventoryIcon.png">
     <link rel="apple-touch-icon" href="/images/InventoryIcon.png">
-    <!-- deferred so it no longer blocks the first paint (the splash). It still
-         runs before /index.tsx (module scripts execute after defer scripts, in
-         document order), so the app mounts with Tailwind ready. -->
-    <script defer src="https://cdn.tailwindcss.com" onload="tailwind.config = {
-      darkMode: 'class',
-      theme: { extend: { colors: { tiffany: { 500: '#14b8a6', 600: '#0abfbc', 700: '#089a98' } } } }
-    };"></script>
+    <!-- Tailwind is compiled at build time (see tailwind.config.js); no CDN runtime. -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"></noscript>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" media="print" onload="this.media='all'">
@@ -159,7 +153,6 @@ html[data-theme="dark"]{--ls-bg:#0F1115;--ls-fg:#F1F5F9;--ls-ring:rgba(255,255,2
         document.head.appendChild(d);
       })();
     </script>
-    <link rel="stylesheet" href="/index.css">
 
 </head>
 
