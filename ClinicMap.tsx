@@ -37,6 +37,12 @@ interface ClinicMapProps {
   syncStatus?: 'synced' | 'syncing' | 'error';
 }
 
+// Preset templates ship as small .webp next to the original .png. Saved
+// blueprint values in the DB still point at the .png, so map at render time.
+const LAST_BLUEPRINT_KEY = 'inventory:last-blueprint';
+const toOptimizedSrc = (url: string) =>
+  url.replace(/^(\/images\/template\d+)\.png(\?.*)?$/, '$1.webp$2');
+
 const ClinicMap: React.FC<ClinicMapProps> = ({
   rooms, blueprint, isLocked, isAddMode, isDeleteMode,
   onSetLocked, onSetAddMode, onSetDeleteMode,
@@ -47,6 +53,10 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   syncStatus = 'synced'
 }) => {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  useEffect(() => {
+    if (!blueprint) return;
+    try { localStorage.setItem(LAST_BLUEPRINT_KEY, toOptimizedSrc(blueprint)); } catch { /* storage unavailable */ }
+  }, [blueprint]);
   const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
   const activeTemplate = PRESET_BLUEPRINTS.find(t => t.url === blueprint);
 
@@ -238,7 +248,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        {blueprint ? <img src={blueprint} alt="Clinic Blueprint" className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-95 transition-opacity" draggable={false} /> : <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20 pointer-events-none"><ImageIcon className="w-32 h-32 mb-6 text-slate-400" /><p className="text-2xl font-black uppercase tracking-[0.3em] text-slate-400">No Layout Uploaded</p></div>}
+        {blueprint ? <img src={toOptimizedSrc(blueprint)} alt="Clinic Blueprint" fetchPriority="high" decoding="async" className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-95 transition-opacity" draggable={false} /> : <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20 pointer-events-none"><ImageIcon className="w-32 h-32 mb-6 text-slate-400" /><p className="text-2xl font-black uppercase tracking-[0.3em] text-slate-400">No Layout Uploaded</p></div>}
 
         {rooms.map(room => (
           <div

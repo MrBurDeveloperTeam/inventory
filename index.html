@@ -4,7 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="preload" as="image" href="https://app.snabbb.com/icons/new-icons/inventory.png?v=1">
+    <link rel="preload" as="image" href="https://app.snabbb.com/icons/new-icons/inventory.png?v=2">
+    <script>
+      // Preload the clinic blueprint (the LCP image) before React boots.
+      // Uses the last blueprint this browser rendered, else the default template.
+      (function () {
+        var src = '/images/template1.webp';
+        try { src = localStorage.getItem('inventory:last-blueprint') || src; } catch (e) {}
+        var l = document.createElement('link');
+        l.rel = 'preload'; l.as = 'image'; l.href = src;
+        l.setAttribute('fetchpriority', 'high');
+        document.head.appendChild(l);
+      })();
+    </script>
     <!--
       Theme bootstrap — runs synchronously before React paints.
       Priority:
@@ -149,7 +161,7 @@ html[data-theme="dark"]{--ls-bg:#0F1115;--ls-fg:#F1F5F9;--ls-ring:rgba(255,255,2
 </head>
 
 <body class="bg-slate-50 text-slate-900">
-    <div id="root"><div class="ls" role="status" aria-live="polite"><img class="ls-icon" src="https://app.snabbb.com/icons/new-icons/inventory.png?v=1" alt="" width="160" height="160" decoding="sync" fetchpriority="high"><div class="ls-spinner" aria-hidden="true"></div><h1 class="ls-title">Opening Inventory…</h1><p class="ls-status">Signing you in…</p></div></div>
+    <div id="root"><div class="ls" role="status" aria-live="polite"><img class="ls-icon" src="https://app.snabbb.com/icons/new-icons/inventory.png?v=2" alt="" width="160" height="160" decoding="sync" fetchpriority="high"><div class="ls-spinner" aria-hidden="true"></div><h1 class="ls-title">Opening Inventory…</h1><p class="ls-status">Signing you in…</p></div></div>
     <script type="module" src="/index.tsx"></script>
 </body>
 
