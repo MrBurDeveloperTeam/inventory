@@ -2,6 +2,7 @@ import React from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SNABBB_SIGNUP_URL } from '../constants/authLinks';
+import { resolveTheme } from '../src/utils/themeSync';
 
 type AuthView = 'login' | 'signup';
 
@@ -31,7 +32,7 @@ const AuthShell: React.FC<AuthShellProps> = ({
         >
           <span style={{ transform: 'skewX(353deg)', display: 'inline-block' }}>App.</span>
           <img
-            src="/icons/Snabbb-Teal.png"
+            src={resolveTheme(theme) === 'dark' ? '/images/Snabbb-White.png' : '/icons/Snabbb-Teal.png'}
             alt="Snabbb"
             style={{ height: '1.59em', width: 'auto', display: 'inline-block', verticalAlign: 'middle' }}
           />
