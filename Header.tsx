@@ -638,19 +638,8 @@ const Header: React.FC<HeaderProps> = ({
                       </button>
                         
                       {/* Settings */}
-                      <button
-                        onClick={async () => {
-                          const res = await createAppLink({
-                            app: 'snabbb',
-                            email: user?.email,
-                            name: user?.name,
-                          });
-                          
-                          const supabaseUserId = res.result?.supabase_user_id;
-                          if (supabaseUserId) {
-                            window.location.assign('https://app.snabbb.com/profile-settings');
-                          }
-                        }}
+                      <a
+                        href="https://app.snabbb.com/profile-settings"
                         className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 rounded-2xl transition-all group text-left"
                       >
                         {/* <div className="w-7 h-7 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
@@ -661,7 +650,7 @@ const Header: React.FC<HeaderProps> = ({
                           <p className="text-[11px] font-semibold text-slate-400 truncate">Account & preferences</p>
                         </div>
                         <i className="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors"></i>
-                      </button>
+                      </a>
                     </div>
                         
                     {/* Log Out */}
