@@ -502,7 +502,6 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       alert('Purchase date is required and cannot be later than today.');
       return;
     }
-    console.log('MasterInventory: handleReceive called', { selectedRoomId, receiveQty, receivePrice });
     if (!selectedRoomId || receiveQty <= 0) {
       alert('Please select a room and enter a valid quantity.');
       return;

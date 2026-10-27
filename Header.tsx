@@ -80,7 +80,6 @@ const Header: React.FC<HeaderProps> = ({
   }, [isOpeningSupportTickets, user?.accountType]);
 
   useEffect(() => {
-    console.log('userAvatarUrl: ',userAvatarUrl)
     setAvatarFailed(false);
   }, [userAvatarUrl]);
 
@@ -93,7 +92,6 @@ const Header: React.FC<HeaderProps> = ({
     setIsIOS(checkIOS);
 
     const handleBeforeInstallPrompt = (e: any) => {
-      console.log('beforeinstallprompt event caught in Header');
       e.preventDefault();
       if (!checkStandalone) {
         setDeferredPrompt(e);
@@ -102,7 +100,6 @@ const Header: React.FC<HeaderProps> = ({
     };
 
     const handleCustomPromptEvent = () => {
-      console.log('Custom PWA prompt event received');
       if ((window as any).deferredInstallPrompt && !isStandalone) {
         setDeferredPrompt((window as any).deferredInstallPrompt);
         setShowInstallBtn(true);
@@ -115,13 +112,11 @@ const Header: React.FC<HeaderProps> = ({
     }
 
     const handleAppInstalled = () => {
-      console.log('App was installed');
       setShowInstallBtn(false);
       setDeferredPrompt(null);
       (window as any).deferredInstallPrompt = null;
     };
 
-    console.log('Registering PWA listeners. Standalone:', isStandalone);
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
     window.addEventListener('pwa-prompt-available', handleCustomPromptEvent);
@@ -274,7 +269,6 @@ const Header: React.FC<HeaderProps> = ({
 
     // Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to the install prompt: ${outcome}`);
 
     // We've used the prompt, and can't use it again, throw it away
     setDeferredPrompt(null);

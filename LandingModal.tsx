@@ -140,7 +140,6 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
         };
 
         const { data: odooData } = await api.post('/inventory/sign-up', inventorySignupPayload);
-        console.log('ODoo sign-up response:', odooData);
 
         const odooResult = odooData?.data?.result ?? odooData?.result ?? odooData;
         if (odooResult?.ok === false) {

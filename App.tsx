@@ -965,7 +965,6 @@ useEffect(() => {
         // User not logged in, prompt them
         // The LandingModal will naturally show up.
         // We can optionally show a message or banner.
-        console.log('User needs to login to accept invite');
       }
     };
     checkInvite();
@@ -1088,7 +1087,6 @@ useEffect(() => {
   const bootstrapUser = async (sbUser: any) => {
     setIsBootstrapped(false);
     const userId = sbUser.id;
-    console.log('Bootstrapping user:', userId);
     setSupabaseUserId(userId);
 
     // getUser() (a round trip to Supabase Auth to re-validate the session),
@@ -1193,12 +1191,10 @@ useEffect(() => {
   const loadInventory = useCallback(async () => {
     if (!currentInventoryOwnerId) return;
     if (isDirty.current) {
-      console.log('loadInventory: Local state is dirty, skipping reload to prevent overwrite');
       return;
     }
     // Prevent background reload if we just did a local mutation (echo prevention for full loads)
     if (Date.now() - lastLocalMutation.current < 2000) {
-      console.log('loadInventory: Local mutation buffer active, skipping reload');
       return;
     }
     const reqId = ++lastLoadRequestId.current;
@@ -1285,7 +1281,6 @@ useEffect(() => {
 
       if (roomsData) {
         if (reqId !== lastLoadRequestId.current) {
-          console.log('Discarding stale inventory load result');
           return;
         }
         // isDirty/lastLocalMutation are only checked once, at the very top of
@@ -1296,13 +1291,11 @@ useEffect(() => {
         // data (e.g. a just-restored item vanishing from view even though it
         // persisted correctly to Supabase). Re-check right before applying.
         if (isDirty.current) {
-          console.log('loadInventory: local mutation started mid-reload, discarding stale snapshot');
           setIsLoadingMain(false);
           setIsReloading(false);
           setSyncStatus('synced');
           return;
         }
-        console.log(`Inventory loaded successfully for ${currentInventoryOwnerId}. Found ${hydratedRooms.length} rooms.`);
         isHydrated.current = true;
 
         // Preserve TBA virtual room — it only lives in local state and must
@@ -1377,7 +1370,6 @@ useEffect(() => {
       // If we recently made a local change, don't reload yet to give sync a chance to complete
       if (reloadTimer) clearTimeout(reloadTimer);
       reloadTimer = setTimeout(() => {
-        console.log('Debounced Reload Triggering loadInventory...');
         loadInventory();
       }, 500); // Reduce to 500ms for faster collaborative updates
     };
@@ -1389,7 +1381,6 @@ useEffect(() => {
         { event: '*', schema: 'public', table: 'inventory_rooms' },
         (payload) => {
           if (Date.now() - lastLocalMutation.current < 800) return;
-          console.log('Realtime Room Change:', payload.eventType);
 
           if (payload.eventType === 'INSERT') {
             if (payload.new.user_id !== currentInventoryOwnerId) return;
@@ -1424,7 +1415,6 @@ useEffect(() => {
         { event: '*', schema: 'public', table: 'inventory_items' },
         (payload) => {
           if (Date.now() - lastLocalMutation.current < 800) return;
-          console.log('Realtime Item Change:', payload.eventType);
 
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             if (payload.new.user_id !== currentInventoryOwnerId) return;
@@ -1469,7 +1459,6 @@ useEffect(() => {
         { event: '*', schema: 'public', table: 'inventory_item_batches' },
         (payload) => {
           if (Date.now() - lastLocalMutation.current < 800) return;
-          console.log('Realtime Batch Change:', payload.eventType);
 
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const newBatch = payload.new;
@@ -1540,7 +1529,6 @@ useEffect(() => {
         { event: '*', schema: 'public', table: 'inventory_purchase_history' },
         (payload) => {
           if (Date.now() - lastLocalMutation.current < 800) return;
-          console.log('Realtime History Change:', payload.eventType);
 
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             if (payload.new.user_id !== currentInventoryOwnerId) return;
@@ -1579,7 +1567,6 @@ useEffect(() => {
         (payload) => {
           if (Date.now() - lastLocalMutation.current < 800) return;
           if (payload.new.user_id !== currentInventoryOwnerId) return;
-          console.log('Realtime Log Change: INSERT');
           const l = payload.new;
           const newLog: ActivityLog = {
             id: l.id,
@@ -1600,7 +1587,6 @@ useEffect(() => {
         }
       )
       .subscribe((status) => {
-        console.log(`Realtime Subscription Status for ${currentInventoryOwnerId}:`, status);
         if (status === 'CHANNEL_ERROR') {
           console.error('Realtime Channel Error - collaborators may not see updates. Check DB Realtime settings.');
           setSyncStatus('error');
@@ -1852,7 +1838,6 @@ const handleLogout = async () => {
   };
 
   const addRoom = async (x: number, y: number, forceName?: string): Promise<string | null> => {
-    console.log('addRoom initiated:', { x, y });
     lastLocalMutation.current = Date.now();
 
     const roomNumbers = rooms
@@ -1930,7 +1915,6 @@ const handleLogout = async () => {
   };
 
   const deleteRoom = async (id: string, itemAction: 'delete' | 'transfer', targetRoomId?: string) => {
-    console.log('deleteRoom initiated:', id);
     const room = rooms.find(r => r.id === id);
     const targetRoom = targetRoomId ? rooms.find(r => r.id === targetRoomId) : undefined;
     if (!room) return false;
@@ -2360,7 +2344,6 @@ const handleLogout = async () => {
     if (currentInventoryOwnerId) {
       setSyncStatus('syncing');
       try {
-        console.log(`Updating position for room ${id} to (${x}, ${y})`);
         // await api.patch('/inventory/rooms/position', { id, pos_x: x, pos_y: y }).catch(async err => {
          await supabase
           .from('inventory_rooms')
@@ -3632,7 +3615,6 @@ const handleLogout = async () => {
   const roomDeleteTransferTargets = useMemo(() => rooms.filter(r => r.id !== pendingRoomDeleteId), [rooms, pendingRoomDeleteId]);
 
   const userInitials = useMemo(() => {
-    console.log('user',user)
     if (!user) return 'U';
     return user.name.split(' ').map(n => n[0]).join('').toUpperCase();
   }, [user]);
@@ -3797,13 +3779,11 @@ const handleLogout = async () => {
                 onSelectRoom={setActiveRoomId}
                 onDragEnd={canManageClinic ? updateRoomPosition : undefined}
                 onUpdateRooms={canManageClinic ? (newRooms) => {
-                  console.log('onUpdateRooms (drag/update) called');
                   lastLocalMutation.current = Date.now();
                   isDirty.current = true;
                   setRooms(newRooms);
                 } : undefined}
                 onSelectTemplate={canManageClinic ? (url) => {
-                  console.log('onSelectTemplate called');
                   lastLocalMutation.current = Date.now();
                   isDirty.current = true;
                   setBlueprint(url);
@@ -3833,7 +3813,6 @@ const handleLogout = async () => {
                     if (metaSyncTimer.current) window.clearTimeout(metaSyncTimer.current);
                     metaSyncTimer.current = window.setTimeout(async () => {
                       setSyncStatus('syncing');
-                      console.log('Debounced Meta Sync: Saving cat position', pos);
                       await supabase.from('inventory_meta').upsert({
                         user_id: currentInventoryOwnerId,
                         cat_position_x: pos.x,
