@@ -249,7 +249,7 @@ const App: React.FC = () => {
   const [blueprint, setBlueprint] = useState<string | null>(() => {
     try {
       const cached = localStorage.getItem('inventory:last-blueprint');
-      if (cached && /^\/images\/template\d+\.png$/.test(cached)) return cached;
+      if (cached && /^\/images\/template\d+\.(png|webp)$/.test(cached)) return cached;
     } catch { /* storage unavailable */ }
     return PRESET_BLUEPRINTS[0].url;
   });
