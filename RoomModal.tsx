@@ -788,7 +788,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
       {exportToast && (
         <div
           role={exportToast.type === 'error' ? 'alert' : 'status'}
-          className={`fixed right-4 top-4 z-[10250] flex w-[calc(100%-2rem)] max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl animate-in slide-in-from-right-4 fade-in duration-300 ${
+          data-toast-tone={exportToast.type}
+          className={`inventory-toast fixed right-4 top-4 z-[10250] flex w-[calc(100%-2rem)] max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl animate-in slide-in-from-right-4 fade-in duration-300 ${
             exportToast.type === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
               : 'border-red-200 bg-red-50 text-red-900'

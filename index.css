@@ -578,6 +578,37 @@ body {
   color: #91cfff !important;
 }
 
+/* Shared room and inventory toasts keep white copy on dark success/error surfaces. */
+.dark .inventory-toast[data-toast-tone="success"] {
+  background-color: #14392f !important;
+  border-color: #3b8069 !important;
+}
+.dark .inventory-toast[data-toast-tone="error"] {
+  background-color: #44262d !important;
+  border-color: #a35562 !important;
+}
+.dark .inventory-toast p,
+.dark .inventory-toast button {
+  color: #fff !important;
+}
+.dark .inventory-toast > svg {
+  color: #9ce7c2 !important;
+}
+.dark .inventory-toast[data-toast-tone="error"] > svg {
+  color: #ffadb7 !important;
+}
+.dark .inventory-toast button {
+  opacity: 0.9;
+}
+.dark .inventory-toast button:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+}
+.dark .inventory-toast button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
 /* Inventory SNAI support shortcut: explicit light/dark ownership keeps the
    action visible even when broad utility overrides change chat surfaces. */
 
