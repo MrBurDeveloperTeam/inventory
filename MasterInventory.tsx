@@ -1926,24 +1926,19 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       </div>
 
       {/* Global Activity Feed (Footer) */}
-      <div className="bg-white rounded-none md:rounded-[2.5rem] shadow-sm border-x-0 md:border border-slate-100 p-4 md:p-10 mt-6 mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <div className="bg-slate-800 p-3 rounded-2xl">
-              <Activity className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h4 className="text-lg font-extrabold text-slate-800 tracking-wider uppercase">Recent Global Activity</h4>
-            </div>
+      <div className="bg-white rounded-none md:rounded-[2.5rem] shadow-sm border-x-0 md:border border-slate-100 p-4 md:p-10 mt-6 mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 min-w-0">
+        <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-8 min-w-0">
+          <div className="bg-slate-800 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shrink-0">
+            <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </div>
-
+          <h4 className="min-w-0 text-sm sm:text-lg font-extrabold text-slate-800 tracking-wide sm:tracking-wider uppercase leading-tight">Recent Global Activity</h4>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 max-h-[500px] overflow-y-auto pr-0 sm:pr-4 custom-scrollbar min-w-0">
           {logs.length > 0 ? logs.map((log) => (
-            <div key={log.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-slate-50/30 rounded-3xl border border-transparent hover:border-slate-200 hover:bg-white group transition-all duration-300">
-              <div className="flex items-start gap-5">
-                <div className={`mt-1 p-3 rounded-2xl shadow-sm transition-transform group-hover:scale-110 duration-300 ${log.action === 'receive' || log.action === 'add' || log.action === 'transfer_in'
+            <div key={log.id} className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-0 p-3 sm:p-6 min-w-0 bg-slate-50/30 rounded-2xl sm:rounded-3xl border border-transparent hover:border-slate-200 hover:bg-white group transition-all duration-300">
+              <div className="flex items-start gap-3 sm:gap-5 min-w-0 flex-1">
+                <div className={`mt-0.5 sm:mt-1 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shrink-0 shadow-sm transition-transform group-hover:scale-110 duration-300 ${log.action === 'receive' || log.action === 'add' || log.action === 'transfer_in'
                   ? 'bg-emerald-100 text-emerald-600'
                   : log.action === 'remove' || log.action === 'delete' || log.action === 'transfer_out'
                     ? 'bg-rose-100 text-rose-600'
@@ -1957,9 +1952,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     <RefreshCcw className="w-5 h-5" />
                   )}
                 </div>
-                <div className="flex flex-col gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100/50">
+                <div className="flex flex-col gap-2 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+                    <span className="max-w-full break-words text-[11px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100/50">
                       {log.roomName}
                     </span>
                     <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${log.action === 'receive' || log.action === 'add' || log.action === 'transfer_in'
@@ -1971,12 +1966,12 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       {log.action.replace('_', ' ')}
                     </span>
                     {log.actorName && (
-                      <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded-md font-bold shadow-sm">
+                      <span className="max-w-full break-words text-[10px] bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded-md font-bold shadow-sm">
                         By {log.actorName}
                       </span>
                     )}
                   </div>
-                  <p className="text-[15px] font-bold text-slate-700 leading-snug group-hover:text-slate-900 transition-colors">
+                  <p className="text-sm sm:text-[15px] font-bold text-slate-700 leading-snug break-words group-hover:text-slate-900 transition-colors">
                     {log.details}
                   </p>
 
@@ -1984,12 +1979,12 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                    !log.details?.startsWith('Deleted room') &&
                    !log.beforeValue?.startsWith('[') &&
                    !log.beforeValue?.startsWith('{') && (
-                    <div className="flex items-center gap-3 mt-1">
-                      <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-slate-100 px-3 py-1.5 rounded-xl shadow-sm">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Delta</span>
-                        <span className="text-[12px] font-bold text-slate-400 line-through decoration-slate-300">{log.beforeValue}</span>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
-                        <span className={`text-[12px] font-black ${Number(log.afterValue) > Number(log.beforeValue) ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <div className="mt-1 min-w-0">
+                      <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 max-w-full bg-white/80 backdrop-blur-sm border border-slate-100 px-2.5 sm:px-3 py-1.5 rounded-xl shadow-sm">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest sm:mr-1">Delta</span>
+                        <span className="text-[12px] font-bold text-slate-400 line-through decoration-slate-300 break-all">{log.beforeValue}</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                        <span className={`text-[12px] font-black break-all ${Number(log.afterValue) > Number(log.beforeValue) ? 'text-emerald-600' : 'text-rose-600'}`}>
                           {log.afterValue}
                         </span>
                       </div>
@@ -1997,7 +1992,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   )}
                 </div>
               </div>
-              <div className="flex flex-row sm:flex-col items-center sm:items-end gap-3 sm:gap-2 mt-4 sm:mt-0 text-right shrink-0 bg-white/50 sm:bg-transparent p-3 sm:p-0 rounded-2xl border border-slate-100 sm:border-none w-full sm:w-auto justify-between sm:justify-start">
+              <div className="flex flex-wrap sm:flex-col items-center sm:items-end gap-x-4 gap-y-2 sm:gap-2 border-t border-slate-100 pt-3 sm:border-none sm:pt-0 text-left sm:text-right shrink-0 w-full sm:w-auto">
                 <div className="flex items-center gap-2 text-slate-700">
                   <Clock className="w-3.5 h-3.5 text-slate-700" />
                   <p className="text-[13px] font-extrabold tracking-wider">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
@@ -2087,7 +2082,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                             });
                           }
                         }}
-                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-nowrap"
+                        className="flex items-center justify-center gap-1.5 w-full sm:w-auto min-h-11 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-normal text-center"
                         title={`Restore ${restoreQty}x "${itemName}" to ${log.roomName}`}
                       >
                         <RefreshCcw className="w-3 h-3" />
@@ -2105,7 +2100,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     return (
                       <button
                         onClick={() => onRestoreRoom(roomName, log.beforeValue)}
-                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-all duration-200 whitespace-nowrap"
+                        className="flex items-center justify-center gap-1.5 w-full sm:w-auto min-h-11 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-all duration-200 whitespace-normal text-center"
                         title={`Recreate "${roomName}" with ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
                       >
                         <RefreshCcw className="w-3 h-3" />
@@ -2119,9 +2114,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
               </div>
             </div>
           )) : (
-            <div className="flex flex-col items-center justify-center py-24 bg-slate-50/30 rounded-[2.5rem] border border-dashed border-slate-200">
-              <History className="w-16 h-16 text-slate-200 mb-6" />
-              <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-300">Awaiting Clinic Activity</p>
+            <div className="flex flex-col items-center justify-center py-12 sm:py-24 px-4 bg-slate-50/30 rounded-2xl sm:rounded-[2.5rem] border border-dashed border-slate-200 text-center">
+              <History className="w-12 h-12 sm:w-16 sm:h-16 text-slate-400 mb-4 sm:mb-6" />
+              <p className="text-xs sm:text-sm font-black uppercase tracking-wider sm:tracking-[0.4em] text-slate-600">Awaiting Clinic Activity</p>
             </div>
           )}
         </div>
