@@ -246,6 +246,40 @@ body {
   background: #cbd5e1;
 }
 
+/* Keep the wide inventory columns reachable with a visible bar below the table. */
+.inventory-table-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #94a3b8 #e2e8f0;
+  scrollbar-gutter: stable;
+}
+.inventory-table-scroll::-webkit-scrollbar {
+  height: 12px;
+}
+.inventory-table-scroll::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+.inventory-table-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border: 2px solid #e2e8f0;
+  border-radius: 999px;
+}
+.inventory-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+.dark .inventory-table-scroll {
+  scrollbar-color: #71849d #172235;
+}
+.dark .inventory-table-scroll::-webkit-scrollbar-track {
+  background: #172235;
+}
+.dark .inventory-table-scroll.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #71849d;
+  border-color: #172235;
+}
+.dark .inventory-table-scroll.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a4b5c9;
+}
+
 /* =============================================================
    DARK MODE OVERRIDES
    Applied when <html class="dark"> is set by themeSync.js.
@@ -488,6 +522,60 @@ body {
 .dark .inventory-activity-empty {
   background-color: #223149 !important;
   border-color: #4b6079 !important;
+}
+
+/* Room stock and import panels use the same dark surface as the dialog.
+   The light blue utility classes otherwise leave a bright card around dark fields. */
+.dark .room-modal-blue-panel {
+  background-color: #1b3042 !important;
+  border-color: #36566c !important;
+  color: #e8f1f8;
+}
+.dark .room-modal-blue-panel h4,
+.dark .room-modal-blue-panel h5 {
+  color: #91cfff !important;
+}
+.dark .room-modal-blue-panel h5 {
+  border-color: #36566c !important;
+}
+.dark .room-modal-blue-panel .text-slate-500,
+.dark .room-modal-blue-panel .text-slate-600 {
+  color: #b8c9d9 !important;
+}
+.dark .room-modal-blue-panel .text-slate-400 {
+  color: #a8bbcf !important;
+}
+.dark .room-modal-blue-panel :is(input:not([type="checkbox"]), textarea, select) {
+  background-color: #253c52 !important;
+  border-color: #527087 !important;
+  color: #f3f8fc !important;
+}
+.dark .room-modal-blue-panel :is(input, textarea)::placeholder {
+  color: #a6b9ca !important;
+  opacity: 1;
+}
+.dark .room-modal-blue-panel input[type="checkbox"] {
+  accent-color: #80c5fa;
+  background-color: #253c52 !important;
+  border-color: #7894a8 !important;
+}
+.dark .room-modal-blue-panel :is(input, textarea, select, button):focus-visible {
+  outline: 2px solid #91cfff;
+  outline-offset: 2px;
+}
+.dark .room-modal-receive-panel .room-product-trigger,
+.dark .room-modal-receive-panel .room-product-menu {
+  background-color: #253c52 !important;
+  border-color: #527087 !important;
+  color: #f3f8fc !important;
+}
+.dark .room-modal-receive-panel .room-product-trigger:hover,
+.dark .room-modal-receive-panel .room-product-menu button:hover {
+  background-color: #304b64 !important;
+}
+.dark .room-modal-receive-panel .room-product-menu .text-\[\#3498db\],
+.dark .room-modal-receive-panel .text-blue-600 {
+  color: #91cfff !important;
 }
 
 /* Inventory SNAI support shortcut: explicit light/dark ownership keeps the

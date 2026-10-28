@@ -77,6 +77,8 @@ interface MasterInventoryProps {
   focusExpiringTabRequestId?: number;
 }
 
+const INVENTORY_PAGE_SIZE = 10;
+
 const MasterInventory: React.FC<MasterInventoryProps> = ({
   rooms,
   history,
@@ -161,6 +163,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   const [inventoryCategory, setInventoryCategory] = useState('all');
   const [inventoryVendor, setInventoryVendor] = useState('all');
   const [inventoryLocation, setInventoryLocation] = useState('all');
+  const [inventoryPage, setInventoryPage] = useState(1);
 
   // Form State for Master Receiving
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
@@ -225,6 +228,18 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
         return dateA - dateB;
       });
   }, [rooms, searchTerm, inventoryCategory, inventoryVendor, inventoryLocation]);
+
+  const inventoryPageCount = Math.max(1, Math.ceil(allItems.length / INVENTORY_PAGE_SIZE));
+  const currentInventoryPage = Math.min(inventoryPage, inventoryPageCount);
+  const inventoryPageStart = (currentInventoryPage - 1) * INVENTORY_PAGE_SIZE;
+  const pagedItems = useMemo(
+    () => allItems.slice(inventoryPageStart, inventoryPageStart + INVENTORY_PAGE_SIZE),
+    [allItems, inventoryPageStart]
+  );
+
+  useEffect(() => {
+    setInventoryPage(page => Math.min(page, inventoryPageCount));
+  }, [inventoryPageCount]);
 
   // Filtered History
   // Suggestions for the Product Name field: the standard list first, then any
@@ -322,7 +337,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
     const groups: Array<{ category: string; items: any[] }> = [];
     const categoryMap = new Map<string, any[]>();
 
-    allItems.forEach(item => {
+    pagedItems.forEach(item => {
       const cat = (item.category || 'other').toUpperCase();
       if (!categoryMap.has(cat)) {
         const newGroup: any[] = [];
@@ -332,7 +347,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       categoryMap.get(cat)!.push(item);
     });
     return groups;
-  }, [allItems]);
+  }, [pagedItems]);
 
   // Expiry Logic - track per batch, not just per item
   const expiringItems = useMemo(() => {
@@ -742,7 +757,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <Layers className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
                   <select
                     value={inventoryCategory}
-                    onChange={e => setInventoryCategory(e.target.value)}
+                    onChange={e => { setInventoryCategory(e.target.value); setInventoryPage(1); }}
                     className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
                   >
                     <option value="all">All Categories</option>
@@ -758,7 +773,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <Truck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
                   <select
                     value={inventoryVendor}
-                    onChange={e => setInventoryVendor(e.target.value)}
+                    onChange={e => { setInventoryVendor(e.target.value); setInventoryPage(1); }}
                     className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
                   >
                     <option value="all">All Vendors</option>
@@ -774,7 +789,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
                   <select
                     value={inventoryLocation}
-                    onChange={e => setInventoryLocation(e.target.value)}
+                    onChange={e => { setInventoryLocation(e.target.value); setInventoryPage(1); }}
                     className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-[#4d9678] transition-colors cursor-pointer appearance-none"
                   >
                     <option value="all">All Locations</option>
@@ -792,7 +807,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     placeholder="Search records..."
                     className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-slate-600 outline-none focus:ring-2 focus:ring-[#4d9678]/10 focus:border-[#4d9678] transition-all"
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => { setSearchTerm(e.target.value); setInventoryPage(1); }}
                   />
                 </div>
               </div>
@@ -858,8 +873,9 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                 </div>
               )}
 
-              <div className="hidden md:block border border-slate-200 rounded-2xl overflow-hidden shadow-sm custom-scrollbar">
-                <table className="w-full text-left border-collapse text-xs">
+              <div className="hidden md:block border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="inventory-table-scroll overflow-x-auto custom-scrollbar" role="region" aria-label="All inventory table, scroll horizontally for more columns" tabIndex={0}>
+                <table className="w-full min-w-[1680px] text-left border-collapse text-xs">
                   <thead className="bg-[#f8fafc] text-slate-500 font-black uppercase tracking-widest text-[9px] border-b border-slate-200 sticky top-0 z-10">
                     <tr>
                       <th className="px-3 py-5 w-[80px]">Brand</th>
@@ -885,7 +901,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                         <React.Fragment key={category}>
                           <tr className="bg-slate-100/70 border-y border-slate-200">
                             <td
-                              colSpan={11}
+                              colSpan={12}
                               className="px-6 py-3 text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]"
                             >
                               {category}
@@ -1119,7 +1135,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     ) : (
                       <tr>
                         <td
-                          colSpan={11}
+                          colSpan={12}
                           className="py-24 text-center text-slate-300 font-black uppercase tracking-[0.3em] opacity-50"
                         >
                           No Items Found
@@ -1128,10 +1144,11 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               {/* MOBILE LIST VIEW */}
-              <div className="md:hidden space-y-6 pb-20">
+              <div className="md:hidden space-y-6">
                 {groupedItems.length > 0 ? (
                   groupedItems.map(({ category, items }) => (
                     <div key={category} className="space-y-3">
@@ -1307,6 +1324,35 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                   </div>
                 )}
               </div>
+
+              <nav className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between" aria-label="Inventory pages">
+                <p className="text-xs font-semibold text-slate-500">
+                  {allItems.length === 0
+                    ? 'Showing 0 of 0 items'
+                    : `Showing ${inventoryPageStart + 1}–${Math.min(inventoryPageStart + INVENTORY_PAGE_SIZE, allItems.length)} of ${allItems.length} items`}
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setInventoryPage(page => Math.max(1, page - 1))}
+                    disabled={currentInventoryPage === 1}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Previous
+                  </button>
+                  <span className="min-w-[88px] text-center text-xs font-semibold text-slate-600" aria-live="polite">
+                    Page {currentInventoryPage} of {inventoryPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setInventoryPage(page => Math.min(inventoryPageCount, page + 1))}
+                    disabled={currentInventoryPage === inventoryPageCount}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Next
+                  </button>
+                </div>
+              </nav>
             </div>
           )
         }
