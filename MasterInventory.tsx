@@ -1926,7 +1926,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
       </div>
 
       {/* Global Activity Feed (Footer) */}
-      <div className="bg-white rounded-none md:rounded-[2.5rem] shadow-sm border-x-0 md:border border-slate-100 p-4 md:p-10 mt-6 mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 min-w-0">
+      <div className="inventory-activity-feed bg-white rounded-none md:rounded-[2.5rem] shadow-sm border-x-0 md:border border-slate-100 p-4 md:p-10 mt-6 mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 min-w-0">
         <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-8 min-w-0">
           <div className="bg-slate-800 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shrink-0">
             <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
@@ -1936,7 +1936,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
 
         <div className="grid grid-cols-1 gap-3 sm:gap-4 max-h-[500px] overflow-y-auto pr-0 sm:pr-4 custom-scrollbar min-w-0">
           {logs.length > 0 ? logs.map((log) => (
-            <div key={log.id} className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-0 p-3 sm:p-6 min-w-0 bg-slate-50/30 rounded-2xl sm:rounded-3xl border border-transparent hover:border-slate-200 hover:bg-white group transition-all duration-300">
+            <div key={log.id} className="inventory-activity-entry flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-0 p-3 sm:p-6 min-w-0 bg-slate-50/30 rounded-2xl sm:rounded-3xl border border-transparent hover:border-slate-200 hover:bg-white group transition-all duration-300">
               <div className="flex items-start gap-3 sm:gap-5 min-w-0 flex-1">
                 <div className={`mt-0.5 sm:mt-1 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shrink-0 shadow-sm transition-transform group-hover:scale-110 duration-300 ${log.action === 'receive' || log.action === 'add' || log.action === 'transfer_in'
                   ? 'bg-emerald-100 text-emerald-600'
@@ -2082,7 +2082,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                             });
                           }
                         }}
-                        className="flex items-center justify-center gap-1.5 w-full sm:w-auto min-h-11 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-normal text-center"
+                        className="inventory-activity-restore-item flex items-center justify-center gap-1.5 w-full sm:w-auto min-h-11 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 whitespace-normal text-center"
                         title={`Restore ${restoreQty}x "${itemName}" to ${log.roomName}`}
                       >
                         <RefreshCcw className="w-3 h-3" />
@@ -2100,7 +2100,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                     return (
                       <button
                         onClick={() => onRestoreRoom(roomName, log.beforeValue)}
-                        className="flex items-center justify-center gap-1.5 w-full sm:w-auto min-h-11 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-all duration-200 whitespace-normal text-center"
+                        className="inventory-activity-restore-room flex items-center justify-center gap-1.5 w-full sm:w-auto min-h-11 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-all duration-200 whitespace-normal text-center"
                         title={`Recreate "${roomName}" with ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
                       >
                         <RefreshCcw className="w-3 h-3" />
@@ -2114,7 +2114,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
               </div>
             </div>
           )) : (
-            <div className="flex flex-col items-center justify-center py-12 sm:py-24 px-4 bg-slate-50/30 rounded-2xl sm:rounded-[2.5rem] border border-dashed border-slate-200 text-center">
+            <div className="inventory-activity-empty flex flex-col items-center justify-center py-12 sm:py-24 px-4 bg-slate-50/30 rounded-2xl sm:rounded-[2.5rem] border border-dashed border-slate-200 text-center">
               <History className="w-12 h-12 sm:w-16 sm:h-16 text-slate-400 mb-4 sm:mb-6" />
               <p className="text-xs sm:text-sm font-black uppercase tracking-wider sm:tracking-[0.4em] text-slate-600">Awaiting Clinic Activity</p>
             </div>
