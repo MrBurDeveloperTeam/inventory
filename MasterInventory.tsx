@@ -37,6 +37,8 @@ import { CATEGORIES, UOMS, PRODUCT_NAMES } from './constants';
 import { fetchPublishedProducts, fetchPublishedProductPrice, getCachedPublishedProducts, prefetchPublishedProducts, productToItemDraft, PublishedProduct } from './services/publishedProducts';
 import ClinicAnalytics from './ClinicAnalytics';
 import ProductCombobox from './components/ProductCombobox';
+import TopUpButton from './components/TopUpButton';
+import { useShopTopUp } from './hooks/useShopTopUp';
 import AutocompleteInput from './components/AutocompleteInput';
 import { getPurchaseHistoryLocation, isArchivedPurchaseHistory } from './src/utils/roomDeletion';
 
@@ -97,6 +99,8 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
   focusExpiringTabRequestId,
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'receive' | 'history' | 'expiring' | 'analytics'>('all');
+  // Quick top-up: opens the item's MR.BUR shop page (see TopUpButton).
+  const { topUp, isExactMatch } = useShopTopUp(rooms);
   const [searchTerm, setSearchTerm] = useState('');
   const [exportToast, setExportToast] = useState<{
     type: 'success' | 'error';
@@ -869,7 +873,7 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                       <th className="px-3 py-5 w-[80px]">Category</th>
                       <th className="px-3 py-5 w-[80px]">Expires</th>
                       <th className="px-3 py-5 w-[80px]">Location</th>
-                      <th className="w-8"></th>
+                      <th className="w-16"></th>
                     </tr>
                   </thead>
 
@@ -1032,18 +1036,23 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                     </select>
                                   </td>
 
-                                  {/* Delete button — only visible in edit mode */}
-                                  <td className="px-2 py-4 w-8">
-                                    {isQtyEditMode && !readOnly && onDeleteItem && (
-                                      <button
-                                        onClick={() => setDeleteTarget({ roomId: item.roomId, itemId: item.id, name: item.name })}
-                                        className="w-6 h-6 flex items-center justify-center rounded-full text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                                        aria-label={`Delete ${item.name}`}
-                                        title={`Delete "${item.name}"`}
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
+                                  {/* Top-up (always) + Delete (edit mode only) */}
+                                  <td className="px-2 py-4 w-16">
+                                    <div className="flex items-center justify-end gap-1">
+                                      {!readOnly && (
+                                        <TopUpButton item={item} onTopUp={topUp} exactMatch={isExactMatch(item)} />
+                                      )}
+                                      {isQtyEditMode && !readOnly && onDeleteItem && (
+                                        <button
+                                          onClick={() => setDeleteTarget({ roomId: item.roomId, itemId: item.id, name: item.name })}
+                                          className="w-6 h-6 flex items-center justify-center rounded-full text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                                          aria-label={`Delete ${item.name}`}
+                                          title={`Delete "${item.name}"`}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </td>
 
                                 </tr>
@@ -1172,6 +1181,15 @@ const MasterInventory: React.FC<MasterInventoryProps> = ({
                                     ${(item.quantity * item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </span>
                                   <span className="text-[9px] text-slate-400 font-medium">${item.price.toFixed(2)}/{item.uom || 'ea'}</span>
+                                  {!readOnly && (
+                                    <TopUpButton
+                                      item={item}
+                                      onTopUp={topUp}
+                                      exactMatch={isExactMatch(item)}
+                                      variant="pill"
+                                      className="mt-2"
+                                    />
+                                  )}
                                 </div>
                               </div>
 

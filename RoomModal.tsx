@@ -34,6 +34,8 @@ import { Room, Item, ActivityLog, Category, UOM, ItemBatch } from './types';
 import { CATEGORIES, UOMS } from './constants';
 import { filesToImages } from './src/utils/fileHelpers';
 import { extractDataFromImage } from './services/geminiService';
+import TopUpButton from './components/TopUpButton';
+import { useShopTopUp } from './hooks/useShopTopUp';
 
 interface RoomModalProps {
   room: Room;
@@ -53,6 +55,8 @@ interface RoomModalProps {
 }
 
 const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, onUpdateName, onReceive, onReceiveBatch, onUpdateQty, onUpdateBatchQty, onTransfer, onDeleteItem, onUpdateItem, onUpdateBatch, readOnly = false }) => {
+  // Quick top-up: opens the item's MR.BUR shop page (see TopUpButton).
+  const { topUp, isExactMatch } = useShopTopUp(allRooms);
   const [isReceiving, setIsReceiving] = useState(false);
   const [receiveMode, setReceiveMode] = useState<'existing' | 'new' | 'edit'>('existing');
   const [selectedItemIdx, setSelectedItemIdx] = useState<string>('');
@@ -1978,6 +1982,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                                 <td className="px-3 py-4 text-center">
                                   {!readOnly && (
                                     <div className="flex items-center justify-center gap-3">
+                                      <TopUpButton item={item} onTopUp={topUp} exactMatch={isExactMatch(item)} />
                                       <button
                                         onClick={() => handleEditItem(item)}
                                         className="text-slate-300 hover:text-indigo-600 transition-colors"
@@ -2150,6 +2155,12 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                               <div className="flex items-center gap-3 shrink-0">
                                 {!readOnly && (
                                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                    <TopUpButton
+                                      item={item}
+                                      onTopUp={topUp}
+                                      exactMatch={isExactMatch(item)}
+                                      className="!w-8 !h-8 !rounded-lg bg-slate-50 !text-slate-400"
+                                    />
                                     <button
                                       onClick={() => handleEditItem(item)}
                                       className="p-1.5 text-slate-400 hover:text-indigo-600 active:text-indigo-700 transition-colors bg-slate-50 rounded-lg hover:bg-slate-100"
