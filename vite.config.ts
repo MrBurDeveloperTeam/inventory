@@ -32,7 +32,7 @@ export default defineConfig(() => {
         devOptions: {
           enabled: true
         },
-        includeAssets: ['images/InventoryIcon.png'],
+        includeAssets: ['images/InventoryIcon.webp'],
         manifest: {
           name: 'DentaStock Pro',
           short_name: 'DentaStock',
@@ -43,15 +43,15 @@ export default defineConfig(() => {
           start_url: '/',
           icons: [
             {
-              src: '/images/InventoryIcon.png',
+              src: '/images/InventoryIcon.webp',
               sizes: '192x192',
-              type: 'image/png',
+              type: 'image/webp',
               purpose: 'any maskable'
             },
             {
-              src: '/images/InventoryIcon.png',
+              src: '/images/InventoryIcon.webp',
               sizes: '512x512',
-              type: 'image/png',
+              type: 'image/webp',
               purpose: 'any maskable'
             }
           ]
