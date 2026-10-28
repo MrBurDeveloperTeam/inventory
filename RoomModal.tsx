@@ -893,7 +893,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
           </div>
 
           {isExcelPreviewActive && excelPreviewData && (
-            <div className="bg-[#ebf5fb] border border-[#c4e1f3] rounded-[1rem] p-6 shadow-sm animate-in zoom-in-95 duration-200 mb-6">
+            <div className="room-modal-blue-panel bg-[#ebf5fb] border border-[#c4e1f3] rounded-[1rem] p-6 shadow-sm animate-in zoom-in-95 duration-200 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-[#2c78b2] font-black uppercase text-xs tracking-[0.2em] flex items-center gap-2">
                   <FileUp className="w-4 h-4" /> Excel Import Preview
@@ -1596,7 +1596,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
           )}
 
           {isReceiving && (
-            <div className="bg-[#ebf5fb] border border-[#c4e1f3] rounded-[1rem] p-6 shadow-sm animate-in zoom-in-95 duration-200">
+            <div className="room-modal-blue-panel room-modal-receive-panel bg-[#ebf5fb] border border-[#c4e1f3] rounded-[1rem] p-6 shadow-sm animate-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-[#2c78b2] font-black uppercase text-xs tracking-[0.2em]">Receive Stock</h4>
               </div>
@@ -1608,7 +1608,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                       <button 
                         type="button"
                         onClick={() => setShowProductList(!showProductList)}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 text-xs focus:ring-1 focus:ring-[#3498db] outline-none shadow-sm h-[38px]"
+                        className="room-product-trigger w-full flex items-center justify-between px-3 py-2 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 text-xs focus:ring-1 focus:ring-[#3498db] outline-none shadow-sm h-[38px]"
                       >
                         <span className="truncate">
                           {selectedItemIdx === 'new' ? '⊕ Create New Product...' : 
@@ -1621,7 +1621,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, allRooms, logs, onClose, on
                       {showProductList && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setShowProductList(false)} />
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-[300px] overflow-hidden flex flex-col">
+                          <div className="room-product-menu absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-[300px] overflow-hidden flex flex-col">
                             <div className="p-2 border-b border-slate-100">
                               <div className="relative">
                                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
