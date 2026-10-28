@@ -34,10 +34,11 @@ const TutorialVideoModal: React.FC<TutorialVideoModalProps> = ({ isOpen, onClose
           </video>
         </div>
 
-        <div className="p-4 flex justify-end bg-slate-50/50 border-t border-slate-100">
+        <div className="p-3 sm:p-4 flex justify-end bg-slate-50/50 border-t border-slate-100">
           <button
+            type="button"
             onClick={onClose}
-            className="inline-flex min-h-11 items-center justify-center px-5 py-2.5 rounded-xl bg-tiffany-600 text-white text-sm font-bold shadow-sm hover:bg-tiffany-700 transition-colors"
+            className="inline-flex min-h-11 items-center justify-center px-4 sm:px-5 py-2.5 rounded-xl bg-tiffany-600 text-white text-sm font-bold shadow-sm hover:bg-tiffany-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tiffany-600 transition-colors"
           >
             Got it, let's go
           </button>
