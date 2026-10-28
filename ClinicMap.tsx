@@ -6,6 +6,7 @@ import {
   Lock,
   Unlock,
   Map as MapIcon,
+  MoveHorizontal,
   ChevronDown,
   Layout,
   Image as ImageIcon
@@ -61,6 +62,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   }, [blueprint]);
   const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
   const activeTemplate = PRESET_BLUEPRINTS.find(t => t.url === (blueprint ? toOptimizedSrc(blueprint) : blueprint));
+  const hasMapContent = Boolean(blueprint || rooms.length);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const templateMenuRef = useRef<HTMLDivElement>(null);
@@ -139,7 +141,7 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
   };
 
   return (
-    <section className="w-full bg-white rounded-none md:rounded-[2rem] shadow-xl overflow-hidden relative border-x-0 md:border border-slate-100 h-[650px] flex flex-col">
+    <section className="w-full bg-white rounded-none md:rounded-[2rem] shadow-xl overflow-hidden relative border-x-0 md:border border-slate-100 flex flex-col md:h-[650px]">
       <style>{`
         @keyframes sound-wave {
           0% { transform: scale(1); opacity: 0.5; }
@@ -198,7 +200,10 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
               disabled={isLocked}
               onClick={() => { onSetDeleteMode?.(!isDeleteMode); onSetAddMode?.(false); }}
               title="Delete Mode"
-              className={`flex-initial flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl font-bold text-[12px] transition-all shadow-sm border ${isDeleteMode ? 'bg-rose-500 text-white border-transparent shadow-rose-200/50' : 'bg-rose-50 text-rose-600 hover:bg-rose-100 border-rose-100/50 disabled:opacity-40 disabled:grayscale'}`}
+              aria-pressed={isDeleteMode}
+              className={`flex-initial flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl font-bold text-[12px] transition-colors shadow-sm border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 dark:focus-visible:ring-rose-300 dark:focus-visible:ring-offset-slate-800 ${isDeleteMode
+                ? 'bg-rose-500 text-white border-transparent shadow-rose-200/50 dark:bg-rose-700 dark:border-rose-500/70 dark:hover:bg-rose-600'
+                : 'bg-rose-50 text-rose-600 hover:bg-rose-100 border-rose-100/50 dark:bg-rose-950/70 dark:text-rose-300 dark:border-rose-800/70 dark:hover:bg-rose-900/80 disabled:opacity-40 disabled:grayscale'}`}
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete</span>
@@ -242,38 +247,52 @@ const ClinicMap: React.FC<ClinicMapProps> = ({
         )}
       </div>
 
-      <div
-        ref={mapRef}
-        className={`flex-1 relative overflow-hidden bg-slate-50 ${isAddMode ? 'cursor-crosshair' : draggedRoomId !== null ? 'cursor-grabbing' : ''}`}
-        onClick={handleMapClick}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      >
-        {blueprint ? <img src={toOptimizedSrc(blueprint)} alt="Clinic Blueprint" fetchPriority="high" decoding="async" className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-95 transition-opacity" draggable={false} /> : <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20 pointer-events-none"><ImageIcon className="w-32 h-32 mb-6 text-slate-400" /><p className="text-2xl font-black uppercase tracking-[0.3em] text-slate-400">No Layout Uploaded</p></div>}
+      {hasMapContent && (
+        <p className="hidden max-[629px]:flex items-center justify-center gap-1.5 py-1.5 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-600">
+          <MoveHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+          Swipe sideways to explore the clinic
+        </p>
+      )}
 
-        {rooms.map(room => (
-          <div
-            key={room.id}
-            className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-transform active:scale-95 z-20 group ${draggedRoomId === room.id ? 'z-50 scale-110 cursor-grabbing hexagon-glow-active' : isDeleteMode ? 'hexagon-glow-rose' : 'hover:scale-105 cursor-pointer hexagon-glow'}`}
-            style={{ left: `${room.x}%`, top: `${room.y}%` }}
-            onMouseDown={(e) => handleMouseDown(e, room.id)}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (wasDraggingRef.current || justDraggedRef.current) {
-                justDraggedRef.current = false;
-                wasDraggingRef.current = false;
-                return;
-              }
-              handleRoomClick(room.id);
-            }}
-          >
-            <div className={`hexagon w-16 h-16 md:w-20 md:h-20 flex flex-col items-center justify-center p-2 text-center transition-colors ${isDeleteMode ? 'bg-rose-600 text-white shadow-xl shadow-rose-500/30' : draggedRoomId === room.id ? 'bg-[#4d9678] text-white shadow-xl shadow-emerald-500/30' : 'bg-white/95 text-slate-800 shadow-xl border border-white/50'}`}>
-              <span className="text-[8px] md:text-[11px] font-bold leading-tight break-words max-w-[80px] pointer-events-none tracking-normal">{room.name}</span>
-              <span className={`text-[7px] md:text-[8px] mt-1 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider pointer-events-none ${isDeleteMode || draggedRoomId === room.id ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>{room.items.length} SKU</span>
+      <div
+        className="h-[420px] md:h-auto md:flex-1 min-h-0 overflow-x-auto overflow-y-hidden overscroll-x-contain bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-emerald-500"
+        role="region"
+        aria-label="Interactive clinic map, scroll horizontally to explore"
+        tabIndex={0}
+      >
+        <div
+          ref={mapRef}
+          className={`relative h-full overflow-hidden ${hasMapContent ? 'min-w-[630px] md:min-w-0' : ''} ${isAddMode ? 'cursor-crosshair' : draggedRoomId !== null ? 'cursor-grabbing' : ''}`}
+          onClick={handleMapClick}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
+          {blueprint ? <img src={toOptimizedSrc(blueprint)} alt="Clinic Blueprint" fetchPriority="high" decoding="async" className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-95 transition-opacity" draggable={false} /> : <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20 pointer-events-none"><ImageIcon className="w-32 h-32 mb-6 text-slate-400" /><p className="text-2xl font-black uppercase tracking-[0.3em] text-slate-400">No Layout Uploaded</p></div>}
+
+          {rooms.map(room => (
+            <div
+              key={room.id}
+              className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-transform active:scale-95 z-20 group ${draggedRoomId === room.id ? 'z-50 scale-110 cursor-grabbing hexagon-glow-active' : isDeleteMode ? 'hexagon-glow-rose' : 'hover:scale-105 cursor-pointer hexagon-glow'}`}
+              style={{ left: `${room.x}%`, top: `${room.y}%` }}
+              onMouseDown={(e) => handleMouseDown(e, room.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (wasDraggingRef.current || justDraggedRef.current) {
+                  justDraggedRef.current = false;
+                  wasDraggingRef.current = false;
+                  return;
+                }
+                handleRoomClick(room.id);
+              }}
+            >
+              <div className={`hexagon w-16 h-16 md:w-20 md:h-20 flex flex-col items-center justify-center p-2 text-center transition-colors ${isDeleteMode ? 'bg-rose-600 text-white shadow-xl shadow-rose-500/30' : draggedRoomId === room.id ? 'bg-[#4d9678] text-white shadow-xl shadow-emerald-500/30' : 'bg-white/95 text-slate-800 shadow-xl border border-white/50'}`}>
+                <span className="text-[8px] md:text-[11px] font-bold leading-tight break-words max-w-[80px] pointer-events-none tracking-normal">{room.name}</span>
+                <span className={`text-[7px] md:text-[8px] mt-1 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider pointer-events-none ${isDeleteMode || draggedRoomId === room.id ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>{room.items.length} SKU</span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </section>
   );
