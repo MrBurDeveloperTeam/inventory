@@ -417,6 +417,79 @@ body {
   box-shadow: none !important;
 }
 
+/* Inventory activity feed dark theme */
+.dark .inventory-activity-feed {
+  background-color: #172235 !important;
+  border-color: #34445c !important;
+}
+.dark .inventory-activity-feed .bg-slate-800 {
+  background-color: #33465e !important;
+}
+.dark .inventory-activity-entry {
+  background-color: #223149 !important;
+  border-color: #3a4d66 !important;
+}
+.dark .inventory-activity-entry:hover,
+.dark .inventory-activity-entry:focus-within {
+  background-color: #293b54 !important;
+  border-color: #64839a !important;
+}
+.dark .inventory-activity-feed .bg-emerald-100,
+.dark .inventory-activity-feed .bg-emerald-50 {
+  background-color: #143d32 !important;
+  color: #7de2b5 !important;
+  border-color: #2b6951 !important;
+}
+.dark .inventory-activity-feed .bg-rose-100,
+.dark .inventory-activity-feed .bg-rose-50 {
+  background-color: #492b39 !important;
+  color: #ffadb9 !important;
+  border-color: #7a4255 !important;
+}
+.dark .inventory-activity-feed .bg-blue-100,
+.dark .inventory-activity-feed .bg-blue-50 {
+  background-color: #223c60 !important;
+  color: #a9d1ff !important;
+}
+.dark .inventory-activity-feed .inventory-activity-entry span.bg-white {
+  background-color: #2d3b51 !important;
+  border-color: #4d607a !important;
+  color: #cbd5e1 !important;
+}
+.dark .inventory-activity-feed .text-slate-500 {
+  color: #b7c4d7 !important;
+}
+.dark .inventory-activity-feed .text-slate-400 {
+  color: #a9b7ca !important;
+}
+.dark .inventory-activity-feed .inventory-activity-restore-room {
+  background-color: #382b57 !important;
+  border-color: #71589b !important;
+  color: #e2d4ff !important;
+}
+.dark .inventory-activity-feed .inventory-activity-restore-room:hover {
+  background-color: #49386e !important;
+  border-color: #9a7bc6 !important;
+}
+.dark .inventory-activity-feed .inventory-activity-restore-item {
+  background-color: #49391d !important;
+  border-color: #8f6b32 !important;
+  color: #ffdc91 !important;
+}
+.dark .inventory-activity-feed .inventory-activity-restore-item:hover {
+  background-color: #5b4825 !important;
+  border-color: #c09449 !important;
+}
+.dark .inventory-activity-feed .inventory-activity-restore-room:focus-visible,
+.dark .inventory-activity-feed .inventory-activity-restore-item:focus-visible {
+  outline: 2px solid #c4b5fd;
+  outline-offset: 2px;
+}
+.dark .inventory-activity-empty {
+  background-color: #223149 !important;
+  border-color: #4b6079 !important;
+}
+
 /* Inventory SNAI support shortcut: explicit light/dark ownership keeps the
    action visible even when broad utility overrides change chat surfaces. */
 
