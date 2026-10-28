@@ -7,7 +7,8 @@ import {
   Droplets,
   Pill,
   ShieldCheck,
-  Box
+  Box,
+  Wrench
 } from 'lucide-react';
 import { Category } from './types';
 
@@ -18,6 +19,7 @@ export const CATEGORIES = [
   { id: 'materials', label: 'Materials', icon: <Droplets className="w-4 h-4" /> },
   { id: 'medication', label: 'Medication', icon: <Pill className="w-4 h-4" /> },
   { id: 'ppe', label: 'PPE', icon: <ShieldCheck className="w-4 h-4" /> },
+  { id: 'accessories', label: 'Accessories', icon: <Wrench className="w-4 h-4" /> },
   { id: 'other', label: 'Other', icon: <Box className="w-4 h-4" /> },
 ];
 
@@ -41,7 +43,7 @@ export const PRODUCT_NAMES = [
   'Suction Tip',
 ];
 
-export const CATEGORY_ORDER = ['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other'];
+export const CATEGORY_ORDER = ['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'accessories', 'other'];
 
 /**
  * Categories treated as "liquid" stock for the low-stock reorder check (see

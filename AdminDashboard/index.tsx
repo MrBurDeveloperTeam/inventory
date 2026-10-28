@@ -161,6 +161,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'medication': '#f97316',
       'instruments': '#db2777',
       'ppe': '#9333ea',
+      'accessories': '#0ea5e9',
       'materials': '#dc2626',
       'other': '#10b981'
     };
@@ -398,7 +399,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const categoryBreakdownData = useMemo(() => {
-    const order = ['materials', 'instruments', 'ppe', 'medication', 'equipment', 'consumables'];
+    const order = ['materials', 'instruments', 'ppe', 'medication', 'equipment', 'consumables', 'accessories'];
     return order.map(id => {
       const cat = CATEGORIES.find(c => c.id === id) || { id, label: id };
       const items = globalInventory.filter(i => i.category === id);

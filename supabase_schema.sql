@@ -35,7 +35,7 @@ create table if not exists items (
   uom text check (uom in ('pcs','box','unit','kit')),
   price numeric(12,2) not null default 0,
   vendor text,
-  category text check (category in ('consumables','equipment','instruments','materials','medication','ppe','other')),
+  category text check (category in ('consumables','equipment','instruments','materials','medication','ppe','accessories','other')),
   description text,
   expiry_date date,
   created_at timestamptz default now(),

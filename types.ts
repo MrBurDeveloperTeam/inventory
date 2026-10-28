@@ -1,4 +1,4 @@
-export type Category = 'consumables' | 'equipment' | 'instruments' | 'materials' | 'medication' | 'ppe' | 'other';
+export type Category = 'consumables' | 'equipment' | 'instruments' | 'materials' | 'medication' | 'ppe' | 'accessories' | 'other';
 export type UOM = 'pcs' | 'box' | 'unit' | 'kit';
 
 // Phase INVENTORY-FAILED-SAVE-RETRY-AND-RECONCILIATION-RECOVERY-HARDENING

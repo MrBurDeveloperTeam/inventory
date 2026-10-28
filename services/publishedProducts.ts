@@ -252,6 +252,9 @@ function mapCategory(p: PublishedProduct): Category {
   // other consumable, so they default to Consumables rather than falling into
   // Instruments via the generic "bur" keyword below. Whole-word match, so
   // look-alikes such as "burnisher" still follow the keyword table.
+  // Accessories (e.g. "MR. BUR Burs Holder") come first: their names contain
+  // "bur" but they are not consumable burs.
+  if (/accessor(y|ies)/.test(haystack) || /\bholder\b/.test(haystack)) return 'accessories';
   if (/\bburs?\b/.test(haystack)) return 'consumables';
   for (const [category, keywords] of CATEGORY_KEYWORDS) {
     if (keywords.some(k => haystack.includes(k))) return category;

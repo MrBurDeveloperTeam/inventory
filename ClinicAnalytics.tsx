@@ -132,6 +132,7 @@ const ClinicAnalytics: React.FC<ClinicAnalyticsProps> = ({ history, inventory = 
       'medication': '#f97316',
       'instruments': '#db2777',
       'ppe': '#9333ea',
+      'accessories': '#0ea5e9',
       'materials': '#dc2626',
       'other': '#10b981'
     };

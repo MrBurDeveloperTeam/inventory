@@ -297,7 +297,7 @@ const App: React.FC = () => {
   // seen/dismissed suppression scan once it knows the current userId — see
   // personalizedInsightState.candidates below.
   const inventoryDialoguePool = useMemo(
-    () => (isLoadingMain ? [] : buildInventoryDialoguePool(rooms)),
+    () => (isLoadingMain ? [] : buildInventoryDialoguePool(rooms as any)), // 'as any': pet-function's Category type predates 'accessories'
     [rooms, isLoadingMain]
   );
   // Bumped by handleInventoryInsightAction below to jump MasterInventory to
@@ -2526,7 +2526,7 @@ const handleLogout = async () => {
     return true;
   };
 
-  const VALID_CATEGORIES = new Set(['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'other']);
+  const VALID_CATEGORIES = new Set(['consumables', 'equipment', 'instruments', 'materials', 'medication', 'ppe', 'accessories', 'other']);
   const VALID_UOMS = new Set(['pcs', 'box', 'unit', 'kit']);
 
   const normalizeCategory = (cat?: string): string => {
@@ -3542,7 +3542,7 @@ const handleLogout = async () => {
   const groundedContextStoreRef = useRef(createGroundedContextStore());
 
   const inventoryMolarAdapter = useMemo(
-    () => createInventoryMolarAdapter({ rooms, history, logs, isLoadingMain, onProposeAction: setPendingInventoryAction, receiveStock, removeStock, moveItem, groundedContextStore: groundedContextStoreRef.current }),
+    () => createInventoryMolarAdapter({ rooms: rooms as any, history, logs, isLoadingMain, onProposeAction: setPendingInventoryAction, receiveStock, removeStock, moveItem, groundedContextStore: groundedContextStoreRef.current }),
     [rooms, history, logs, isLoadingMain, receiveStock, removeStock, moveItem]
   );
 
