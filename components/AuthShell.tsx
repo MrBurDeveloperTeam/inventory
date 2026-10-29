@@ -32,7 +32,7 @@ const AuthShell: React.FC<AuthShellProps> = ({
         >
           <span style={{ transform: 'skewX(353deg)', display: 'inline-block' }}>App.</span>
           <img
-            src={resolveTheme(theme) === 'dark' ? '/images/Snabbb-White.png' : '/icons/Snabbb-Teal.png'}
+            src={resolveTheme(theme) === 'dark' ? '/images/Snabbb-White.webp' : '/icons/Snabbb-Teal.webp'}
             alt="Snabbb"
             style={{ height: '1.59em', width: 'auto', display: 'inline-block', verticalAlign: 'middle' }}
           />
