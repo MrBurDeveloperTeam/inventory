@@ -122,7 +122,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
         <main className="inventory-landing">
             <nav className="inventory-nav">
                 <a className="inventory-brand" href="https://app.snabbb.com" aria-label="Go to Snabbb app">
-                    <img src="/icons/Snabbb-Teal.png" alt="Snabbb" />
+                    <img src="/icons/Snabbb-Teal.webp" alt="Snabbb" />
                     <span>Inventory</span>
                 </a>
 
@@ -392,7 +392,7 @@ const InventoryLandingPage: React.FC<InventoryLandingPageProps> = ({
 
             <footer className="inventory-footer">
                 <div className="inventory-brand">
-                    <img src="/icons/Snabbb-Teal.png" alt="Snabbb" />
+                    <img src="/icons/Snabbb-Teal.webp" alt="Snabbb" />
                     <span>Inventory</span>
                 </div>
 

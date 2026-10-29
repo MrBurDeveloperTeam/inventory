@@ -175,7 +175,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
                 aria-label="Return to Snabbb main app"
                 className="mb-5 inline-flex rounded-md transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tiffany-600 focus-visible:ring-offset-2"
               >
-                <img src={resolveTheme(theme) === 'dark' ? '/images/Snabbb-White.png' : '/icons/Snabbb-Teal.png'} alt="Snabbb" className="h-7 w-auto" />
+                <img src={resolveTheme(theme) === 'dark' ? '/images/Snabbb-White.png' : '/icons/Snabbb-Teal.webp'} alt="Snabbb" className="h-7 w-auto" />
               </a>
               <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter">Create Account</h1>
               <p className="text-slate-500 font-semibold text-sm leading-relaxed">Track and manage your dental inventory with ease.</p>
@@ -646,7 +646,7 @@ const LandingModal: React.FC<LandingModalProps> = ({ onLogin, theme, onThemeTogg
                 aria-label="Return to Snabbb main app"
                 className="mb-5 inline-flex rounded-md transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tiffany-600 focus-visible:ring-offset-2"
               >
-                <img src={resolveTheme(theme) === 'dark' ? '/images/Snabbb-White.png' : '/icons/Snabbb-Teal.png'} alt="Snabbb" className="h-7 w-auto" />
+                <img src={resolveTheme(theme) === 'dark' ? '/images/Snabbb-White.png' : '/icons/Snabbb-Teal.webp'} alt="Snabbb" className="h-7 w-auto" />
               </a>
               <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Welcome Back</h2>
             </header>
