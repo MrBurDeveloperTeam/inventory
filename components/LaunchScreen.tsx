@@ -18,7 +18,7 @@ const LaunchScreen: React.FC<LaunchScreenProps> = ({
   <div className="ls" role="status" aria-live="polite">
     <img
       className="ls-icon"
-      src="https://app.snabbb.com/icons/new-icons/inventory.png?v=2"
+      src="/icons/inventory.webp"
       alt=""
       width={160}
       height={160}
